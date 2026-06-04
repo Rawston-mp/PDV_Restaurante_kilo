@@ -5,6 +5,7 @@ import { useProductsQuery } from '@/modules/products/presentation/hooks/useProdu
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { SensitiveAction } from '@/modules/auth/presentation/providers/AuthProvider';
 import { appendSensitiveAuditEvent } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
+import { logInfo, logWarn } from '@/shared/infrastructure/logging/structuredLogger';
 import { PriceDisplay } from '@/components/Balanca/PriceDisplay';
 import {
   ProductGrid,
@@ -236,6 +237,16 @@ export function BalancaScreen({ wsUrl }: BalancaScreenProps) {
 
     const result = confirmSensitiveAction(pendingAction, confirmPin);
     if (!result.success) {
+      logWarn({
+        event: 'BALANCA_SENSITIVE_DENIED',
+        module: 'balanca',
+        details: {
+          action: pendingAction,
+          scale: activeScale,
+          role: user?.role ?? 'UNKNOWN'
+        }
+      });
+
       if (user) {
         appendSensitiveAuditEvent({
           action: pendingAction,
@@ -259,6 +270,16 @@ export function BalancaScreen({ wsUrl }: BalancaScreenProps) {
       setComandaItems((prev) => prev.slice(1));
       setFeedback('Ultimo item da comanda foi cancelado com sucesso.');
     }
+
+    logInfo({
+      event: 'BALANCA_SENSITIVE_SUCCESS',
+      module: 'balanca',
+      details: {
+        action: pendingAction,
+        scale: activeScale,
+        role: user?.role ?? 'UNKNOWN'
+      }
+    });
 
     if (user) {
       appendSensitiveAuditEvent({
