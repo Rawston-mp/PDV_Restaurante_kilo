@@ -53,6 +53,19 @@ Fluxo arquitetural base:
 - Rota protegida por permissao e por role
 - Fallback seguro para ambiente de teste sem localStorage
 
+Matriz de acesso atual (atualizada em 04/06/2026):
+- Dashboard (/):
+  - Permitido: ADMIN, GERENTE, CAIXA, ATENDENTE
+  - Negado: BALANCA_A, BALANCA_B
+- Produtos (/products):
+  - Visualizar catalogo: ADMIN, GERENTE, CAIXA, ATENDENTE, BALANCA_A, BALANCA_B
+  - Gerenciar (novo cadastro, editar, deletar, salvar): ADMIN, GERENTE, CAIXA, ATENDENTE
+  - BALANCA_A e BALANCA_B operam em modo consulta de produtos
+- Balancas (/balanca):
+  - Permitido: ADMIN, GERENTE, CAIXA, BALANCA_A, BALANCA_B
+- Admin (/admin):
+  - Permitido: ADMIN
+
 ### 2) Acoes sensiveis com PIN separado (enterprise)
 - Confirmacao por senha diferente da senha de login
 - Acoes criticas implementadas na tela de balanca:
@@ -89,10 +102,11 @@ Na tela /balanca:
 - Layout responsivo desktop/mobile
 
 ## Rotas oficiais
-- /
+- / (restrita para ADMIN, GERENTE, CAIXA e ATENDENTE)
 - /orders/new
-- /products
+- /products (consulta para todos os perfis; gestao bloqueada para BALANCA_A/B)
 - /balanca
+- /admin (somente ADMIN)
 
 ## Componentes-chave
 - src/components/Balanca/WeightDisplay.tsx
@@ -143,6 +157,11 @@ Na tela /balanca:
    - inclusao de item
    - confirmacao por PIN sensivel
 4. verificar permissao de acesso por perfil
+5. validar RBAC operacional:
+  - BALANCA_A/B sem acesso ao Dashboard
+  - BALANCA_A/B sem botao de novo cadastro em Produtos
+  - BALANCA_A/B sem editar/deletar em Produtos
+  - BALANCA_A/B sem exibicao de custo/margem na listagem de Produtos
 
 ## Proximas evolucoes recomendadas
 1. Auditoria local de acoes sensiveis
