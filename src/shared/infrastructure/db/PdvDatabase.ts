@@ -55,6 +55,14 @@ export class PdvDatabase extends Dexie {
       weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
       syncQueue: 'id, type, attempts, nextRetryAt, lastError'
     });
+
+    this.version(4).stores({
+      orders: 'id, table, status, createdAt, updatedAt',
+      products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
+      comandaState: 'id, comandaAtiva, updatedAt',
+      weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
+      syncQueue: 'id, type, attempts, nextRetryAt, lastError'
+    });
   }
 }
 

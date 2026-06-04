@@ -9,6 +9,7 @@ import {
   listSensitiveAuditEvents,
   type SensitiveAuditEvent
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
+import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
 
@@ -17,10 +18,25 @@ const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'S
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B'];
 
+const parseLegacyProductCode = (productName: string) => {
+  const [firstChunk] = productName.split(' - ');
+  return /^\d{2,4}$/.test(firstChunk) ? firstChunk : '--';
+};
+
+const getProductDisplayName = (product: Product) => {
+  const legacyCode = parseLegacyProductCode(product.name);
+  if (legacyCode !== '--') {
+    return product.name.split(' - ').slice(1).join(' - ');
+  }
+
+  return product.name;
+};
+
 export function AdminPage() {
   const { user, changePin, getPinHealth } = useAuth();
   const [syncTasks, setSyncTasks] = useState<SyncQueueTask[]>([]);
   const [auditEvents, setAuditEvents] = useState<SensitiveAuditEvent[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<'ALL' | SensitiveAuditEvent['action']>('ALL');
   const [outcomeFilter, setOutcomeFilter] = useState<'ALL' | SensitiveAuditEvent['outcome']>('ALL');
@@ -38,6 +54,7 @@ export function AdminPage() {
     const tasks = await productsContainer.syncTaskQueue.listAll();
     setSyncTasks(tasks);
     setAuditEvents(listSensitiveAuditEvents());
+    setProducts(await productsContainer.productRepository.list());
   };
 
   useEffect(() => {
@@ -56,6 +73,30 @@ export function AdminPage() {
   }, [syncTasks]);
 
   const pinHealth = useMemo(() => getPinHealth(), [getPinHealth]);
+  const currency = useMemo(
+    () => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }),
+    []
+  );
+
+  const marginRows = useMemo(() => {
+    return products
+      .map((product) => {
+        const costValue = product.costValue ?? 0;
+        const price = product.price;
+        const marginValue = price - costValue;
+        const marginPercent = costValue > 0 ? (marginValue / costValue) * 100 : null;
+        const estimatedProfitStock = marginValue * product.stock;
+
+        return {
+          product,
+          costValue,
+          marginValue,
+          marginPercent,
+          estimatedProfitStock
+        };
+      })
+      .sort((a, b) => b.estimatedProfitStock - a.estimatedProfitStock);
+  }, [products]);
 
   const filteredAuditEvents = useMemo(() => {
     const normalizedText = textFilter.trim().toLowerCase();
@@ -339,6 +380,42 @@ export function AdminPage() {
               </table>
             </div>
           )}
+
+          <section className="admin-margin-section">
+            <h3>Analise de Margem por Produto</h3>
+            {marginRows.length === 0 ? (
+              <p className="empty-state">Nenhum produto para analisar.</p>
+            ) : (
+              <div className="admin-table-wrap">
+                <table className="admin-table admin-margin-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Produto</th>
+                      <th>Custo</th>
+                      <th>Venda</th>
+                      <th>Margem %</th>
+                      <th>Estoque</th>
+                      <th>Lucro est. estoque</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marginRows.map(({ product, costValue, marginPercent, estimatedProfitStock }) => (
+                      <tr key={`margin-${product.id}`}>
+                        <td>{product.productCode ?? parseLegacyProductCode(product.name)}</td>
+                        <td>{getProductDisplayName(product)}</td>
+                        <td>{currency.format(costValue)}</td>
+                        <td>{currency.format(product.price)}</td>
+                        <td>{marginPercent !== null ? `${marginPercent.toFixed(2)}%` : '-'}</td>
+                        <td>{product.stock}</td>
+                        <td>{currency.format(estimatedProfitStock)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </article>
       </div>
     </section>

@@ -171,6 +171,117 @@ form {
   gap: 1rem;
 }
 
+.products-grid-list-only {
+  grid-template-columns: 1fr;
+}
+
+.products-toolbar {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.products-toolbar-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.products-new-button {
+  background: linear-gradient(120deg, #16a34a 0%, #22c55e 100%);
+}
+
+.products-cadastro-span {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #bfdbfe;
+  box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.08), var(--shadow);
+}
+
+.products-cadastro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.products-cadastro-header h3 {
+  margin: 0;
+}
+
+.products-cadastro-tabs {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.products-cadastro-tabs button {
+  min-width: 108px;
+  background: linear-gradient(120deg, #334155 0%, #475569 100%);
+}
+
+.products-cadastro-tabs button.is-active {
+  background: linear-gradient(120deg, #1d4ed8 0%, #0ea5e9 100%);
+}
+
+.products-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(170px, 250px));
+  gap: 0.75rem;
+  justify-content: flex-start;
+}
+
+.products-row-3 > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.products-row-4 {
+  display: grid;
+  grid-template-columns: 165px minmax(260px, 460px) minmax(210px, 300px) minmax(170px, 210px);
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.products-row-4 > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.products-field-compact {
+  max-width: 210px;
+}
+
+.products-field-main {
+  min-width: 260px;
+  max-width: 460px;
+}
+
+.products-cost-block {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  padding: 0.72rem;
+  background: linear-gradient(120deg, #f8fbff 0%, #ffffff 100%);
+  display: grid;
+  gap: 0.62rem;
+}
+
+.products-cost-block h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #1e3a8a;
+}
+
+.products-cadastro-footer {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.products-help-note {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
 .products-form-card h3,
 .products-list-card h3 {
   margin-top: 0;
@@ -178,12 +289,15 @@ form {
 
 .products-form {
   margin-top: 0.6rem;
+  display: grid;
+  gap: 0.95rem;
 }
 
 .products-row-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(180px, 250px));
   gap: 0.75rem;
+  justify-content: flex-start;
 }
 
 .products-row-2 > div {
@@ -246,6 +360,56 @@ form {
 .products-list li span {
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.products-id-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.38rem;
+  border-radius: 8px;
+  border: 1px solid rgba(29, 78, 216, 0.35);
+  background: rgba(59, 130, 246, 0.14);
+  color: #1e40af;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.1rem 0.38rem;
+}
+
+.products-group-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  padding: 0.16rem 0.55rem;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+.products-group-tag b {
+  font-weight: 700;
+}
+
+.products-group-tag.is-por-kilo {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+}
+
+.products-group-tag.is-bebidas {
+  border-color: rgba(14, 165, 233, 0.45);
+  background: rgba(14, 165, 233, 0.14);
+  color: #0c4a6e;
+}
+
+.products-group-tag.is-ala-carte {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.14);
+  color: #065f46;
 }
 
 .empty-state {
@@ -382,6 +546,22 @@ form {
 
 .admin-table th {
   color: #1e40af;
+}
+
+.admin-margin-section {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.admin-margin-section h3 {
+  margin: 0 0 0.55rem;
+}
+
+.admin-margin-table td:nth-child(1),
+.admin-margin-table td:nth-child(5),
+.admin-margin-table td:nth-child(6) {
+  font-weight: 600;
 }
 
 .sidebar a.active {
@@ -922,6 +1102,33 @@ form {
 
   .products-row-2 {
     grid-template-columns: 1fr;
+  }
+
+  .products-row-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .products-row-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .products-field-compact,
+  .products-field-main {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .products-cadastro-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .products-cadastro-tabs {
+    width: 100%;
+  }
+
+  .products-cadastro-tabs button {
+    flex: 1;
   }
 
   .balanca-topbar {

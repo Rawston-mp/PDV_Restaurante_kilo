@@ -12,8 +12,11 @@ describe('SyncProducts use case integration', () => {
 
     await createProduct.execute({
       id: 'prd-sync-1',
+      productCode: '02',
       name: 'Feijao',
       category: 'BUFFET',
+      costValue: 38,
+      marginProfit: 57.63,
       price: 59.9,
       byWeight: true,
       stock: 40
@@ -22,8 +25,11 @@ describe('SyncProducts use case integration', () => {
     const remoteGateway = new InMemoryProductSyncGateway([
       {
         id: 'prd-sync-1',
+        productCode: '02',
         name: 'Feijao Premium',
         category: 'BUFFET',
+        costValue: 40,
+        marginProfit: 62.5,
         price: 65,
         byWeight: true,
         stock: 35,
