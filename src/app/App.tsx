@@ -7,6 +7,7 @@ import { RequirePermission } from '@/modules/auth/presentation/components/Requir
 import { RequireRole } from '@/modules/auth/presentation/components/RequireRole';
 import { AuthAccessPanel } from '@/modules/auth/presentation/components/AuthAccessPanel';
 import { BalancaScreen } from '@/components/Balanca/BalancaScreen';
+import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 
 export function App() {
   return (
@@ -18,6 +19,7 @@ export function App() {
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
           <NavLink to="/balanca">Balancas</NavLink>
+          <NavLink to="/admin">Admin</NavLink>
         </nav>
 
         <AuthAccessPanel />
@@ -47,6 +49,14 @@ export function App() {
             element={
               <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
                 <BalancaScreen />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireRole allowedRoles={['ADMIN']}>
+                <AdminPage />
               </RequireRole>
             }
           />
