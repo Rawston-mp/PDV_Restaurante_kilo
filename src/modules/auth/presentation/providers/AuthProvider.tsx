@@ -4,8 +4,24 @@ import type { User } from '@/modules/auth/domain/entities/User';
 import { hasPermission } from '@/modules/auth/domain/services/permissionPolicy';
 import type { Permission } from '@/modules/auth/domain/types/Permission';
 import type { Role } from '@/modules/auth/domain/types/Role';
+import {
+  changeRolePin,
+  getPinPolicySummary,
+  verifyLoginPin,
+  verifySensitivePin,
+  type PinKind
+} from '@/modules/auth/infrastructure/local/pinPolicy';
+import { logInfo, logWarn } from '@/shared/infrastructure/logging/structuredLogger';
 
 export type SensitiveAction = 'CLOSE_COMANDA' | 'CANCEL_ORDER';
+
+type ChangePinInput = {
+  kind: PinKind;
+  role: Role;
+  currentPin: string;
+  nextPin: string;
+  confirmPin: string;
+};
 
 type AuthContextValue = {
   user: User | null;
@@ -18,29 +34,13 @@ type AuthContextValue = {
   signOut: () => void;
   can: (permission: Permission) => boolean;
   availableRoles: Role[];
+  changePin: (input: ChangePinInput) => { success: boolean; message: string };
+  getPinHealth: () => { loginStrengthIssues: number; sensitiveStrengthIssues: number };
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const storageKey = 'pdv.auth.user';
-
-const rolePasswordMap: Record<Role, string> = {
-  ADMIN: '9000',
-  GERENTE: '7070',
-  CAIXA: '2025',
-  ATENDENTE: '3030',
-  BALANCA_A: '1111',
-  BALANCA_B: '2222'
-};
-
-const sensitivePasswordMap: Record<Role, string> = {
-  ADMIN: '9900',
-  GERENTE: '7700',
-  CAIXA: '2200',
-  ATENDENTE: '3300',
-  BALANCA_A: '1100',
-  BALANCA_B: '2201'
-};
 
 const actionNameMap: Record<SensitiveAction, string> = {
   CLOSE_COMANDA: 'fechamento de comanda',
@@ -118,7 +118,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistUser(nextUser);
       },
       signInWithPassword: (role: Role, password: string) => {
-        if (rolePasswordMap[role] !== password) {
+        if (!verifyLoginPin(role, password)) {
+          logWarn({
+            event: 'AUTH_LOGIN_DENIED',
+            module: 'auth',
+            details: { role }
+          });
+
           return {
             success: false,
             message: 'Senha invalida para o perfil selecionado.'
@@ -134,6 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser);
         persistUser(nextUser);
 
+        logInfo({
+          event: 'AUTH_LOGIN_SUCCESS',
+          module: 'auth',
+          details: { role }
+        });
+
         return {
           success: true,
           message: `Acesso liberado: ${roleNames[role]}.`
@@ -147,19 +159,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        const expected = sensitivePasswordMap[user.role];
-        if (expected !== password) {
+        if (!verifySensitivePin(user.role, password)) {
+          logWarn({
+            event: 'AUTH_SENSITIVE_DENIED',
+            module: 'auth',
+            details: { action, actorRole: user.role }
+          });
+
           return {
             success: false,
             message: `Senha de confirmacao invalida para ${actionNameMap[action]}.`
           };
         }
 
+        logInfo({
+          event: 'AUTH_SENSITIVE_APPROVED',
+          module: 'auth',
+          details: { action, actorRole: user.role }
+        });
+
         return {
           success: true,
           message: `Confirmacao de ${actionNameMap[action]} aprovada.`
         };
       },
+      changePin: ({ kind, role, currentPin, nextPin, confirmPin }: ChangePinInput) => {
+        if (!user || user.role !== 'ADMIN') {
+          return {
+            success: false,
+            message: 'Somente ADMIN pode alterar politica de PIN.'
+          };
+        }
+
+        if (nextPin !== confirmPin) {
+          return {
+            success: false,
+            message: 'Confirmacao do novo PIN nao confere.'
+          };
+        }
+
+        const result = changeRolePin({
+          kind,
+          role,
+          currentPin,
+          nextPin
+        });
+
+        if (result.success) {
+          logInfo({
+            event: 'AUTH_PIN_CHANGED',
+            module: 'auth',
+            details: { kind, role, actorRole: user.role }
+          });
+        } else {
+          logWarn({
+            event: 'AUTH_PIN_CHANGE_DENIED',
+            module: 'auth',
+            details: { kind, role, actorRole: user.role }
+          });
+        }
+
+        return result;
+      },
+      getPinHealth: () => getPinPolicySummary(),
       signOut: () => {
         setUser(null);
         persistUser(null);

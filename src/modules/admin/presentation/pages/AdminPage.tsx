@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
+import type { Role } from '@/modules/auth/domain/types/Role';
+import type { PinKind } from '@/modules/auth/infrastructure/local/pinPolicy';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
   clearSensitiveAuditEvents,
@@ -8,12 +10,29 @@ import {
   type SensitiveAuditEvent
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
+import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
+
+const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLOSE_COMANDA', 'CANCEL_ORDER'];
+const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
+
+const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B'];
 
 export function AdminPage() {
-  const { user } = useAuth();
+  const { user, changePin, getPinHealth } = useAuth();
   const [syncTasks, setSyncTasks] = useState<SyncQueueTask[]>([]);
   const [auditEvents, setAuditEvents] = useState<SensitiveAuditEvent[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [actionFilter, setActionFilter] = useState<'ALL' | SensitiveAuditEvent['action']>('ALL');
+  const [outcomeFilter, setOutcomeFilter] = useState<'ALL' | SensitiveAuditEvent['outcome']>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | Role>('ALL');
+  const [textFilter, setTextFilter] = useState('');
+
+  const [pinRole, setPinRole] = useState<Role>('CAIXA');
+  const [pinKind, setPinKind] = useState<PinKind>('LOGIN');
+  const [currentPin, setCurrentPin] = useState('');
+  const [nextPin, setNextPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinMessage, setPinMessage] = useState<string | null>(null);
 
   const refresh = async () => {
     const tasks = await productsContainer.syncTaskQueue.listAll();
@@ -36,11 +55,59 @@ export function AdminPage() {
     };
   }, [syncTasks]);
 
+  const pinHealth = useMemo(() => getPinHealth(), [getPinHealth]);
+
+  const filteredAuditEvents = useMemo(() => {
+    const normalizedText = textFilter.trim().toLowerCase();
+
+    return auditEvents.filter((event) => {
+      if (actionFilter !== 'ALL' && event.action !== actionFilter) {
+        return false;
+      }
+
+      if (outcomeFilter !== 'ALL' && event.outcome !== outcomeFilter) {
+        return false;
+      }
+
+      if (roleFilter !== 'ALL' && event.actorRole !== roleFilter) {
+        return false;
+      }
+
+      if (!normalizedText) {
+        return true;
+      }
+
+      const line = [
+        event.action,
+        event.actorRole,
+        event.actorName,
+        event.outcome,
+        event.reason ?? '',
+        event.scaleId ?? ''
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return line.includes(normalizedText);
+    });
+  }, [actionFilter, outcomeFilter, roleFilter, textFilter, auditEvents]);
+
   const onProcessQueue = async () => {
     const result = await productsContainer.processSyncQueue.execute();
     setMessage(
       `Fila processada: ${result.processed} tarefas | sucesso ${result.succeeded} | falha ${result.failed}.`
     );
+
+    logInfo({
+      event: 'ADMIN_PROCESS_SYNC_QUEUE',
+      module: 'admin',
+      details: {
+        processed: result.processed,
+        succeeded: result.succeeded,
+        failed: result.failed
+      }
+    });
+
     await refresh();
   };
 
@@ -48,6 +115,44 @@ export function AdminPage() {
     clearSensitiveAuditEvents();
     setAuditEvents([]);
     setMessage('Auditoria local de acoes sensiveis foi limpa.');
+
+    logInfo({
+      event: 'ADMIN_CLEAR_AUDIT',
+      module: 'admin'
+    });
+  };
+
+  const onExportAudit = () => {
+    const payload = JSON.stringify(filteredAuditEvents, null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audit-sensitive-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    setMessage(`Exportacao concluida com ${filteredAuditEvents.length} eventos.`);
+  };
+
+  const onChangePin = (event: FormEvent) => {
+    event.preventDefault();
+
+    const result = changePin({
+      kind: pinKind,
+      role: pinRole,
+      currentPin,
+      nextPin,
+      confirmPin
+    });
+
+    setPinMessage(result.message);
+
+    if (result.success) {
+      setCurrentPin('');
+      setNextPin('');
+      setConfirmPin('');
+    }
   };
 
   return (
@@ -84,6 +189,14 @@ export function AdminPage() {
               <span>Eventos sensiveis</span>
               <strong>{auditEvents.length}</strong>
             </li>
+            <li>
+              <span>PIN login fraco</span>
+              <strong>{pinHealth.loginStrengthIssues}</strong>
+            </li>
+            <li>
+              <span>PIN sensivel fraco</span>
+              <strong>{pinHealth.sensitiveStrengthIssues}</strong>
+            </li>
           </ul>
 
           <div className="admin-actions">
@@ -99,11 +212,104 @@ export function AdminPage() {
           </div>
 
           {message && <p className="admin-message">{message}</p>}
+
+          <form onSubmit={onChangePin} className="admin-pin-form">
+            <h4>Gestao de PIN</h4>
+
+            <label htmlFor="pin-role">Perfil</label>
+            <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+
+            <label htmlFor="pin-kind">Tipo</label>
+            <select
+              id="pin-kind"
+              value={pinKind}
+              onChange={(e) => setPinKind(e.target.value as PinKind)}
+            >
+              <option value="LOGIN">LOGIN</option>
+              <option value="SENSITIVE">SENSITIVE</option>
+            </select>
+
+            <label htmlFor="pin-current">PIN atual</label>
+            <input
+              id="pin-current"
+              type="password"
+              value={currentPin}
+              onChange={(e) => setCurrentPin(e.target.value)}
+              required
+            />
+
+            <label htmlFor="pin-next">Novo PIN</label>
+            <input
+              id="pin-next"
+              type="password"
+              value={nextPin}
+              onChange={(e) => setNextPin(e.target.value)}
+              required
+            />
+
+            <label htmlFor="pin-confirm">Confirmar novo PIN</label>
+            <input
+              id="pin-confirm"
+              type="password"
+              value={confirmPin}
+              onChange={(e) => setConfirmPin(e.target.value)}
+              required
+            />
+
+            <button type="submit">Atualizar PIN</button>
+            {pinMessage && <p className="admin-message">{pinMessage}</p>}
+          </form>
         </article>
 
         <article className="card admin-audit">
           <h3>Auditoria de acoes sensiveis</h3>
-          {auditEvents.length === 0 ? (
+          <div className="admin-audit-filters">
+            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value as typeof actionFilter)}>
+              {actionOptions.map((item) => (
+                <option key={item} value={item}>
+                  Acao: {item}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={outcomeFilter}
+              onChange={(e) => setOutcomeFilter(e.target.value as typeof outcomeFilter)}
+            >
+              {outcomeOptions.map((item) => (
+                <option key={item} value={item}>
+                  Resultado: {item}
+                </option>
+              ))}
+            </select>
+
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}>
+              <option value="ALL">Perfil: ALL</option>
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  Perfil: {role}
+                </option>
+              ))}
+            </select>
+
+            <input
+              value={textFilter}
+              onChange={(e) => setTextFilter(e.target.value)}
+              placeholder="Buscar por texto"
+            />
+
+            <button type="button" onClick={onExportAudit}>
+              Exportar JSON
+            </button>
+          </div>
+
+          {filteredAuditEvents.length === 0 ? (
             <p className="empty-state">Nenhum evento sensivel registrado.</p>
           ) : (
             <div className="admin-table-wrap">
@@ -119,7 +325,7 @@ export function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {auditEvents.map((event) => (
+                  {filteredAuditEvents.map((event) => (
                     <tr key={event.id}>
                       <td>{new Date(event.createdAt).toLocaleString('pt-BR')}</td>
                       <td>{event.action}</td>

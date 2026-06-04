@@ -335,6 +335,34 @@ form {
   padding: 0.65rem 0.75rem;
 }
 
+.admin-pin-form {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.admin-pin-form h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.admin-pin-form label {
+  font-size: 0.84rem;
+  color: #475569;
+}
+
+.admin-audit-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+
+.admin-audit-filters input,
+.admin-audit-filters select {
+  width: 100%;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
 }
@@ -851,6 +879,10 @@ form {
   }
 
   .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-audit-filters {
     grid-template-columns: 1fr;
   }
 

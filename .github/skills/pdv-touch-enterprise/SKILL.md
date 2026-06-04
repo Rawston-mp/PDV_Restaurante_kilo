@@ -5,6 +5,9 @@ Consolidar o contexto tecnico, operacional e visual do projeto PDV Touch Restaur
 
 Esta skill descreve o que ja foi implementado, como operar, como validar e como evoluir sem quebrar arquitetura, testes e experiencia de uso.
 
+Documento complementar (fonte de arquitetura alvo):
+- `docs/PDVTOUCH_ARCHITECTURE_BLUEPRINT.md`
+
 ## Quando usar
 Use esta skill quando precisar:
 - entender rapidamente o estado real do produto
@@ -205,4 +208,4 @@ Critérios de aceite da etapa Admin:
 4. npm run test e npm run build sem regressao
 
 Status atual da etapa Admin:
-- Em andamento (bloco 1 concluido: rota /admin, painel operacional e auditoria sensivel)
+- Em andamento (bloco 2 concluido: gestao de PIN, filtros/export da auditoria e logs estruturados)
