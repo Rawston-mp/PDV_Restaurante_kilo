@@ -9,10 +9,12 @@ import { AuthAccessPanel } from '@/modules/auth/presentation/components/AuthAcce
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { BalancaScreen } from '@/components/Balanca/BalancaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
+import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
 
 export function App() {
   const { user } = useAuth();
   const canAccessDashboard = user?.role !== 'BALANCA_A' && user?.role !== 'BALANCA_B';
+  const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
 
   return (
     <div className="layout">
@@ -23,6 +25,7 @@ export function App() {
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
           <NavLink to="/balanca">Balancas</NavLink>
+          {canAccessCadastro && <NavLink to="/cadastro">Cadastro</NavLink>}
           <NavLink to="/admin">Admin</NavLink>
         </nav>
 
@@ -60,6 +63,14 @@ export function App() {
             element={
               <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
                 <BalancaScreen />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/cadastro"
+            element={
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA']}>
+                <CadastroPage />
               </RequireRole>
             }
           />
