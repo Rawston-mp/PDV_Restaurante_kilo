@@ -6,16 +6,20 @@ import { ProductsPage } from '@/modules/products/presentation/pages/ProductsPage
 import { RequirePermission } from '@/modules/auth/presentation/components/RequirePermission';
 import { RequireRole } from '@/modules/auth/presentation/components/RequireRole';
 import { AuthAccessPanel } from '@/modules/auth/presentation/components/AuthAccessPanel';
+import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { BalancaScreen } from '@/components/Balanca/BalancaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 
 export function App() {
+  const { user } = useAuth();
+  const canAccessDashboard = user?.role !== 'BALANCA_A' && user?.role !== 'BALANCA_B';
+
   return (
     <div className="layout">
       <aside className="sidebar">
         <h1>PDV Touch</h1>
         <nav>
-          <NavLink to="/">Dashboard</NavLink>
+          {canAccessDashboard && <NavLink to="/">Dashboard</NavLink>}
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
           <NavLink to="/balanca">Balancas</NavLink>
@@ -27,7 +31,14 @@ export function App() {
 
       <main className="content">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route
+            path="/"
+            element={
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE']}>
+                <DashboardPage />
+              </RequireRole>
+            }
+          />
           <Route
             path="/orders/new"
             element={
@@ -39,7 +50,7 @@ export function App() {
           <Route
             path="/products"
             element={
-              <RequirePermission permission="products:manage">
+              <RequirePermission permission="products:view">
                 <ProductsPage />
               </RequirePermission>
             }

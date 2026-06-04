@@ -17,6 +17,7 @@ export function AuthAccessPanel() {
 
   const [role, setRole] = useState<Role>('CAIXA');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const onSubmit = (event: React.FormEvent) => {
@@ -30,45 +31,81 @@ export function AuthAccessPanel() {
     }
   };
 
+  if (user) {
+    return (
+      <section className="auth-sidebar-status">
+        <p className="auth-sidebar-label">Usuario logado</p>
+        <strong>{user.name}</strong>
+        <span>{roleLabel[user.role]}</span>
+
+        <button
+          type="button"
+          className="button-muted auth-switch-user"
+          onClick={() => {
+            setPassword('');
+            setMessage(null);
+            signOut();
+          }}
+        >
+          Trocar usuario
+        </button>
+      </section>
+    );
+  }
+
   return (
-    <section className="auth-panel">
-      <div className="auth-panel-header">
-        <strong>Controle de acesso</strong>
-        <span>{user ? `${roleLabel[user.role]} ativo` : 'Nao autenticado'}</span>
-      </div>
+    <div className="auth-overlay">
+      <section className="auth-panel auth-panel-centered">
+        <div className="auth-brand">
+          <strong>PDVTouch</strong>
+          <span>Sistema de Ponto de Venda</span>
+        </div>
 
-      <form onSubmit={onSubmit} className="auth-form">
-        <label htmlFor="role">Perfil</label>
-        <select id="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
-          {availableRoles.map((option) => (
-            <option key={option} value={option}>
-              {roleLabel[option]}
-            </option>
-          ))}
-        </select>
+        <div className="auth-panel-header">
+          <strong>Acessar o sistema</strong>
+          <span>Selecione seu perfil e informe o PIN</span>
+        </div>
 
-        <label htmlFor="password">Senha</label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Digite o PIN"
-          required
-        />
+        <form onSubmit={onSubmit} className="auth-form">
+          <label htmlFor="role">Perfil</label>
+          <select id="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
+            {availableRoles.map((option) => (
+              <option key={option} value={option}>
+                {roleLabel[option]}
+              </option>
+            ))}
+          </select>
 
-        <button type="submit">Entrar</button>
-      </form>
+          <label htmlFor="password">Senha</label>
+          <div className="auth-password-row">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Digite o PIN"
+              required
+            />
+            <button
+              type="button"
+              className="auth-toggle-password"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+            >
+              {showPassword ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
 
-      <button type="button" className="button-muted auth-logout" onClick={signOut}>
-        Sair
-      </button>
+          <button type="submit" className="auth-submit">Entrar</button>
+        </form>
 
-      {message && <p className="auth-message">{message}</p>}
+        {message && <p className="auth-message">{message}</p>}
 
-      <p className="auth-hint">
-        PIN login: Admin 9000, Caixa 2025, Balanca A 1111, Balanca B 2222. PIN sensivel: Admin 9900, Caixa 2200.
-      </p>
-    </section>
+        <p className="auth-hint">
+          PIN login: Admin 9000, Caixa 2025, Balanca A 1111, Balanca B 2222. PIN sensivel: Admin 9900, Caixa 2200.
+        </p>
+      </section>
+    </div>
   );
 }

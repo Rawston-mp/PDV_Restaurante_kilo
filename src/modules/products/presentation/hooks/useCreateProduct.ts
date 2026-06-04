@@ -6,6 +6,16 @@ type Input = {
   productCode: string;
   name: string;
   category: string;
+  ncm: string;
+  cfop: string;
+  cstIcms: string;
+  taxSituationCode: string;
+  aliqIcms: string;
+  cstPis: string;
+  aliqPis: string;
+  cstCofins: string;
+  aliqCofins: string;
+  fiscalType: string;
   costValue: number;
   marginProfit: number;
   price: number;

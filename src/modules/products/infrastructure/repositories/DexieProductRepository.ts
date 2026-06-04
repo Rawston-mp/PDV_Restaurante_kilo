@@ -15,4 +15,8 @@ export class DexieProductRepository implements ProductRepository {
   async save(product: Product): Promise<void> {
     await pdvDatabase.products.put(product);
   }
+
+  async delete(id: string): Promise<void> {
+    await pdvDatabase.products.delete(id);
+  }
 }
