@@ -4,6 +4,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { SensitiveAction } from '@/modules/auth/presentation/providers/AuthProvider';
+import { appendSensitiveAuditEvent } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import { PriceDisplay } from '@/components/Balanca/PriceDisplay';
 import {
   ProductGrid,
@@ -235,6 +236,16 @@ export function BalancaScreen({ wsUrl }: BalancaScreenProps) {
 
     const result = confirmSensitiveAction(pendingAction, confirmPin);
     if (!result.success) {
+      if (user) {
+        appendSensitiveAuditEvent({
+          action: pendingAction,
+          actorRole: user.role,
+          actorName: user.name,
+          outcome: 'DENIED',
+          reason: result.message,
+          scaleId: activeScale
+        });
+      }
       setConfirmMessage(result.message);
       return;
     }
@@ -247,6 +258,17 @@ export function BalancaScreen({ wsUrl }: BalancaScreenProps) {
     if (pendingAction === 'CANCEL_ORDER') {
       setComandaItems((prev) => prev.slice(1));
       setFeedback('Ultimo item da comanda foi cancelado com sucesso.');
+    }
+
+    if (user) {
+      appendSensitiveAuditEvent({
+        action: pendingAction,
+        actorRole: user.role,
+        actorName: user.name,
+        outcome: 'SUCCESS',
+        reason: result.message,
+        scaleId: activeScale
+      });
     }
 
     setConfirmMessage(result.message);

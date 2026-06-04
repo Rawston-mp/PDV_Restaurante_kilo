@@ -252,6 +252,110 @@ form {
   color: var(--muted);
 }
 
+.admin-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-header {
+  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+}
+
+.admin-eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.admin-header h2 {
+  margin: 0.2rem 0;
+}
+
+.admin-subtitle {
+  margin: 0;
+  color: #475569;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 1rem;
+}
+
+.admin-kpis h3,
+.admin-audit h3 {
+  margin-top: 0;
+}
+
+.admin-kpis ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.admin-kpis li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #f8fafc;
+}
+
+.admin-kpis li span {
+  color: #475569;
+}
+
+.admin-kpis li strong {
+  color: #0f172a;
+}
+
+.admin-actions {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-danger {
+  background: linear-gradient(120deg, #b91c1c 0%, #ef4444 100%);
+}
+
+.admin-message {
+  margin: 0.8rem 0 0;
+  border-radius: 10px;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  color: #0c4a6e;
+  padding: 0.65rem 0.75rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 0.5rem 0.46rem;
+  border-bottom: 1px solid #dbe3ef;
+  font-size: 0.92rem;
+}
+
+.admin-table th {
+  color: #1e40af;
+}
+
 .sidebar a.active {
   background: linear-gradient(120deg, rgba(20, 184, 166, 0.26) 0%, rgba(59, 130, 246, 0.2) 100%);
   border: 1px solid rgba(56, 189, 248, 0.35);
@@ -743,6 +847,10 @@ form {
 
 @media (max-width: 1020px) {
   .products-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-grid {
     grid-template-columns: 1fr;
   }
 

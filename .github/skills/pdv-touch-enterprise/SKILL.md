@@ -205,4 +205,4 @@ Critérios de aceite da etapa Admin:
 4. npm run test e npm run build sem regressao
 
 Status atual da etapa Admin:
-- Em andamento (planejamento aprovado)
+- Em andamento (bloco 1 concluido: rota /admin, painel operacional e auditoria sensivel)
