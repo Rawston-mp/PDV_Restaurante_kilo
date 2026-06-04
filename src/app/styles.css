@@ -294,6 +294,16 @@ form {
   font-size: 0.78rem;
 }
 
+.products-form-warning {
+  margin: 0;
+  border-radius: 9px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 0.52rem 0.62rem;
+  font-size: 0.82rem;
+}
+
 .products-form-card h3,
 .products-list-card h3 {
   margin-top: 0;
@@ -334,6 +344,78 @@ form {
   max-width: 160px;
 }
 
+.ncm-input-row {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.ncm-search-trigger {
+  min-height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(120deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.ncm-lookup-panel {
+  margin-top: 0.35rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 12px 26px rgba(30, 64, 175, 0.14);
+  padding: 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ncm-lookup-panel input {
+  min-height: 32px;
+}
+
+.ncm-lookup-panel ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.28rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ncm-lookup-panel li button {
+  width: 100%;
+  text-align: left;
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 0.45rem 0.5rem;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.ncm-lookup-panel li button strong {
+  font-size: 0.8rem;
+  color: #1d4ed8;
+}
+
+.ncm-lookup-panel li button span {
+  font-size: 0.76rem;
+  color: #334155;
+  line-height: 1.25;
+}
+
+.ncm-lookup-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 0.5rem;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
 .products-row-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(180px, 250px));
@@ -345,6 +427,24 @@ form {
 .products-row-2 > div {
   display: grid;
   gap: 0.42rem;
+}
+
+.products-fiscal-row-top {
+  grid-template-columns: minmax(190px, 230px) minmax(280px, 380px) minmax(120px, 150px) minmax(150px, 190px);
+  column-gap: 1rem;
+  row-gap: 0.8rem;
+}
+
+.products-fiscal-row-bottom {
+  grid-template-columns: repeat(3, minmax(170px, 220px));
+  column-gap: 1rem;
+  row-gap: 0.8rem;
+}
+
+.products-fiscal-row-end {
+  grid-template-columns: repeat(2, minmax(180px, 250px));
+  column-gap: 1rem;
+  row-gap: 0.8rem;
 }
 
 .checkbox-label {
@@ -402,6 +502,30 @@ form {
 .products-list li span {
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.products-edit-button {
+  width: fit-content;
+  margin-top: 0.15rem;
+  padding: 0.32rem 0.62rem;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  background: linear-gradient(120deg, #1d4ed8 0%, #2563eb 100%);
+}
+
+.products-row-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.12rem;
+}
+
+.products-delete-button {
+  width: fit-content;
+  margin-top: 0.15rem;
+  padding: 0.32rem 0.62rem;
+  border-radius: 8px;
+  font-size: 0.76rem;
+  background: linear-gradient(120deg, #b91c1c 0%, #ef4444 100%);
 }
 
 .products-id-tag {
@@ -614,58 +738,156 @@ form {
 
 .auth-panel {
   margin-top: 1.2rem;
+  padding: 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: radial-gradient(circle at 15% 10%, rgba(14, 116, 144, 0.28) 0%, transparent 35%),
+    linear-gradient(150deg, rgba(2, 6, 23, 0.95) 0%, rgba(15, 23, 42, 0.96) 100%);
+  box-shadow: inset 0 0 0 1px rgba(30, 64, 175, 0.25);
+}
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 20% 10%, rgba(15, 23, 42, 0.35) 0%, rgba(2, 6, 23, 0.82) 60%);
+  backdrop-filter: blur(1.5px);
+}
+
+.auth-panel-centered {
+  margin-top: 0;
+  width: min(460px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.auth-sidebar-status {
+  margin-top: 1.2rem;
+  display: grid;
+  gap: 0.28rem;
   padding: 0.7rem;
   border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: linear-gradient(150deg, rgba(30, 41, 59, 0.84) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: linear-gradient(140deg, rgba(2, 6, 23, 0.88) 0%, rgba(15, 23, 42, 0.92) 100%);
+}
+
+.auth-sidebar-label {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7dd3fc;
+}
+
+.auth-sidebar-status strong {
+  color: #f8fafc;
+  font-size: 0.95rem;
+}
+
+.auth-sidebar-status span {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+}
+
+.auth-switch-user {
+  margin-top: 0.28rem;
+}
+
+.auth-brand {
+  display: grid;
+  gap: 0.1rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.48);
+}
+
+.auth-brand strong {
+  font-size: 1.06rem;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+
+.auth-brand span {
+  font-size: 0.74rem;
+  color: #94a3b8;
 }
 
 .auth-panel-header {
   display: grid;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
+  gap: 0.2rem;
+  margin-bottom: 0.62rem;
 }
 
 .auth-panel-header strong {
-  font-size: 0.88rem;
+  font-size: 1.02rem;
+  color: #e2e8f0;
 }
 
 .auth-panel-header span {
-  font-size: 0.76rem;
-  color: #cbd5e1;
+  font-size: 0.74rem;
+  color: #94a3b8;
 }
 
 .auth-form {
-  gap: 0.45rem;
+  gap: 0.48rem;
 }
 
 .auth-form label {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: #cbd5e1;
+  font-weight: 600;
 }
 
 .auth-form input,
 .auth-form select {
-  font-size: 0.9rem;
-  color: #0f172a;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.72);
+  border: 1px solid rgba(59, 130, 246, 0.58);
+}
+
+.auth-password-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.42rem;
+}
+
+.auth-toggle-password {
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  background: linear-gradient(120deg, #334155 0%, #475569 100%);
+  font-size: 0.72rem;
+}
+
+.auth-submit {
+  margin-top: 0.32rem;
+  background: linear-gradient(120deg, #10b981 0%, #14b8a6 100%);
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .auth-logout {
   width: 100%;
-  margin-top: 0.55rem;
+  margin-top: 0.48rem;
 }
 
 .auth-message {
   margin: 0.55rem 0 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: #99f6e4;
+  border: 1px solid rgba(20, 184, 166, 0.28);
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.12);
+  padding: 0.4rem 0.46rem;
 }
 
 .auth-hint {
-  margin: 0.45rem 0 0;
-  font-size: 0.72rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.68rem;
   color: #94a3b8;
-  line-height: 1.45;
+  line-height: 1.38;
 }
 
 .balanca-screen {
@@ -1123,6 +1345,10 @@ form {
     gap: 0.75rem;
   }
 
+  .auth-panel-centered {
+    width: min(430px, calc(100vw - 1.3rem));
+  }
+
   .sidebar nav {
     flex-direction: row;
     flex-wrap: wrap;
@@ -1151,6 +1377,12 @@ form {
   }
 
   .products-row-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .products-fiscal-row-top,
+  .products-fiscal-row-bottom,
+  .products-fiscal-row-end {
     grid-template-columns: 1fr;
   }
 

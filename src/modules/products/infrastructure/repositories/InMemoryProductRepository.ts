@@ -15,4 +15,8 @@ export class InMemoryProductRepository implements ProductRepository {
   async save(product: Product): Promise<void> {
     this.products.set(product.id, product);
   }
+
+  async delete(id: string): Promise<void> {
+    this.products.delete(id);
+  }
 }

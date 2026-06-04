@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
+import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
@@ -41,12 +42,52 @@ const cstPisCofinsOptions = [
   '53'
 ];
 
+const taxSituationCodeOptions = ['61', '102', '300', '400', '500', '900'];
+
 const groupOptions = ['Por kilo', 'Bebidas', 'A la Carte'];
 
 const groupVisuals: Record<string, { label: string; icon: string; className: string }> = {
   'Por kilo': { label: 'Por kilo', icon: '⚖', className: 'is-por-kilo' },
   Bebidas: { label: 'Bebidas', icon: '🥤', className: 'is-bebidas' },
   'A la Carte': { label: 'A la Carte', icon: '🍽', className: 'is-ala-carte' }
+};
+
+const ncmLookupCatalog = [
+  { code: '02013000', description: 'Carne bovina desossada, fresca ou refrigerada' },
+  { code: '02071400', description: 'Cortes e miudezas de frango congelados' },
+  { code: '03038990', description: 'Peixes congelados (outros)' },
+  { code: '04012010', description: 'Leite UHT integral' },
+  { code: '07031019', description: 'Cebola fresca ou refrigerada (outras)' },
+  { code: '07133329', description: 'Feijao comum, seco, debulhado (outros)' },
+  { code: '09012100', description: 'Cafe torrado, nao descafeinado' },
+  { code: '10063021', description: 'Arroz semibranqueado ou branqueado, polido' },
+  { code: '11010010', description: 'Farinha de trigo' },
+  { code: '16025000', description: 'Preparacoes alimenticias de carne bovina' },
+  { code: '17019900', description: 'Acucares de cana ou de beterraba (outros)' },
+  { code: '19021900', description: 'Massas alimenticias nao cozidas (outras)' },
+  { code: '19059090', description: 'Produtos de padaria e pastelaria (outros)' },
+  { code: '20057000', description: 'Azeitonas preparadas ou conservadas' },
+  { code: '21039021', description: 'Molhos preparados (maionese)' },
+  { code: '22011000', description: 'Agua mineral e agua gaseificada' },
+  { code: '22021000', description: 'Refrigerantes e bebidas nao alcoolicas' },
+  { code: '22030000', description: 'Cervejas de malte' },
+  { code: '22042100', description: 'Vinhos em recipientes ate 2 litros' },
+  { code: '25010020', description: 'Sal refinado' }
+];
+
+const normalizeNcmDigits = (value: string) => value.replace(/\D/g, '').slice(0, 8);
+
+const formatNcmCode = (value: string) => {
+  const digits = normalizeNcmDigits(value);
+  if (digits.length <= 4) {
+    return digits;
+  }
+
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 4)}.${digits.slice(4)}`;
+  }
+
+  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`;
 };
 
 const parseLegacyProductCode = (productName: string) => {
@@ -101,9 +142,29 @@ const calculateSalePrice = (costValue: number, marginPercent: number) => {
   return Number((base * (1 + margin / 100)).toFixed(2));
 };
 
+const calculateMarginProfit = (costValue: number, salePrice: number) => {
+  const base = Number.isFinite(costValue) ? costValue : 0;
+  const sale = Number.isFinite(salePrice) ? salePrice : 0;
+
+  if (base <= 0 || sale <= 0) {
+    return 0;
+  }
+
+  return Number((((sale - base) / base) * 100).toFixed(2));
+};
+
+const parseDecimalInput = (value: string) => {
+  const normalized = value.replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const isFilled = (value: string) => value.trim().length > 0;
+
 export function ProductsPage() {
   const { products, setProducts, reload } = useProductsQuery();
   const { createProduct, saving } = useCreateProduct();
+  const { user } = useAuth();
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
@@ -113,6 +174,10 @@ export function ProductsPage() {
   const [barcode, setBarcode] = useState('');
   const [category, setCategory] = useState(groupOptions[0]);
   const [ncm, setNcm] = useState('');
+  const [showNcmLookup, setShowNcmLookup] = useState(false);
+  const [ncmSearchQuery, setNcmSearchQuery] = useState('');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [costValue, setCostValue] = useState(0);
   const [marginProfit, setMarginProfit] = useState(0);
   const [salePrice, setSalePrice] = useState(0);
@@ -121,6 +186,7 @@ export function ProductsPage() {
 
   const [cfop, setCfop] = useState(cfopOptions[0]);
   const [cstIcms, setCstIcms] = useState(cstIcmsOptions[0]);
+  const [taxSituationCode, setTaxSituationCode] = useState(taxSituationCodeOptions[0]);
   const [aliqIcms, setAliqIcms] = useState('');
   const [cstPis, setCstPis] = useState(cstPisCofinsOptions[0]);
   const [aliqPis, setAliqPis] = useState('');
@@ -130,6 +196,26 @@ export function ProductsPage() {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  const canEditOrDelete = user?.role !== 'BALANCA_A' && user?.role !== 'BALANCA_B';
+
+  const ncmLookupResults = useMemo(() => {
+    const query = ncmSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return ncmLookupCatalog.slice(0, 8);
+    }
+
+    const normalizedQueryDigits = normalizeNcmDigits(query);
+
+    return ncmLookupCatalog
+      .filter((item) => {
+        if (normalizedQueryDigits && item.code.includes(normalizedQueryDigits)) {
+          return true;
+        }
+
+        return item.description.toLowerCase().includes(query);
+      })
+      .slice(0, 12);
+  }, [ncmSearchQuery]);
 
   const generateCodeForCurrentCatalog = () => {
     const usedCodes = getUsedProductCodes(products);
@@ -166,28 +252,96 @@ export function ProductsPage() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
-    const usedCodes = getUsedProductCodes(products);
+    if (!canEditOrDelete) {
+      setFormError('Perfil de balanca nao pode cadastrar ou editar produtos.');
+      return;
+    }
+
+    if (!isFilled(ncm)) {
+      setFormError('Preencha o NCM antes de salvar o produto.');
+      setActiveTab('PRODUTO');
+      return;
+    }
+
+    if (!isFilled(aliqIcms) || !isFilled(aliqPis) || !isFilled(aliqCofins)) {
+      setFormError('Preencha as aliquotas fiscais (ICMS, PIS e COFINS) antes de salvar.');
+      setActiveTab('FISCAL');
+      return;
+    }
+
+    const usedCodes = getUsedProductCodes(products.filter((product) => product.id !== editingProductId));
     const generatedCode = productCode && !usedCodes.has(productCode)
       ? productCode
       : generateRandomProductCode(usedCodes);
 
-    const product = await createProduct({
-      productCode: generatedCode,
-      name,
-      category,
-      costValue,
-      marginProfit,
-      price: salePrice,
-      stock,
-      byWeight
-    });
+    if (editingProductId) {
+      const existingProduct = products.find((product) => product.id === editingProductId);
 
-    setProducts((prev) => [...prev, product]);
+      if (!existingProduct) {
+        setFormError('Produto selecionado para edicao nao foi encontrado.');
+        return;
+      }
+
+      const updatedProduct = {
+        ...existingProduct,
+        productCode: generatedCode,
+        name,
+        category,
+        ncm,
+        cfop,
+        cstIcms,
+        taxSituationCode,
+        aliqIcms,
+        cstPis,
+        aliqPis,
+        cstCofins,
+        aliqCofins,
+        fiscalType,
+        costValue,
+        marginProfit,
+        price: salePrice,
+        stock,
+        byWeight,
+        updatedAt: new Date(),
+        version: existingProduct.version + 1
+      };
+
+      await productsContainer.productRepository.save(updatedProduct);
+      setProducts((prev) => prev.map((product) => (product.id === editingProductId ? updatedProduct : product)));
+    } else {
+      const product = await createProduct({
+        productCode: generatedCode,
+        name,
+        category,
+        ncm,
+        cfop,
+        cstIcms,
+        taxSituationCode,
+        aliqIcms,
+        cstPis,
+        aliqPis,
+        cstCofins,
+        aliqCofins,
+        fiscalType,
+        costValue,
+        marginProfit,
+        price: salePrice,
+        stock,
+        byWeight
+      });
+
+      setProducts((prev) => [...prev, product]);
+    }
+
+    setFormError(null);
+    setEditingProductId(null);
 
     setName('');
     setProductCode(generateRandomProductCode(new Set([...usedCodes, generatedCode])));
     setBarcode('');
     setNcm('');
+    setNcmSearchQuery('');
+    setShowNcmLookup(false);
     setCostValue(0);
     setMarginProfit(0);
     setSalePrice(0);
@@ -196,6 +350,7 @@ export function ProductsPage() {
 
     setCfop(cfopOptions[0]);
     setCstIcms(cstIcmsOptions[0]);
+    setTaxSituationCode(taxSituationCodeOptions[0]);
     setAliqIcms('');
     setCstPis(cstPisCofinsOptions[0]);
     setAliqPis('');
@@ -205,6 +360,72 @@ export function ProductsPage() {
 
     setShowCadastroSpan(false);
     setActiveTab('PRODUTO');
+  };
+
+  const onEditProduct = (productId: string) => {
+    if (!canEditOrDelete) {
+      setFormError('Perfil de balanca nao pode editar produtos.');
+      return;
+    }
+
+    const product = products.find((item) => item.id === productId);
+    if (!product) {
+      return;
+    }
+
+    setEditingProductId(product.id);
+    setShowCadastroSpan(true);
+    setActiveTab('PRODUTO');
+    setFormError(null);
+
+    setProductCode(product.productCode ?? parseLegacyProductCode(product.name) ?? generateCodeForCurrentCatalog());
+    setName(getProductDisplayName(product));
+    setBarcode('');
+    setCategory(product.category);
+    setNcm(product.ncm ?? '');
+    setNcmSearchQuery(product.ncm ?? '');
+    setShowNcmLookup(false);
+    setStock(product.stock);
+    setByWeight(product.byWeight);
+    setCostValue(product.costValue ?? 0);
+    setMarginProfit(product.marginProfit ?? 0);
+    setSalePrice(product.price);
+
+    setCfop(product.cfop ?? cfopOptions[0]);
+    setCstIcms(product.cstIcms ?? cstIcmsOptions[0]);
+    setTaxSituationCode(product.taxSituationCode ?? taxSituationCodeOptions[0]);
+    setAliqIcms(product.aliqIcms ?? '');
+    setCstPis(product.cstPis ?? cstPisCofinsOptions[0]);
+    setAliqPis(product.aliqPis ?? '');
+    setCstCofins(product.cstCofins ?? cstPisCofinsOptions[0]);
+    setAliqCofins(product.aliqCofins ?? '');
+    setFiscalType(product.fiscalType ?? fiscalTypeOptions[0]);
+  };
+
+  const onDeleteProduct = async (productId: string) => {
+    if (!canEditOrDelete) {
+      setFormError('Perfil de balanca nao pode deletar produtos.');
+      return;
+    }
+
+    const target = products.find((product) => product.id === productId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar o produto "${getProductDisplayName(target)}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await productsContainer.productRepository.delete(productId);
+    setProducts((prev) => prev.filter((product) => product.id !== productId));
+
+    if (editingProductId === productId) {
+      setShowCadastroSpan(false);
+      setEditingProductId(null);
+      setFormError(null);
+    }
   };
 
   return (
@@ -223,20 +444,24 @@ export function ProductsPage() {
 
       <article className="card products-toolbar">
         <div className="products-toolbar-actions">
-          <button
-            type="button"
-            className="products-new-button"
-            onClick={() => {
-              if (!showCadastroSpan) {
-                setProductCode(generateCodeForCurrentCatalog());
-                setActiveTab('PRODUTO');
-              }
+          {canEditOrDelete && (
+            <button
+              type="button"
+              className="products-new-button"
+              onClick={() => {
+                if (!showCadastroSpan) {
+                  setEditingProductId(null);
+                  setFormError(null);
+                  setProductCode(generateCodeForCurrentCatalog());
+                  setActiveTab('PRODUTO');
+                }
 
-              setShowCadastroSpan((prev) => !prev);
-            }}
-          >
-            + Novo cadastro
-          </button>
+                setShowCadastroSpan((prev) => !prev);
+              }}
+            >
+              + Novo cadastro
+            </button>
+          )}
           <button type="button" onClick={onSyncProducts}>
             Sincronizar produtos
           </button>
@@ -247,7 +472,7 @@ export function ProductsPage() {
         {syncMessage && <p className="sync-banner">{syncMessage}</p>}
       </article>
 
-      {showCadastroSpan && (
+      {canEditOrDelete && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
             <h3>Produtos &gt; Cadastro</h3>
@@ -310,7 +535,58 @@ export function ProductsPage() {
                 <div className="products-row-2">
                   <div className="products-field-compact">
                     <label htmlFor="ncm">NCM</label>
-                    <input id="ncm" value={ncm} onChange={(e) => setNcm(e.target.value)} />
+                    <div className="ncm-input-row">
+                      <input
+                        id="ncm"
+                        value={ncm}
+                        onChange={(e) => setNcm(formatNcmCode(e.target.value))}
+                        placeholder="0000.00.00"
+                      />
+                      <button
+                        type="button"
+                        className="ncm-search-trigger"
+                        aria-label="Buscar NCM"
+                        title="Buscar NCM"
+                        onClick={() => {
+                          setShowNcmLookup((prev) => !prev);
+                          setNcmSearchQuery((prev) => prev || ncm);
+                        }}
+                      >
+                        🔍
+                      </button>
+                    </div>
+
+                    {showNcmLookup && (
+                      <div className="ncm-lookup-panel">
+                        <input
+                          value={ncmSearchQuery}
+                          onChange={(e) => setNcmSearchQuery(e.target.value)}
+                          placeholder="Buscar por codigo ou descricao"
+                          aria-label="Buscar por codigo ou descricao de NCM"
+                        />
+                        <ul>
+                          {ncmLookupResults.length === 0 ? (
+                            <li className="ncm-lookup-empty">Nenhum NCM encontrado.</li>
+                          ) : (
+                            ncmLookupResults.map((item) => (
+                              <li key={item.code}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNcm(formatNcmCode(item.code));
+                                    setNcmSearchQuery(item.code);
+                                    setShowNcmLookup(false);
+                                  }}
+                                >
+                                  <strong>{formatNcmCode(item.code)}</strong>
+                                  <span>{item.description}</span>
+                                </button>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                   <div className="products-field-compact">
                     <label htmlFor="stock">Estoque inicial</label>
@@ -338,8 +614,14 @@ export function ProductsPage() {
                         step="0.01"
                         value={costValue}
                         onChange={(e) => {
-                          const nextCost = Number(e.target.value);
+                          const nextCost = parseDecimalInput(e.target.value);
                           setCostValue(nextCost);
+
+                          if (salePrice > 0) {
+                            setMarginProfit(calculateMarginProfit(nextCost, salePrice));
+                            return;
+                          }
+
                           setSalePrice(calculateSalePrice(nextCost, marginProfit));
                         }}
                       />
@@ -353,7 +635,7 @@ export function ProductsPage() {
                         step="0.01"
                         value={marginProfit}
                         onChange={(e) => {
-                          const nextMargin = Number(e.target.value);
+                          const nextMargin = parseDecimalInput(e.target.value);
                           setMarginProfit(nextMargin);
                           setSalePrice(calculateSalePrice(costValue, nextMargin));
                         }}
@@ -367,7 +649,11 @@ export function ProductsPage() {
                         min={0}
                         step="0.01"
                         value={salePrice}
-                        onChange={(e) => setSalePrice(Number(e.target.value))}
+                        onChange={(e) => {
+                          const nextSale = parseDecimalInput(e.target.value);
+                          setSalePrice(nextSale);
+                          setMarginProfit(calculateMarginProfit(costValue, nextSale));
+                        }}
                         required
                       />
                     </div>
@@ -377,7 +663,7 @@ export function ProductsPage() {
                 <div className="products-row-2">
                   <div>
                     <small className="products-help-note">
-                      Preco de venda pode ser calculado automaticamente por valor + margem, ou ajustado manualmente.
+                      O sistema calcula automaticamente preco de venda por custo + margem, e tambem recalcula a margem quando voce informa custo + preco de venda.
                     </small>
                   </div>
                 </div>
@@ -393,7 +679,7 @@ export function ProductsPage() {
               </>
             ) : (
               <>
-                <div className="products-row-3">
+                <div className="products-row-4 products-fiscal-row-top">
                   <div>
                     <label htmlFor="cfop">CFOP</label>
                     <select id="cfop" value={cfop} onChange={(e) => setCfop(e.target.value)}>
@@ -416,6 +702,20 @@ export function ProductsPage() {
                     <small className="products-help-note">Dica: use o codigo CST/CSOSN conforme seu regime.</small>
                   </div>
                   <div>
+                    <label htmlFor="tax-situation-code">Codigo 61 a 900</label>
+                    <select
+                      id="tax-situation-code"
+                      value={taxSituationCode}
+                      onChange={(e) => setTaxSituationCode(e.target.value)}
+                    >
+                      {taxSituationCodeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label htmlFor="aliq-icms">Aliq. ICMS</label>
                     <input
                       id="aliq-icms"
@@ -426,7 +726,7 @@ export function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="products-row-3">
+                <div className="products-row-3 products-fiscal-row-bottom">
                   <div>
                     <label htmlFor="cst-pis">CST PIS</label>
                     <select id="cst-pis" value={cstPis} onChange={(e) => setCstPis(e.target.value)}>
@@ -458,7 +758,7 @@ export function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="products-row-2">
+                <div className="products-row-2 products-fiscal-row-end">
                   <div>
                     <label htmlFor="aliq-cofins">Aliq. COFINS</label>
                     <input
@@ -484,16 +784,22 @@ export function ProductsPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={saving}>
-                {saving ? 'Salvando...' : 'Salvar dados'}
+                {saving ? 'Salvando...' : editingProductId ? 'Salvar edicao' : 'Salvar dados'}
               </button>
               <button
                 type="button"
                 className="button-muted"
-                onClick={() => setShowCadastroSpan(false)}
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  setEditingProductId(null);
+                  setFormError(null);
+                }}
               >
                 Fechar cadastro
               </button>
             </div>
+
+            {formError && <p className="products-form-warning">{formError}</p>}
           </form>
         </article>
       )}
@@ -519,10 +825,30 @@ export function ProductsPage() {
                   <div>
                     <strong>{currency.format(product.price)}</strong>
                     <span>estoque {product.stock}</span>
-                    <span>
-                      custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
-                      {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
-                    </span>
+                    {canEditOrDelete && (
+                      <span>
+                        custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
+                        {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
+                      </span>
+                    )}
+                    {canEditOrDelete && (
+                      <div className="products-row-actions">
+                        <button
+                          type="button"
+                          className="products-edit-button"
+                          onClick={() => onEditProduct(product.id)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="products-delete-button"
+                          onClick={() => void onDeleteProduct(product.id)}
+                        >
+                          Deletar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}
