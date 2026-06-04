@@ -10,8 +10,11 @@ export class CreateProduct {
 
     const product: Product = {
       id: input.id,
+      productCode: input.productCode,
       name: input.name,
       category: input.category,
+      costValue: input.costValue,
+      marginProfit: input.marginProfit,
       price: input.price,
       byWeight: input.byWeight,
       stock: input.stock,

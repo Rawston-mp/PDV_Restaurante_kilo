@@ -12,8 +12,11 @@ describe('Products + Stock use cases integration', () => {
 
     const product = await createProduct.execute({
       id: 'prd-1',
+      productCode: '01',
       name: 'Arroz branco',
       category: 'BUFFET',
+      costValue: 45,
+      marginProfit: 44.22,
       price: 64.9,
       byWeight: true,
       stock: 50

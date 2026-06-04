@@ -3,8 +3,11 @@ import { useState } from 'react';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 
 type Input = {
+  productCode: string;
   name: string;
   category: string;
+  costValue: number;
+  marginProfit: number;
   price: number;
   byWeight: boolean;
   stock: number;
