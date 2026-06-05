@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
+import type { ClientConsumptionEntry } from '@/modules/clients/domain/entities/Client';
+import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
+import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
+import { useCreateClient } from '@/modules/clients/presentation/hooks/useCreateClient';
 import { employeesContainer } from '@/modules/employees/infrastructure/container/employeesContainer';
 import { suppliersContainer } from '@/modules/suppliers/infrastructure/container/suppliersContainer';
 import { useCreateEmployee } from '@/modules/employees/presentation/hooks/useCreateEmployee';
@@ -25,6 +29,11 @@ const parseLegacyEmployeeCode = (fullName: string) => {
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
 
+const parseLegacyClientCode = (fullName: string) => {
+  const [firstChunk] = fullName.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
 const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalName: string }>) => {
   const usedCodes = new Set<string>();
 
@@ -43,6 +52,19 @@ const getUsedEmployeeCodes = (employees: Array<{ employeeCode?: string; fullName
 
   for (const employee of employees) {
     const code = employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const getUsedClientCodes = (clients: Array<{ clientCode?: string; fullName: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const client of clients) {
+    const code = client.clientCode ?? parseLegacyClientCode(client.fullName);
     if (code) {
       usedCodes.add(code);
     }
@@ -143,6 +165,33 @@ const formatPhone = (value: string) => {
   return `(${ddd}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
 };
 
+const formatConsumptionLaunchDate = (value: Date) => {
+  const datePart = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(value);
+
+  const timePart = new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(value);
+
+  return `${datePart} ${timePart}`;
+};
+
+const parseConsumptionLaunchDate = (value: string) => {
+  const [datePart, timePart = '00:00'] = value.split(' ');
+  const [day, month, year] = datePart.split('/').map(Number);
+  const [hours, minutes] = timePart.split(':').map(Number);
+
+  if (!day || !month || !year) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day, hours || 0, minutes || 0);
+};
+
 type ViaCepResponse = {
   cep?: string;
   logradouro?: string;
@@ -157,8 +206,10 @@ export function CadastroPage() {
   const { createSupplier, saving: savingSupplier } = useCreateSupplier();
   const { employees, setEmployees } = useEmployeesQuery();
   const { createEmployee, saving: savingEmployee } = useCreateEmployee();
+  const { clients, setClients } = useClientsQuery();
+  const { createClient, saving: savingClient } = useCreateClient();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
 
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -206,6 +257,31 @@ export function CadastroPage() {
   const [employeeActive, setEmployeeActive] = useState(true);
   const [employeeCepSuggestionMessage, setEmployeeCepSuggestionMessage] = useState<string | null>(null);
   const [isEmployeeCepLookupLoading, setIsEmployeeCepLookupLoading] = useState(false);
+
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [clientFormError, setClientFormError] = useState<string | null>(null);
+  const [clientCode, setClientCode] = useState('');
+  const [clientFullName, setClientFullName] = useState('');
+  const [clientCpf, setClientCpf] = useState('');
+  const [clientCep, setClientCep] = useState('');
+  const [clientAddress, setClientAddress] = useState('');
+  const [clientNumber, setClientNumber] = useState('');
+  const [clientNeighborhood, setClientNeighborhood] = useState('');
+  const [clientState, setClientState] = useState('SP');
+  const [clientCity, setClientCity] = useState('');
+  const [clientComplement, setClientComplement] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [clientMobile, setClientMobile] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientActive, setClientActive] = useState(true);
+  const [clientConsumptionDescription, setClientConsumptionDescription] = useState('');
+  const [clientConsumptionHistory, setClientConsumptionHistory] = useState<ClientConsumptionEntry[]>([]);
+  const [clientCepSuggestionMessage, setClientCepSuggestionMessage] = useState<string | null>(null);
+  const [isClientCepLookupLoading, setIsClientCepLookupLoading] = useState(false);
+  const [clientHistoryPeriodStartInput, setClientHistoryPeriodStartInput] = useState('');
+  const [clientHistoryPeriodEndInput, setClientHistoryPeriodEndInput] = useState('');
+  const [clientHistoryPeriodStart, setClientHistoryPeriodStart] = useState('');
+  const [clientHistoryPeriodEnd, setClientHistoryPeriodEnd] = useState('');
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -317,6 +393,61 @@ export function CadastroPage() {
     };
   }, [employeeCep, employeeCity, employeeState]);
 
+  useEffect(() => {
+    const cepDigits = normalizeCepDigits(clientCep);
+
+    if (cepDigits.length < 8) {
+      setIsClientCepLookupLoading(false);
+      setClientCepSuggestionMessage(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const lookupTimer = window.setTimeout(async () => {
+      try {
+        setIsClientCepLookupLoading(true);
+
+        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Falha na consulta de CEP.');
+        }
+
+        const data = (await response.json()) as ViaCepResponse;
+
+        if (data.erro) {
+          setClientCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          return;
+        }
+
+        setClientAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
+        setClientNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
+        setClientCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
+        setClientState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+
+        const suggestedCity = data.localidade ?? clientCity;
+        const suggestedUf = data.uf ?? clientState;
+        setClientCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+      } catch {
+        if (!controller.signal.aborted) {
+          setClientCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsClientCepLookupLoading(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(lookupTimer);
+    };
+  }, [clientCep, clientCity, clientState]);
+
   const generateSupplierCodeForCurrentCatalog = () => {
     const usedCodes = getUsedSupplierCodes(suppliers);
     return generateRandomCode(usedCodes);
@@ -324,6 +455,11 @@ export function CadastroPage() {
 
   const generateEmployeeCodeForCurrentCatalog = () => {
     const usedCodes = getUsedEmployeeCodes(employees);
+    return generateRandomCode(usedCodes);
+  };
+
+  const generateClientCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedClientCodes(clients);
     return generateRandomCode(usedCodes);
   };
 
@@ -377,6 +513,33 @@ export function CadastroPage() {
     setIsEmployeeCepLookupLoading(false);
   };
 
+  const clearClientForm = (nextCode?: string) => {
+    setEditingClientId(null);
+    setClientFormError(null);
+    setClientCode(nextCode ?? generateClientCodeForCurrentCatalog());
+    setClientFullName('');
+    setClientCpf('');
+    setClientCep('');
+    setClientAddress('');
+    setClientNumber('');
+    setClientNeighborhood('');
+    setClientState('SP');
+    setClientCity('');
+    setClientComplement('');
+    setClientPhone('');
+    setClientMobile('');
+    setClientEmail('');
+    setClientActive(true);
+    setClientConsumptionDescription('');
+    setClientConsumptionHistory([]);
+    setClientCepSuggestionMessage(null);
+    setIsClientCepLookupLoading(false);
+    setClientHistoryPeriodStartInput('');
+    setClientHistoryPeriodEndInput('');
+    setClientHistoryPeriodStart('');
+    setClientHistoryPeriodEnd('');
+  };
+
   const supplierRows = useMemo(
     () =>
       [...suppliers].sort((a, b) => {
@@ -396,6 +559,76 @@ export function CadastroPage() {
       }),
     [employees]
   );
+
+  const clientRows = useMemo(
+    () =>
+      [...clients].sort((a, b) => {
+        const aCode = Number(a.clientCode ?? parseLegacyClientCode(a.fullName) ?? '0');
+        const bCode = Number(b.clientCode ?? parseLegacyClientCode(b.fullName) ?? '0');
+        return aCode - bCode;
+      }),
+    [clients]
+  );
+
+  const filteredClientConsumptionHistory = useMemo(() => {
+    if (!clientHistoryPeriodStart && !clientHistoryPeriodEnd) {
+      return clientConsumptionHistory;
+    }
+
+    const startDate = clientHistoryPeriodStart ? new Date(`${clientHistoryPeriodStart}T00:00:00`) : null;
+    const endDate = clientHistoryPeriodEnd ? new Date(`${clientHistoryPeriodEnd}T23:59:59`) : null;
+
+    return clientConsumptionHistory.filter((entry) => {
+      const launchedAt = parseConsumptionLaunchDate(entry.launchedAt);
+      if (!launchedAt) {
+        return false;
+      }
+
+      if (startDate && launchedAt < startDate) {
+        return false;
+      }
+
+      if (endDate && launchedAt > endDate) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [clientConsumptionHistory, clientHistoryPeriodEnd, clientHistoryPeriodStart]);
+
+  const addClientConsumptionEntry = () => {
+    const description = clientConsumptionDescription.trim();
+    if (!description) {
+      return;
+    }
+
+    const launchedAt = formatConsumptionLaunchDate(new Date());
+    setClientConsumptionHistory((prev) => [
+      {
+        id: `entry-${crypto.randomUUID()}`,
+        description,
+        launchedAt
+      },
+      ...prev
+    ]);
+    setClientConsumptionDescription('');
+  };
+
+  const removeClientConsumptionEntry = (entryId: string) => {
+    setClientConsumptionHistory((prev) => prev.filter((entry) => entry.id !== entryId));
+  };
+
+  const applyClientHistoryPeriodFilter = () => {
+    setClientHistoryPeriodStart(clientHistoryPeriodStartInput);
+    setClientHistoryPeriodEnd(clientHistoryPeriodEndInput);
+  };
+
+  const clearClientHistoryPeriodFilter = () => {
+    setClientHistoryPeriodStartInput('');
+    setClientHistoryPeriodEndInput('');
+    setClientHistoryPeriodStart('');
+    setClientHistoryPeriodEnd('');
+  };
 
   const onSubmitSupplier = async (event: FormEvent) => {
     event.preventDefault();
@@ -549,6 +782,76 @@ export function CadastroPage() {
     setShowCadastroSpan(false);
   };
 
+  const onSubmitClient = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!isFilled(clientFullName) || !isFilled(clientCpf)) {
+      setClientFormError('Preencha Nome completo e CPF antes de salvar.');
+      return;
+    }
+
+    const usedCodes = getUsedClientCodes(clients.filter((client) => client.id !== editingClientId));
+    const generatedCode = clientCode && !usedCodes.has(clientCode)
+      ? clientCode
+      : generateRandomCode(usedCodes);
+
+    if (editingClientId) {
+      const existingClient = clients.find((client) => client.id === editingClientId);
+
+      if (!existingClient) {
+        setClientFormError('Cliente selecionado para edicao nao foi encontrado.');
+        return;
+      }
+
+      const updatedClient = {
+        ...existingClient,
+        clientCode: generatedCode,
+        fullName: clientFullName,
+        cpf: clientCpf,
+        cep: clientCep,
+        address: clientAddress,
+        number: clientNumber,
+        neighborhood: clientNeighborhood,
+        state: clientState,
+        city: clientCity,
+        complement: clientComplement,
+        phone: clientPhone,
+        mobile: clientMobile,
+        email: clientEmail,
+        active: clientActive,
+        consumptionHistory: clientConsumptionHistory,
+        updatedAt: new Date(),
+        version: existingClient.version + 1
+      };
+
+      await clientsContainer.clientRepository.save(updatedClient);
+      setClients((prev) => prev.map((client) => (client.id === editingClientId ? updatedClient : client)));
+    } else {
+      const client = await createClient({
+        clientCode: generatedCode,
+        fullName: clientFullName,
+        cpf: clientCpf,
+        cep: clientCep,
+        address: clientAddress,
+        number: clientNumber,
+        neighborhood: clientNeighborhood,
+        state: clientState,
+        city: clientCity,
+        complement: clientComplement,
+        phone: clientPhone,
+        mobile: clientMobile,
+        email: clientEmail,
+        active: clientActive,
+        consumptionHistory: clientConsumptionHistory
+      });
+
+      setClients((prev) => [...prev, client]);
+    }
+
+    clearClientForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setShowCadastroSpan(false);
+  };
+
   const onEditSupplier = (supplierId: string) => {
     const supplier = suppliers.find((item) => item.id === supplierId);
     if (!supplier) {
@@ -613,6 +916,40 @@ export function CadastroPage() {
     setIsEmployeeCepLookupLoading(false);
   };
 
+  const onEditClient = (clientId: string) => {
+    const client = clients.find((item) => item.id === clientId);
+    if (!client) {
+      return;
+    }
+
+    setEditingClientId(client.id);
+    setShowCadastroSpan(true);
+    setClientFormError(null);
+
+    setClientCode(client.clientCode ?? parseLegacyClientCode(client.fullName) ?? generateClientCodeForCurrentCatalog());
+    setClientFullName(client.fullName);
+    setClientCpf(client.cpf);
+    setClientCep(client.cep || '');
+    setClientAddress(client.address || '');
+    setClientNumber(client.number || '');
+    setClientNeighborhood(client.neighborhood || '');
+    setClientState(client.state || 'SP');
+    setClientCity(client.city || '');
+    setClientComplement(client.complement || '');
+    setClientPhone(client.phone);
+    setClientMobile(client.mobile);
+    setClientEmail(client.email);
+    setClientActive(client.active);
+    setClientConsumptionDescription('');
+    setClientConsumptionHistory(client.consumptionHistory ?? []);
+    setClientCepSuggestionMessage(null);
+    setIsClientCepLookupLoading(false);
+    setClientHistoryPeriodStartInput('');
+    setClientHistoryPeriodEndInput('');
+    setClientHistoryPeriodStart('');
+    setClientHistoryPeriodEnd('');
+  };
+
   const onDeleteSupplier = async (supplierId: string) => {
     const target = suppliers.find((supplier) => supplier.id === supplierId);
     if (!target) {
@@ -653,7 +990,31 @@ export function CadastroPage() {
     }
   };
 
-  const currentCount = activeTab === 'FORNECEDORES' ? suppliers.length : employees.length;
+  const onDeleteClient = async (clientId: string) => {
+    const target = clients.find((client) => client.id === clientId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar o cliente "${target.fullName}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await clientsContainer.clientRepository.delete(clientId);
+    setClients((prev) => prev.filter((client) => client.id !== clientId));
+
+    if (editingClientId === clientId) {
+      clearClientForm();
+      setShowCadastroSpan(false);
+    }
+  };
+
+  const currentCount = activeTab === 'FORNECEDORES'
+    ? suppliers.length
+    : activeTab === 'FUNCIONARIOS'
+      ? employees.length
+      : clients.length;
 
   return (
     <section className="cadastro-page">
@@ -665,7 +1026,13 @@ export function CadastroPage() {
         </div>
         <div className="products-kpi">
           <strong>{currentCount}</strong>
-          <span>{activeTab === 'FORNECEDORES' ? 'fornecedores' : 'funcionarios'}</span>
+          <span>
+            {activeTab === 'FORNECEDORES'
+              ? 'fornecedores'
+              : activeTab === 'FUNCIONARIOS'
+                ? 'funcionarios'
+                : 'clientes'}
+          </span>
         </div>
       </header>
 
@@ -691,6 +1058,16 @@ export function CadastroPage() {
           >
             Funcionarios
           </button>
+          <button
+            type="button"
+            className={activeTab === 'CLIENTES' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('CLIENTES');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Clientes
+          </button>
         </div>
       </article>
 
@@ -703,8 +1080,10 @@ export function CadastroPage() {
               if (!showCadastroSpan) {
                 if (activeTab === 'FORNECEDORES') {
                   clearSupplierForm();
-                } else {
+                } else if (activeTab === 'FUNCIONARIOS') {
                   clearEmployeeForm();
+                } else {
+                  clearClientForm();
                 }
               }
 
@@ -1126,6 +1505,258 @@ export function CadastroPage() {
         </article>
       )}
 
+      {activeTab === 'CLIENTES' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <h3>Cadastro rapido | Clientes</h3>
+          </header>
+
+          <form onSubmit={onSubmitClient} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>Dados basicos</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="client-code">ID cliente (automatico)</label>
+                  <input id="client-code" value={clientCode} readOnly />
+                </div>
+                <div>
+                  <label htmlFor="client-cpf">CPF</label>
+                  <input
+                    id="client-cpf"
+                    value={clientCpf}
+                    onChange={(e) => setClientCpf(formatCpfCnpj(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-full-name">Nome completo</label>
+                  <input
+                    id="client-full-name"
+                    value={clientFullName}
+                    onChange={(e) => setClientFullName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="employee-status-field">
+                <label>Status do cliente</label>
+                <div className="employee-status-toggle" role="group" aria-label="Status do cliente">
+                  <button
+                    type="button"
+                    className={clientActive ? 'is-active' : ''}
+                    onClick={() => setClientActive(true)}
+                  >
+                    Ativo
+                  </button>
+                  <button
+                    type="button"
+                    className={!clientActive ? 'is-active' : ''}
+                    onClick={() => setClientActive(false)}
+                  >
+                    Inativo
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Contato</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="client-phone">Telefone</label>
+                  <input
+                    id="client-phone"
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(formatPhone(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-mobile">Celular</label>
+                  <input
+                    id="client-mobile"
+                    value={clientMobile}
+                    onChange={(e) => setClientMobile(formatPhone(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-email">E-Mail</label>
+                  <input
+                    id="client-email"
+                    type="email"
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Endereco</h4>
+
+              <div className="suppliers-row-address-top">
+                <div>
+                  <label htmlFor="client-cep">CEP</label>
+                  <input
+                    id="client-cep"
+                    value={clientCep}
+                    onChange={(e) => setClientCep(formatCep(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-address">Logradouro</label>
+                  <input
+                    id="client-address"
+                    value={clientAddress}
+                    onChange={(e) => setClientAddress(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-number">Numero</label>
+                  <input
+                    id="client-number"
+                    value={clientNumber}
+                    onChange={(e) => setClientNumber(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-neighborhood">Bairro</label>
+                  <input
+                    id="client-neighborhood"
+                    value={clientNeighborhood}
+                    onChange={(e) => setClientNeighborhood(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {(isClientCepLookupLoading || clientCepSuggestionMessage) && (
+                <p className="suppliers-cep-feedback">
+                  {isClientCepLookupLoading
+                    ? 'Buscando sugestao de endereco pelo CEP...'
+                    : clientCepSuggestionMessage}
+                </p>
+              )}
+
+              <div className="suppliers-row-address-bottom">
+                <div>
+                  <label htmlFor="client-state">UF</label>
+                  <select id="client-state" value={clientState} onChange={(e) => setClientState(e.target.value)}>
+                    {stateOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="client-city">Cidade</label>
+                  <input
+                    id="client-city"
+                    value={clientCity}
+                    onChange={(e) => setClientCity(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-complement">Complemento</label>
+                  <input
+                    id="client-complement"
+                    value={clientComplement}
+                    onChange={(e) => setClientComplement(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-status">Status</label>
+                  <input id="client-status" value={clientActive ? 'ATIVO' : 'INATIVO'} readOnly />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Historico de consumo (Fiado)</h4>
+
+              <div className="client-history-filter-row">
+                <div>
+                  <label htmlFor="client-history-period-start">Periodo de</label>
+                  <input
+                    id="client-history-period-start"
+                    type="date"
+                    value={clientHistoryPeriodStartInput}
+                    onChange={(e) => setClientHistoryPeriodStartInput(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="client-history-period-end">ate</label>
+                  <input
+                    id="client-history-period-end"
+                    type="date"
+                    value={clientHistoryPeriodEndInput}
+                    onChange={(e) => setClientHistoryPeriodEndInput(e.target.value)}
+                  />
+                </div>
+                <button type="button" onClick={applyClientHistoryPeriodFilter}>
+                  Buscar
+                </button>
+                <button type="button" className="button-muted" onClick={clearClientHistoryPeriodFilter}>
+                  Limpar
+                </button>
+              </div>
+
+              <div className="client-history-input-row">
+                <input
+                  id="client-consumption-description"
+                  value={clientConsumptionDescription}
+                  onChange={(e) => setClientConsumptionDescription(e.target.value)}
+                  placeholder="Descreva o lancamento de consumo fiado"
+                />
+                <button type="button" onClick={addClientConsumptionEntry}>
+                  Lancar com data/hora
+                </button>
+              </div>
+
+              {clientConsumptionHistory.length === 0 ? (
+                <p className="client-history-empty">Nenhum consumo lancado para este cliente.</p>
+              ) : filteredClientConsumptionHistory.length === 0 ? (
+                <p className="client-history-empty">Nenhum consumo encontrado no periodo selecionado.</p>
+              ) : (
+                <ul className="client-history-list">
+                  {filteredClientConsumptionHistory.map((entry) => (
+                    <li key={entry.id}>
+                      <div>
+                        <strong>{entry.launchedAt}</strong>
+                        <span>{entry.description}</span>
+                      </div>
+                      <button type="button" className="products-delete-button" onClick={() => removeClientConsumptionEntry(entry.id)}>
+                        Remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit" disabled={savingClient}>
+                {savingClient ? 'Salvando...' : editingClientId ? 'Salvar edicao' : 'Salvar dados'}
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearClientForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {clientFormError && <p className="products-form-warning">{clientFormError}</p>}
+          </form>
+        </article>
+      )}
+
       {activeTab === 'FORNECEDORES' && (
         <article className="card products-list-card">
           <h3>Fornecedores ativos</h3>
@@ -1241,6 +1872,59 @@ export function CadastroPage() {
                         type="button"
                         className="products-delete-button"
                         onClick={() => void onDeleteEmployee(employee.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
+
+      {activeTab === 'CLIENTES' && (
+        <article className="card products-list-card">
+          <h3>Clientes cadastrados</h3>
+
+          {clientRows.length === 0 ? (
+            <p className="empty-state">Nenhum cliente cadastrado ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {clientRows.map((client) => (
+                <li key={client.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {client.clientCode ?? parseLegacyClientCode(client.fullName) ?? '--'}</span>{' '}
+                      {client.fullName}
+                    </strong>
+                    <span>CPF {client.cpf}</span>
+                    <span>
+                      {client.city || '-'} - {client.state || '-'}
+                    </span>
+                    <span>
+                      Contato: {client.mobile || client.phone || '-'} | E-mail: {client.email || '-'}
+                    </span>
+                    <span>Status: {client.active ? 'ATIVO' : 'INATIVO'}</span>
+                    <span>Historico fiado: {client.consumptionHistory.length} lancamento(s)</span>
+                  </div>
+                  <div>
+                    {client.consumptionHistory.length > 0 && (
+                      <div className="client-history-list-preview">
+                        <strong>Ultimo lancamento</strong>
+                        <span>{client.consumptionHistory[0]?.launchedAt}</span>
+                        <span>{client.consumptionHistory[0]?.description}</span>
+                      </div>
+                    )}
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditClient(client.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteClient(client.id)}
                       >
                         Deletar
                       </button>

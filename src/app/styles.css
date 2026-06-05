@@ -1403,6 +1403,83 @@ form {
   gap: 0.42rem;
 }
 
+.client-history-input-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  gap: 0.7rem;
+  align-items: end;
+}
+
+.client-history-filter-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 200px) minmax(160px, 200px) auto auto;
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.client-history-filter-row > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.client-history-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
+.client-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.client-history-list li {
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.client-history-list li > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.client-history-list li strong {
+  color: #1e3a8a;
+  font-size: 0.82rem;
+}
+
+.client-history-list li span {
+  color: #334155;
+  font-size: 0.84rem;
+}
+
+.client-history-list-preview {
+  margin-bottom: 0.45rem;
+  display: grid;
+  justify-items: end;
+  gap: 0.15rem;
+}
+
+.client-history-list-preview strong {
+  color: #1e3a8a;
+  font-size: 0.8rem;
+}
+
+.client-history-list-preview span {
+  color: #334155;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
 .employee-status-field {
   display: grid;
   gap: 0.42rem;
@@ -1577,6 +1654,14 @@ form {
   .suppliers-row-2-wide,
   .suppliers-row-address-top,
   .suppliers-row-address-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .client-history-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .client-history-filter-row {
     grid-template-columns: 1fr;
   }
 
