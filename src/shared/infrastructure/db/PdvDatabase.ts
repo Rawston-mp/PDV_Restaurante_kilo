@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 
+import type { Client } from '@/modules/clients/domain/entities/Client';
 import type { Employee } from '@/modules/employees/domain/entities/Employee';
 import type { Order } from '@/modules/orders/domain/entities/Order';
 import type { Product } from '@/modules/products/domain/entities/Product';
@@ -33,6 +34,7 @@ export class PdvDatabase extends Dexie {
   products!: Table<Product, string>;
   suppliers!: Table<Supplier, string>;
   employees!: Table<Employee, string>;
+  clients!: Table<Client, string>;
   comandaState!: Table<ComandaStateRow, 'main'>;
   weightHistory!: Table<WeightHistoryRow, string>;
   syncQueue!: Table<SyncQueueRow, string>;
@@ -82,6 +84,17 @@ export class PdvDatabase extends Dexie {
       products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
       suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
       employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
+      comandaState: 'id, comandaAtiva, updatedAt',
+      weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
+      syncQueue: 'id, type, attempts, nextRetryAt, lastError'
+    });
+
+    this.version(7).stores({
+      orders: 'id, table, status, createdAt, updatedAt',
+      products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
+      suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
+      employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
+      clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
       comandaState: 'id, comandaAtiva, updatedAt',
       weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
       syncQueue: 'id, type, attempts, nextRetryAt, lastError'
