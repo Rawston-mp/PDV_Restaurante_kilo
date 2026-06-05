@@ -29,6 +29,8 @@ const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
 const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
 const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;
 const cardBrandGroupOptions = ['MULTIBANDEIRA', 'VISA', 'MASTERCARD', 'ELO', 'AMEX', 'HIPERCARD', 'OUTRA'] as const;
+const financeTabs = ['DESPESAS', 'RECEITA', 'CONTA_CORRENTE'] as const;
+const financeTypeOptions = ['FIXA', 'VARIAVEL', 'OPERACIONAL', 'SERVICO', 'TAXA', 'OUTRO'] as const;
 const stockEntryNatureOfOperationOptions = [
   '0 -',
   '1102 - Entrada de Mercadorias',
@@ -46,6 +48,13 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
 });
 const nfeXmlPortalUrl = 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ%20gAVw2g=';
 const cardManagersStorageKey = 'pdv.cardManagers.settings';
+const financeEntriesStorageKey = 'pdv.finance.entries';
+const financeDocumentTypesStorageKey = 'pdv.finance.documentTypes';
+const defaultFinanceDocumentTypesByTab = {
+  DESPESAS: ['Adiantamento', 'Boleto', 'Conducao', 'Dinheiro', 'Ferias', 'Pix', 'Ted'],
+  RECEITA: ['Cartoes', 'Dinheiro', 'Fechamento', 'Pix', 'Ted'],
+  CONTA_CORRENTE: ['Extrato', 'Pix', 'Ted', 'Transferencia']
+} as const;
 
 const parseLegacySupplierCode = (legalName: string) => {
   const [firstChunk] = legalName.split(' - ');
@@ -69,6 +78,11 @@ const parseLegacyConvenioCode = (name: string) => {
 
 const parseLegacyCardManagerCode = (name: string) => {
   const [firstChunk] = name.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const parseLegacyFinanceCode = (description: string) => {
+  const [firstChunk] = description.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
 
@@ -134,6 +148,36 @@ const parseXmlDate = (value: string) => {
   return parseXmlDateTime(value).slice(0, 10);
 };
 
+const parseIsoDateInput = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatIsoDateInput = (date: Date) => {
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const addDays = (baseDate: Date, days: number) => {
+  const nextDate = new Date(baseDate);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
+const getDateWithFixedDay = (baseDate: Date, dayOfMonth: number) => {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+  const validDay = Math.min(dayOfMonth, lastDayOfMonth);
+  return new Date(year, month, validDay);
+};
+
 const normalizeSearchText = (value: string) => normalizeXmlValue(value).replace(/[^A-Z0-9 ]/g, ' ');
 
 const normalizeNatureOfOperation = (value: string) => {
@@ -164,6 +208,30 @@ type CardManagerSettings = {
   createdAt: string;
   updatedAt: string;
   version: number;
+};
+
+type FinanceTab = (typeof financeTabs)[number];
+
+type FinanceDocumentTypeCatalog = Record<FinanceTab, string[]>;
+
+type FinanceEntry = {
+  id: string;
+  financeCode: string;
+  tab: FinanceTab;
+  supplierName?: string;
+  description: string;
+  categoryType: (typeof financeTypeOptions)[number];
+  amount: string;
+  dueDate: string;
+  competenceDate: string;
+  accountName: string;
+  documentRef: string;
+  status: 'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO';
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+  reversedFromEntryId?: string;
 };
 
 const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalName: string }>) => {
@@ -223,6 +291,19 @@ const getUsedCardManagerCodes = (cardManagers: Array<{ cardManagerCode?: string;
 
   for (const manager of cardManagers) {
     const code = manager.cardManagerCode ?? parseLegacyCardManagerCode(manager.name);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const getUsedFinanceCodes = (entries: Array<{ financeCode?: string; description: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const entry of entries) {
+    const code = entry.financeCode ?? parseLegacyFinanceCode(entry.description);
     if (code) {
       usedCodes.add(code);
     }
@@ -385,7 +466,7 @@ export function CadastroPage() {
   const { stockEntries, setStockEntries } = useStockEntriesQuery();
   const { createStockEntry, saving: savingStockEntry } = useCreateStockEntry();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS' | 'ADMIN_CARTOES' | 'ESTOQUE'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS' | 'ADMIN_CARTOES' | 'FINANCEIRO' | 'ESTOQUE'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
 
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -482,6 +563,34 @@ export function CadastroPage() {
   const [cardManagerActive, setCardManagerActive] = useState(true);
   const [cardManagerNotes, setCardManagerNotes] = useState('');
 
+  const [financeEntries, setFinanceEntries] = useState<FinanceEntry[]>([]);
+  const [activeFinanceTab, setActiveFinanceTab] = useState<FinanceTab>('DESPESAS');
+  const [editingFinanceEntryId, setEditingFinanceEntryId] = useState<string | null>(null);
+  const [financeFormError, setFinanceFormError] = useState<string | null>(null);
+  const [financeCode, setFinanceCode] = useState('');
+  const [financeSupplierName, setFinanceSupplierName] = useState('');
+  const [financeDescription, setFinanceDescription] = useState('');
+  const [financeCategoryType, setFinanceCategoryType] = useState<(typeof financeTypeOptions)[number]>('OPERACIONAL');
+  const [financeAmount, setFinanceAmount] = useState('');
+  const [financeDueDate, setFinanceDueDate] = useState('');
+  const [financeCompetenceDate, setFinanceCompetenceDate] = useState('');
+  const [financeAccountName, setFinanceAccountName] = useState('');
+  const [financeDocumentRef, setFinanceDocumentRef] = useState('');
+  const [financeDocumentTypeCatalog, setFinanceDocumentTypeCatalog] = useState<FinanceDocumentTypeCatalog>({
+    DESPESAS: [...defaultFinanceDocumentTypesByTab.DESPESAS],
+    RECEITA: [...defaultFinanceDocumentTypesByTab.RECEITA],
+    CONTA_CORRENTE: [...defaultFinanceDocumentTypesByTab.CONTA_CORRENTE]
+  });
+  const [financeStatus, setFinanceStatus] = useState<'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO'>('ABERTO');
+  const [financeNotes, setFinanceNotes] = useState('');
+  const [duplicateFinanceSourceEntryId, setDuplicateFinanceSourceEntryId] = useState<string | null>(null);
+  const [duplicateFinanceIssueDate, setDuplicateFinanceIssueDate] = useState('');
+  const [duplicateFinanceDueDate, setDuplicateFinanceDueDate] = useState('');
+  const [duplicateFinanceInstallmentCount, setDuplicateFinanceInstallmentCount] = useState('1');
+  const [duplicateFinanceIntervalDays, setDuplicateFinanceIntervalDays] = useState('30');
+  const [duplicateFinanceFixedDayEnabled, setDuplicateFinanceFixedDayEnabled] = useState(false);
+  const [duplicateFinanceError, setDuplicateFinanceError] = useState<string | null>(null);
+
 
   const [stockEntryFormError, setStockEntryFormError] = useState<string | null>(null);
   const [stockEntryCode, setStockEntryCode] = useState('');
@@ -535,6 +644,84 @@ export function CadastroPage() {
       localStorage.removeItem(cardManagersStorageKey);
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      const rawEntries = localStorage.getItem(financeEntriesStorageKey);
+      if (!rawEntries) {
+        return;
+      }
+
+      const parsedEntries = JSON.parse(rawEntries) as FinanceEntry[];
+      if (Array.isArray(parsedEntries)) {
+        setFinanceEntries(parsedEntries);
+      }
+    } catch {
+      localStorage.removeItem(financeEntriesStorageKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const rawDocumentTypes = localStorage.getItem(financeDocumentTypesStorageKey);
+      if (!rawDocumentTypes) {
+        return;
+      }
+
+      const parsedDocumentTypes = JSON.parse(rawDocumentTypes) as unknown;
+
+      if (Array.isArray(parsedDocumentTypes)) {
+        const sanitizedLegacy = Array.from(
+          new Set(
+            parsedDocumentTypes
+              .map((item) => String(item).trim())
+              .filter((item) => item.length > 0)
+          )
+        );
+
+        if (sanitizedLegacy.length > 0) {
+          setFinanceDocumentTypeCatalog({
+            DESPESAS: [...sanitizedLegacy],
+            RECEITA: [...sanitizedLegacy],
+            CONTA_CORRENTE: [...sanitizedLegacy]
+          });
+        }
+        return;
+      }
+
+      if (parsedDocumentTypes && typeof parsedDocumentTypes === 'object') {
+        const readTab = (tab: FinanceTab, fallback: string[]) => {
+          const rawTabValue = (parsedDocumentTypes as Record<string, unknown>)[tab];
+          if (!Array.isArray(rawTabValue)) {
+            return fallback;
+          }
+
+          const sanitized = Array.from(
+            new Set(
+              rawTabValue
+                .map((item) => String(item).trim())
+                .filter((item) => item.length > 0)
+            )
+          );
+
+          return sanitized.length > 0 ? sanitized : fallback;
+        };
+
+        setFinanceDocumentTypeCatalog({
+          DESPESAS: readTab('DESPESAS', [...defaultFinanceDocumentTypesByTab.DESPESAS]),
+          RECEITA: readTab('RECEITA', [...defaultFinanceDocumentTypesByTab.RECEITA]),
+          CONTA_CORRENTE: readTab('CONTA_CORRENTE', [...defaultFinanceDocumentTypesByTab.CONTA_CORRENTE])
+        });
+      }
+    } catch {
+      localStorage.removeItem(financeDocumentTypesStorageKey);
+    }
+  }, []);
+
+  const financeDocumentTypeOptions = useMemo(
+    () => financeDocumentTypeCatalog[activeFinanceTab] ?? [],
+    [financeDocumentTypeCatalog, activeFinanceTab]
+  );
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -725,6 +912,11 @@ export function CadastroPage() {
     const usedCodes = getUsedCardManagerCodes(cardManagers);
     return generateRandomCode(usedCodes);
   };
+  
+  const generateFinanceCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedFinanceCodes(financeEntries);
+    return generateRandomCode(usedCodes);
+  };
 
   const generateStockEntryCodeForCurrentCatalog = () => {
     const usedCodes = getUsedStockEntryCodes(stockEntries);
@@ -832,6 +1024,23 @@ export function CadastroPage() {
     setCardManagerSettlementDays('30');
     setCardManagerActive(true);
     setCardManagerNotes('');
+  };
+  
+  const clearFinanceForm = (nextCode?: string, tab?: FinanceTab) => {
+    const targetTab = tab ?? activeFinanceTab;
+    setEditingFinanceEntryId(null);
+    setFinanceFormError(null);
+    setFinanceCode(nextCode ?? generateFinanceCodeForCurrentCatalog());
+    setFinanceSupplierName('');
+    setFinanceDescription('');
+    setFinanceCategoryType('OPERACIONAL');
+    setFinanceAmount('');
+    setFinanceDueDate('');
+    setFinanceCompetenceDate('');
+    setFinanceAccountName('');
+    setFinanceDocumentRef('');
+    setFinanceStatus(targetTab === 'DESPESAS' ? 'ABERTO' : targetTab === 'RECEITA' ? 'ABERTO' : 'RECEBIDO');
+    setFinanceNotes('');
   };
 
   const clearStockEntryForm = (nextCode?: string) => {
@@ -1063,6 +1272,113 @@ export function CadastroPage() {
     [cardManagers]
   );
 
+  const financeRows = useMemo(
+    () =>
+      [...financeEntries].sort((a, b) => {
+        const aCode = Number(a.financeCode ?? parseLegacyFinanceCode(a.description) ?? '0');
+        const bCode = Number(b.financeCode ?? parseLegacyFinanceCode(b.description) ?? '0');
+        return aCode - bCode;
+      }),
+    [financeEntries]
+  );
+
+  const activeFinanceRows = useMemo(
+    () => financeRows.filter((entry) => entry.tab === activeFinanceTab),
+    [financeRows, activeFinanceTab]
+  );
+
+  const duplicateFinanceSourceEntry = useMemo(
+    () => financeEntries.find((entry) => entry.id === duplicateFinanceSourceEntryId) ?? null,
+    [financeEntries, duplicateFinanceSourceEntryId]
+  );
+
+  const duplicateFinancePreview = useMemo(() => {
+    const installmentCount = Number(duplicateFinanceInstallmentCount);
+    const intervalDays = Number(duplicateFinanceIntervalDays);
+    const dueDateBase = parseIsoDateInput(duplicateFinanceDueDate);
+
+    if (!Number.isFinite(installmentCount) || installmentCount < 1 || installmentCount > 120) {
+      return null;
+    }
+
+    if (!Number.isFinite(intervalDays) || intervalDays < 1 || intervalDays > 365) {
+      return null;
+    }
+
+    if (!dueDateBase) {
+      return null;
+    }
+
+    const firstDueDate = dueDateBase;
+    const lastInstallmentIndex = installmentCount - 1;
+    const dueDateFromInterval = addDays(dueDateBase, intervalDays * lastInstallmentIndex);
+    const lastDueDate = duplicateFinanceFixedDayEnabled
+      ? getDateWithFixedDay(dueDateFromInterval, dueDateBase.getDate())
+      : dueDateFromInterval;
+
+    return `Serão geradas ${installmentCount} parcela(s), com intervalo de ${intervalDays} dia(s), de ${firstDueDate.toLocaleDateString('pt-BR')} até ${lastDueDate.toLocaleDateString('pt-BR')}.`;
+  }, [duplicateFinanceInstallmentCount, duplicateFinanceIntervalDays, duplicateFinanceDueDate, duplicateFinanceFixedDayEnabled]);
+
+  const financeSupplierSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(financeSupplierName).trim();
+    if (normalizedQuery.length < 3) {
+      return [];
+    }
+
+    return suppliers
+      .filter((supplier) => {
+        const legalName = normalizeSearchText(supplier.legalName);
+        const tradeName = normalizeSearchText(supplier.tradeName ?? '');
+        return legalName.includes(normalizedQuery) || tradeName.includes(normalizedQuery);
+      })
+      .slice(0, 10)
+      .map((supplier) => ({
+        id: supplier.id,
+        label: supplier.legalName || supplier.tradeName || ''
+      }))
+      .filter((supplier) => supplier.label.length > 0);
+  }, [suppliers, financeSupplierName]);
+
+  const openSupplierFormFromFinance = () => {
+    const initialName = financeSupplierName.trim();
+
+    clearSupplierForm();
+    if (initialName) {
+      setLegalName(initialName);
+      setTradeName(initialName);
+    }
+
+    setActiveTab('FORNECEDORES');
+    setShowCadastroSpan(true);
+    setFinanceFormError(null);
+  };
+
+  const addFinanceDocumentTypeOption = () => {
+    const candidate = financeDocumentRef.trim();
+    if (candidate.length < 2) {
+      setFinanceFormError('Digite ao menos 2 caracteres em Documento / Referência para cadastrar no +.');
+      return;
+    }
+
+    const alreadyExists = financeDocumentTypeOptions.some(
+      (option) => normalizeSearchText(option) === normalizeSearchText(candidate)
+    );
+    if (alreadyExists) {
+      setFinanceFormError('Esse tipo de documento já está cadastrado.');
+      return;
+    }
+
+    const nextOptions = [...financeDocumentTypeOptions, candidate].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const nextCatalog: FinanceDocumentTypeCatalog = {
+      ...financeDocumentTypeCatalog,
+      [activeFinanceTab]: nextOptions
+    };
+
+    setFinanceDocumentTypeCatalog(nextCatalog);
+    localStorage.setItem(financeDocumentTypesStorageKey, JSON.stringify(nextCatalog));
+    setFinanceFormError(null);
+  };
+
   const stockEntryRows = useMemo(
     () =>
       [...stockEntries].sort((a, b) => {
@@ -1233,6 +1549,11 @@ export function CadastroPage() {
     setCardManagers(nextCardManagers);
     localStorage.setItem(cardManagersStorageKey, JSON.stringify(nextCardManagers));
   };
+  
+  const saveFinanceEntriesLocal = (nextEntries: FinanceEntry[]) => {
+    setFinanceEntries(nextEntries);
+    localStorage.setItem(financeEntriesStorageKey, JSON.stringify(nextEntries));
+  };
 
   const onSubmitCardManager = (event: FormEvent) => {
     event.preventDefault();
@@ -1340,6 +1661,268 @@ export function CadastroPage() {
       clearCardManagerForm();
       setShowCadastroSpan(false);
     }
+  };
+  
+  const onSubmitFinanceEntry = (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!isFilled(financeDescription)) {
+      setFinanceFormError('Preencha a descricao antes de salvar.');
+      return;
+    }
+
+    const amountValue = Number(financeAmount.replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setFinanceFormError('Informe um valor valido para o lancamento.');
+      return;
+    }
+
+    const usedCodes = getUsedFinanceCodes(financeEntries.filter((entry) => entry.id !== editingFinanceEntryId));
+    const generatedCode = financeCode && !usedCodes.has(financeCode)
+      ? financeCode
+      : generateRandomCode(usedCodes);
+
+    if (editingFinanceEntryId) {
+      const existingEntry = financeEntries.find((entry) => entry.id === editingFinanceEntryId);
+
+      if (!existingEntry) {
+        setFinanceFormError('Lancamento selecionado para edicao nao foi encontrado.');
+        return;
+      }
+
+      const updatedEntry: FinanceEntry = {
+        ...existingEntry,
+        financeCode: generatedCode,
+        tab: activeFinanceTab,
+        supplierName: financeSupplierName,
+        description: financeDescription,
+        categoryType: financeCategoryType,
+        amount: financeAmount,
+        dueDate: financeDueDate,
+        competenceDate: financeCompetenceDate,
+        accountName: financeAccountName,
+        documentRef: financeDocumentRef,
+        status: financeStatus,
+        notes: financeNotes,
+        updatedAt: new Date().toISOString(),
+        version: existingEntry.version + 1
+      };
+
+      saveFinanceEntriesLocal(
+        financeEntries.map((entry) => (entry.id === editingFinanceEntryId ? updatedEntry : entry))
+      );
+    } else {
+      const nowIso = new Date().toISOString();
+      const createdEntry: FinanceEntry = {
+        id: `finance-entry-${crypto.randomUUID()}`,
+        financeCode: generatedCode,
+        tab: activeFinanceTab,
+        supplierName: financeSupplierName,
+        description: financeDescription,
+        categoryType: financeCategoryType,
+        amount: financeAmount,
+        dueDate: financeDueDate,
+        competenceDate: financeCompetenceDate,
+        accountName: financeAccountName,
+        documentRef: financeDocumentRef,
+        status: financeStatus,
+        notes: financeNotes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 1
+      };
+
+      saveFinanceEntriesLocal([...financeEntries, createdEntry]);
+    }
+
+    clearFinanceForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setShowCadastroSpan(false);
+  };
+
+  const onEditFinanceEntry = (entryId: string) => {
+    const entry = financeEntries.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+
+    setEditingFinanceEntryId(entry.id);
+    setActiveFinanceTab(entry.tab);
+    setShowCadastroSpan(true);
+    setFinanceFormError(null);
+
+    setFinanceCode(entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? generateFinanceCodeForCurrentCatalog());
+    setFinanceSupplierName(entry.supplierName ?? '');
+    setFinanceDescription(entry.description);
+    setFinanceCategoryType(entry.categoryType);
+    setFinanceAmount(entry.amount);
+    setFinanceDueDate(entry.dueDate);
+    setFinanceCompetenceDate(entry.competenceDate);
+    setFinanceAccountName(entry.accountName);
+    setFinanceDocumentRef(entry.documentRef);
+    setFinanceStatus(entry.status);
+    setFinanceNotes(entry.notes);
+  };
+
+  const onDeleteFinanceEntry = (entryId: string) => {
+    const target = financeEntries.find((entry) => entry.id === entryId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar o lancamento "${target.description}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const nextEntries = financeEntries.filter((entry) => entry.id !== entryId);
+    saveFinanceEntriesLocal(nextEntries);
+
+    if (editingFinanceEntryId === entryId) {
+      clearFinanceForm();
+      setShowCadastroSpan(false);
+    }
+  };
+
+  const onDuplicateFinanceEntry = (entryId: string) => {
+    const sourceEntry = financeEntries.find((entry) => entry.id === entryId);
+    if (!sourceEntry) {
+      return;
+    }
+
+    setDuplicateFinanceSourceEntryId(sourceEntry.id);
+    setDuplicateFinanceIssueDate(sourceEntry.competenceDate || sourceEntry.dueDate || '');
+    setDuplicateFinanceDueDate(sourceEntry.dueDate || sourceEntry.competenceDate || '');
+    setDuplicateFinanceInstallmentCount('1');
+    setDuplicateFinanceIntervalDays('30');
+    setDuplicateFinanceFixedDayEnabled(false);
+    setDuplicateFinanceError(null);
+  };
+
+  const onDuplicateFromCurrentFinanceTab = () => {
+    const sourceEntry = activeFinanceRows[activeFinanceRows.length - 1];
+    if (!sourceEntry) {
+      window.alert('Nao ha lancamentos nesta aba para duplicar. Cadastre ao menos 1 lançamento primeiro.');
+      return;
+    }
+
+    onDuplicateFinanceEntry(sourceEntry.id);
+  };
+
+  const onCancelDuplicateFinanceEntry = () => {
+    setDuplicateFinanceSourceEntryId(null);
+    setDuplicateFinanceIssueDate('');
+    setDuplicateFinanceDueDate('');
+    setDuplicateFinanceInstallmentCount('1');
+    setDuplicateFinanceIntervalDays('30');
+    setDuplicateFinanceFixedDayEnabled(false);
+    setDuplicateFinanceError(null);
+  };
+
+  const onConfirmDuplicateFinanceEntry = () => {
+    if (!duplicateFinanceSourceEntry) {
+      onCancelDuplicateFinanceEntry();
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(duplicateFinanceIssueDate)) {
+      setDuplicateFinanceError('Informe a data de emissao no formato AAAA-MM-DD.');
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(duplicateFinanceDueDate)) {
+      setDuplicateFinanceError('Informe a data de vencimento no formato AAAA-MM-DD.');
+      return;
+    }
+
+    const installmentCount = Number(duplicateFinanceInstallmentCount);
+    if (!Number.isFinite(installmentCount) || installmentCount < 1 || installmentCount > 120) {
+      setDuplicateFinanceError('Qtde de parcelas deve ser entre 1 e 120.');
+      return;
+    }
+
+    const intervalDays = Number(duplicateFinanceIntervalDays);
+    if (!Number.isFinite(intervalDays) || intervalDays < 1 || intervalDays > 365) {
+      setDuplicateFinanceError('Dias entre parcelas deve ser entre 1 e 365.');
+      return;
+    }
+
+    const issueDateBase = parseIsoDateInput(duplicateFinanceIssueDate);
+    const dueDateBase = parseIsoDateInput(duplicateFinanceDueDate);
+    if (!issueDateBase || !dueDateBase) {
+      setDuplicateFinanceError('As datas informadas sao invalidas.');
+      return;
+    }
+
+    const fixedDayOfMonth = dueDateBase.getDate();
+
+    const usedCodes = getUsedFinanceCodes(financeEntries);
+    const nowIso = new Date().toISOString();
+
+    const duplicatedEntries: FinanceEntry[] = [];
+    for (let installmentIndex = 0; installmentIndex < installmentCount; installmentIndex += 1) {
+      const issueDate = addDays(issueDateBase, intervalDays * installmentIndex);
+      const dueDateFromInterval = addDays(dueDateBase, intervalDays * installmentIndex);
+      const dueDate = duplicateFinanceFixedDayEnabled
+        ? getDateWithFixedDay(dueDateFromInterval, fixedDayOfMonth)
+        : dueDateFromInterval;
+
+      const duplicatedCode = generateRandomCode(usedCodes);
+      usedCodes.add(duplicatedCode);
+
+      duplicatedEntries.push({
+        ...duplicateFinanceSourceEntry,
+        id: `finance-entry-${crypto.randomUUID()}`,
+        financeCode: duplicatedCode,
+        dueDate: formatIsoDateInput(dueDate),
+        competenceDate: formatIsoDateInput(issueDate),
+        status: duplicateFinanceSourceEntry.tab === 'CONTA_CORRENTE' ? 'RECEBIDO' : 'ABERTO',
+        notes: duplicateFinanceSourceEntry.notes
+          ? `${duplicateFinanceSourceEntry.notes}\nDuplicado em parcela ${installmentIndex + 1}/${installmentCount} do lançamento ${duplicateFinanceSourceEntry.financeCode ?? '--'} em ${new Date().toLocaleDateString('pt-BR')}`
+          : `Duplicado em parcela ${installmentIndex + 1}/${installmentCount} do lançamento ${duplicateFinanceSourceEntry.financeCode ?? '--'} em ${new Date().toLocaleDateString('pt-BR')}`,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 1,
+        reversedFromEntryId: undefined
+      });
+    }
+
+    saveFinanceEntriesLocal([...financeEntries, ...duplicatedEntries]);
+    onCancelDuplicateFinanceEntry();
+  };
+
+  const onReverseFinanceEntry = (entryId: string) => {
+    const target = financeEntries.find((entry) => entry.id === entryId);
+    if (!target) {
+      return;
+    }
+
+    if (target.status === 'ESTORNADO') {
+      window.alert('Este lançamento já está estornado.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja estornar o lançamento "${target.description}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const notePrefix = `Estornado em ${new Date().toLocaleString('pt-BR')}`;
+    const reversedEntries = financeEntries.map<FinanceEntry>((entry) => {
+      if (entry.id !== entryId) {
+        return entry;
+      }
+
+      return {
+        ...entry,
+        status: 'ESTORNADO' as const,
+        notes: entry.notes ? `${notePrefix}\n${entry.notes}` : notePrefix,
+        updatedAt: nowIso,
+        version: entry.version + 1
+      };
+    });
+
+    saveFinanceEntriesLocal(reversedEntries);
   };
 
   const onSubmitStockEntry = async (event: FormEvent) => {
@@ -1852,6 +2435,8 @@ export function CadastroPage() {
           ? convenios.length
           : activeTab === 'ADMIN_CARTOES'
             ? cardManagers.length
+            : activeTab === 'FINANCEIRO'
+              ? activeFinanceRows.length
           : stockEntries.length;
 
   return (
@@ -1875,6 +2460,12 @@ export function CadastroPage() {
                     ? 'convenios'
                     : activeTab === 'ADMIN_CARTOES'
                       ? 'administradoras'
+                      : activeTab === 'FINANCEIRO'
+                        ? activeFinanceTab === 'DESPESAS'
+                          ? 'despesas'
+                          : activeFinanceTab === 'RECEITA'
+                            ? 'receitas'
+                            : 'conta corrente'
                     : 'estoque'}
           </span>
         </div>
@@ -1934,6 +2525,16 @@ export function CadastroPage() {
           </button>
           <button
             type="button"
+            className={activeTab === 'FINANCEIRO' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('FINANCEIRO');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Financeiro
+          </button>
+          <button
+            type="button"
             className={activeTab === 'ESTOQUE' ? 'is-active' : ''}
             onClick={() => {
               setActiveTab('ESTOQUE');
@@ -1974,29 +2575,31 @@ export function CadastroPage() {
               />
             </>
           ) : (
-            <button
-              type="button"
-              className="products-new-button"
-              onClick={() => {
-                if (!showCadastroSpan) {
-                  if (activeTab === 'FORNECEDORES') {
-                    clearSupplierForm();
-                  } else if (activeTab === 'FUNCIONARIOS') {
-                    clearEmployeeForm();
-                  } else if (activeTab === 'CLIENTES') {
-                    clearClientForm();
-                  } else if (activeTab === 'ADMIN_CARTOES') {
-                    clearCardManagerForm();
-                  } else {
-                    clearConvenioForm();
+            activeTab !== 'FINANCEIRO' && (
+              <button
+                type="button"
+                className="products-new-button"
+                onClick={() => {
+                  if (!showCadastroSpan) {
+                    if (activeTab === 'FORNECEDORES') {
+                      clearSupplierForm();
+                    } else if (activeTab === 'FUNCIONARIOS') {
+                      clearEmployeeForm();
+                    } else if (activeTab === 'CLIENTES') {
+                      clearClientForm();
+                    } else if (activeTab === 'ADMIN_CARTOES') {
+                      clearCardManagerForm();
+                    } else {
+                      clearConvenioForm();
+                    }
                   }
-                }
 
-                setShowCadastroSpan((prev) => !prev);
-              }}
-            >
-              + Novo cadastro
-            </button>
+                  setShowCadastroSpan((prev) => !prev);
+                }}
+              >
+                + Novo cadastro
+              </button>
+            )
           )}
         </div>
       </article>
@@ -2906,6 +3509,222 @@ export function CadastroPage() {
         </article>
       )}
 
+      {activeTab === 'FINANCEIRO' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <div>
+              <h3>Cadastro rapido | Financeiro</h3>
+              <p className="products-subtitle">Lancamentos por categoria financeira.</p>
+            </div>
+            <div className="products-cadastro-tabs">
+              {financeTabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={activeFinanceTab === tab ? 'is-active' : ''}
+                  onClick={() => {
+                    setActiveFinanceTab(tab);
+                    if (!editingFinanceEntryId) {
+                      clearFinanceForm(undefined, tab);
+                    }
+                  }}
+                >
+                  {tab === 'DESPESAS' ? 'Despesas' : tab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}
+                </button>
+              ))}
+            </div>
+          </header>
+
+          <form onSubmit={onSubmitFinanceEntry} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>
+                {activeFinanceTab === 'DESPESAS'
+                  ? 'Lançamento de despesa'
+                  : activeFinanceTab === 'RECEITA'
+                    ? 'Lançamento de receita'
+                    : 'Movimentação em conta corrente'}
+              </h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="finance-code">ID lançamento (automatico)</label>
+                  <input id="finance-code" value={financeCode} readOnly />
+                </div>
+                <div>
+                  <label htmlFor="finance-supplier-name">Fornecedor</label>
+                  <div className="products-supplier-picker-field">
+                    <input
+                      id="finance-supplier-name"
+                      list="finance-supplier-suggestions"
+                      value={financeSupplierName}
+                      onChange={(e) => {
+                        setFinanceSupplierName(e.target.value);
+                        setFinanceFormError(null);
+                      }}
+                      placeholder="Digite 3 letras para sugerir fornecedor"
+                    />
+                    <button
+                      type="button"
+                      className="products-supplier-picker-button"
+                      onClick={openSupplierFormFromFinance}
+                      aria-label="Cadastrar fornecedor rapido"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <datalist id="finance-supplier-suggestions">
+                    {financeSupplierSuggestions.map((supplier) => (
+                      <option key={supplier.id} value={supplier.label} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label htmlFor="finance-description">Descrição</label>
+                  <input
+                    id="finance-description"
+                    value={financeDescription}
+                    onChange={(e) => setFinanceDescription(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="finance-category-type">Tipo</label>
+                  <select
+                    id="finance-category-type"
+                    value={financeCategoryType}
+                    onChange={(e) => setFinanceCategoryType(e.target.value as typeof financeTypeOptions[number])}
+                  >
+                    {financeTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="finance-amount">Valor</label>
+                  <input
+                    id="finance-amount"
+                    inputMode="decimal"
+                    value={financeAmount}
+                    onChange={(e) => setFinanceAmount(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="finance-due-date">Data de vencimento</label>
+                  <input
+                    id="finance-due-date"
+                    type="date"
+                    value={financeDueDate}
+                    onChange={(e) => setFinanceDueDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="finance-competence-date">Competência</label>
+                  <input
+                    id="finance-competence-date"
+                    type="date"
+                    value={financeCompetenceDate}
+                    onChange={(e) => setFinanceCompetenceDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="finance-account-name">Conta</label>
+                  <input
+                    id="finance-account-name"
+                    value={financeAccountName}
+                    onChange={(e) => setFinanceAccountName(e.target.value)}
+                    placeholder="Ex: Caixa, Banco X, Conta Operacional"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="finance-document-ref">Documento / Referência</label>
+                  <div className="products-supplier-picker-field">
+                    <input
+                      id="finance-document-ref"
+                      list="finance-document-ref-options"
+                      value={financeDocumentRef}
+                      onChange={(e) => {
+                        setFinanceDocumentRef(e.target.value);
+                        setFinanceFormError(null);
+                      }}
+                      placeholder="Ex: boleto, pix, ted, adiantamento"
+                    />
+                    <button
+                      type="button"
+                      className="products-supplier-picker-button"
+                      onClick={addFinanceDocumentTypeOption}
+                      aria-label="Cadastrar tipo de documento"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <datalist id="finance-document-ref-options">
+                    {financeDocumentTypeOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label htmlFor="finance-status">Status</label>
+                  <select
+                    id="finance-status"
+                    value={financeStatus}
+                    onChange={(e) => setFinanceStatus(e.target.value as 'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO')}
+                  >
+                    <option value="ABERTO">ABERTO</option>
+                    <option value="PAGO">PAGO</option>
+                    <option value="RECEBIDO">RECEBIDO</option>
+                    <option value="ESTORNADO">ESTORNADO</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-notes-field">
+                <label htmlFor="finance-notes">Observações</label>
+                <textarea
+                  id="finance-notes"
+                  value={financeNotes}
+                  onChange={(e) => setFinanceNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Notas sobre o lançamento financeiro"
+                />
+              </div>
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit">{editingFinanceEntryId ? 'Salvar edicao' : 'Salvar lançamento'}</button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={onDuplicateFromCurrentFinanceTab}
+              >
+                Duplicar conta
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearFinanceForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {financeFormError && <p className="products-form-warning">{financeFormError}</p>}
+          </form>
+        </article>
+      )}
+
       {activeTab === 'ESTOQUE' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
@@ -3715,6 +4534,198 @@ export function CadastroPage() {
                         type="button"
                         className="products-delete-button"
                         onClick={() => onDeleteCardManager(cardManager.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
+
+      {activeTab === 'FINANCEIRO' && (
+        <article className="card products-list-card">
+          <header className="products-cadastro-header">
+            <div>
+              <h3>Financeiro</h3>
+              <p className="products-subtitle">Gerencie despesas, receitas e conta corrente.</p>
+            </div>
+            <div className="products-cadastro-tabs">
+              {financeTabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={activeFinanceTab === tab ? 'is-active' : ''}
+                  onClick={() => {
+                    setActiveFinanceTab(tab);
+                    onCancelDuplicateFinanceEntry();
+                  }}
+                >
+                  {tab === 'DESPESAS' ? 'Despesas' : tab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="products-new-button"
+              onClick={() => {
+                if (!showCadastroSpan) {
+                  clearFinanceForm(undefined, activeFinanceTab);
+                }
+
+                setShowCadastroSpan((prev) => !prev);
+              }}
+            >
+              {showCadastroSpan ? 'Fechar cadastro' : '+ Novo cadastro'}
+            </button>
+          </header>
+
+          {duplicateFinanceSourceEntry && (
+            <section className="suppliers-section">
+              <h4>Duplicar conta</h4>
+              <div className="suppliers-row-3">
+                <div>
+                  <label>Lançamento base</label>
+                  <input
+                    value={`${duplicateFinanceSourceEntry.financeCode ?? '--'} - ${duplicateFinanceSourceEntry.description}`}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label htmlFor="duplicate-finance-issue-date">Emissão</label>
+                  <input
+                    id="duplicate-finance-issue-date"
+                    type="date"
+                    value={duplicateFinanceIssueDate}
+                    onChange={(e) => {
+                      setDuplicateFinanceIssueDate(e.target.value);
+                      setDuplicateFinanceError(null);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="duplicate-finance-due-date">Vencimento</label>
+                  <input
+                    id="duplicate-finance-due-date"
+                    type="date"
+                    value={duplicateFinanceDueDate}
+                    onChange={(e) => {
+                      setDuplicateFinanceDueDate(e.target.value);
+                      setDuplicateFinanceError(null);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="duplicate-finance-fixed-day" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input
+                      id="duplicate-finance-fixed-day"
+                      type="checkbox"
+                      checked={duplicateFinanceFixedDayEnabled}
+                      onChange={(e) => setDuplicateFinanceFixedDayEnabled(e.target.checked)}
+                    />
+                    Dia fixo para parcelas
+                  </label>
+                </div>
+                <div>
+                  <label htmlFor="duplicate-finance-installment-count">Qtde de parcelas</label>
+                  <input
+                    id="duplicate-finance-installment-count"
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={duplicateFinanceInstallmentCount}
+                    onChange={(e) => {
+                      setDuplicateFinanceInstallmentCount(e.target.value);
+                      setDuplicateFinanceError(null);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="duplicate-finance-interval-days">Dias entre parcelas</label>
+                  <input
+                    id="duplicate-finance-interval-days"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={duplicateFinanceIntervalDays}
+                    onChange={(e) => {
+                      setDuplicateFinanceIntervalDays(e.target.value);
+                      setDuplicateFinanceError(null);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {duplicateFinancePreview && <p className="products-subtitle">{duplicateFinancePreview}</p>}
+
+              <div className="products-cadastro-footer">
+                <button type="button" onClick={onConfirmDuplicateFinanceEntry}>
+                  Salvar dados
+                </button>
+                <button type="button" className="button-muted" onClick={onCancelDuplicateFinanceEntry}>
+                  Cancelar
+                </button>
+              </div>
+
+              {duplicateFinanceError && <p className="products-form-warning">{duplicateFinanceError}</p>}
+            </section>
+          )}
+
+          {activeFinanceRows.length === 0 ? (
+            <p className="empty-state">Nenhum lançamento em {activeFinanceTab === 'DESPESAS' ? 'Despesas' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {activeFinanceRows.map((entry) => (
+                <li key={entry.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</span>{' '}
+                      {entry.description}
+                    </strong>
+                    <span>
+                      Tipo: {entry.categoryType} | Status: {entry.status}
+                    </span>
+                    <span>
+                      Fornecedor: {entry.supplierName || '-'}
+                    </span>
+                    <span>
+                      Valor: {entry.amount || '-'} | Vencimento: {entry.dueDate || '-'} | Competência: {entry.competenceDate || '-'}
+                    </span>
+                    <span>
+                      Conta: {entry.accountName || '-'} | Documento: {entry.documentRef || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span>{entry.notes || 'Sem observacoes'}</span>
+                    <div className="products-row-actions">
+                      <button
+                        type="button"
+                        className="button-muted"
+                        onClick={() => onDuplicateFinanceEntry(entry.id)}
+                      >
+                        Duplicar conta
+                      </button>
+                      <button
+                        type="button"
+                        className="button-muted"
+                        onClick={() => onReverseFinanceEntry(entry.id)}
+                        disabled={entry.status === 'ESTORNADO'}
+                      >
+                        Estornar
+                      </button>
+                      <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => onDeleteFinanceEntry(entry.id)}
                       >
                         Deletar
                       </button>
