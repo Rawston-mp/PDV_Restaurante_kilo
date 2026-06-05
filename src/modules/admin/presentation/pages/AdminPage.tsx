@@ -12,6 +12,22 @@ import {
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
+import {
+  BR_UF_OPTIONS,
+  CERTIFICATE_IMPORT_SOURCE_OPTIONS,
+  CERTIFICATE_MODEL_OPTIONS,
+  CERTIFICATE_SETTINGS_STORAGE_KEY,
+  DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS,
+  formatCertificateFileSize,
+  getCertificateExpiryStatus,
+  getUfNfceRuleMessage,
+  isValidCnpjFormat,
+  parseDigitalCertificateSettings,
+  type CertificateImportSource,
+  type CertificateModel,
+  type DigitalCertificateSettings,
+  validateCscByUf
+} from '@/shared/domain/services/digitalCertificateRules';
 
 const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLOSE_COMANDA', 'CANCEL_ORDER'];
 const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
@@ -49,6 +65,26 @@ export function AdminPage() {
   const [nextPin, setNextPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinMessage, setPinMessage] = useState<string | null>(null);
+  const [certificateFormError, setCertificateFormError] = useState<string | null>(null);
+  const [certificateAlias, setCertificateAlias] = useState('');
+  const [certificateCompanyName, setCertificateCompanyName] = useState('');
+  const [certificateCnpj, setCertificateCnpj] = useState('');
+  const [certificateModel, setCertificateModel] = useState<CertificateModel>('A1');
+  const [certificateUf, setCertificateUf] = useState<string>('SP');
+  const [certificateCscId, setCertificateCscId] = useState('');
+  const [certificateCscCode, setCertificateCscCode] = useState('');
+  const [certificatePassword, setCertificatePassword] = useState('');
+  const [certificateFileName, setCertificateFileName] = useState('');
+  const [certificateFileSize, setCertificateFileSize] = useState<number | null>(null);
+  const [certificateFileExtension, setCertificateFileExtension] = useState('');
+  const [certificateImportSource, setCertificateImportSource] = useState<CertificateImportSource>('MAQUINA');
+  const [certificateImportedAt, setCertificateImportedAt] = useState('');
+  const [certificateExpirationDate, setCertificateExpirationDate] = useState('');
+  const [certificateRenewAlertDays, setCertificateRenewAlertDays] = useState(
+    String(DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS)
+  );
+  const [savedCertificateSettings, setSavedCertificateSettings] = useState<DigitalCertificateSettings | null>(null);
+  const [certificateMessage, setCertificateMessage] = useState<string | null>(null);
 
   const refresh = async () => {
     const tasks = await productsContainer.syncTaskQueue.listAll();
@@ -59,6 +95,35 @@ export function AdminPage() {
 
   useEffect(() => {
     void refresh();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const parsedSettings = parseDigitalCertificateSettings(localStorage.getItem(CERTIFICATE_SETTINGS_STORAGE_KEY));
+      if (!parsedSettings) {
+        return;
+      }
+
+      setSavedCertificateSettings(parsedSettings);
+      setCertificateAlias(parsedSettings.alias);
+      setCertificateCompanyName(parsedSettings.companyName);
+      setCertificateCnpj(parsedSettings.cnpj);
+      setCertificateModel(parsedSettings.model);
+      setCertificateUf(parsedSettings.uf);
+      setCertificateCscId(parsedSettings.cscId);
+      setCertificateCscCode(parsedSettings.cscCode);
+      setCertificateFileName(parsedSettings.fileName);
+      setCertificateFileSize(parsedSettings.fileSize);
+      setCertificateFileExtension(parsedSettings.fileExtension);
+      setCertificateImportSource(parsedSettings.importSource);
+      setCertificateImportedAt(parsedSettings.importedAt);
+      setCertificateExpirationDate(parsedSettings.expirationDate);
+      setCertificateRenewAlertDays(
+        String(parsedSettings.renewAlertDays || DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS)
+      );
+    } catch {
+      localStorage.removeItem(CERTIFICATE_SETTINGS_STORAGE_KEY);
+    }
   }, []);
 
   const queueSummary = useMemo(() => {
@@ -132,6 +197,131 @@ export function AdminPage() {
       return line.includes(normalizedText);
     });
   }, [actionFilter, outcomeFilter, roleFilter, textFilter, auditEvents]);
+
+  const certificateExpiryInfo = useMemo(() => {
+    if (!certificateExpirationDate) {
+      return null;
+    }
+
+    return getCertificateExpiryStatus({
+      expirationDate: certificateExpirationDate,
+      renewAlertDays: certificateRenewAlertDays
+    });
+  }, [certificateExpirationDate, certificateRenewAlertDays]);
+
+  const isCscRequired = true;
+
+  const clearCertificateForm = () => {
+    setCertificateFormError(null);
+    setCertificateAlias('');
+    setCertificateCompanyName('');
+    setCertificateCnpj('');
+    setCertificateModel('A1');
+    setCertificateUf('SP');
+    setCertificateCscId('');
+    setCertificateCscCode('');
+    setCertificatePassword('');
+    setCertificateFileName('');
+    setCertificateFileSize(null);
+    setCertificateFileExtension('');
+    setCertificateImportSource('MAQUINA');
+    setCertificateImportedAt('');
+    setCertificateExpirationDate('');
+    setCertificateRenewAlertDays(String(DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS));
+  };
+
+  const openCertificateFilePicker = (source: CertificateImportSource) => {
+    setCertificateImportSource(source);
+    const fileInput = document.getElementById('admin-certificate-file-input') as HTMLInputElement | null;
+    fileInput?.click();
+  };
+
+  const onImportCertificateFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    const extensionChunks = file.name.split('.');
+    const extension = extensionChunks.length > 1 ? extensionChunks[extensionChunks.length - 1].toLowerCase() : '';
+
+    setCertificateFileName(file.name);
+    setCertificateFileSize(file.size);
+    setCertificateFileExtension(extension);
+    setCertificateImportedAt(new Date().toISOString());
+    setCertificateFormError(null);
+    setCertificateMessage('Arquivo de certificado importado. Revise os dados e salve a configuração.');
+
+    if (extension === 'pfx' || extension === 'p12') {
+      setCertificateModel('A1');
+    }
+  };
+
+  const onSaveCertificateSettings = (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!certificateFileName.trim()) {
+      setCertificateFormError('Importe o arquivo do certificado antes de salvar.');
+      return;
+    }
+
+    if (!isValidCnpjFormat(certificateCnpj)) {
+      setCertificateFormError('CNPJ inválido. Informe 14 dígitos válidos.');
+      return;
+    }
+
+    if (isCscRequired) {
+      const cscValidationError = validateCscByUf({
+        uf: certificateUf,
+        cscId: certificateCscId,
+        cscCode: certificateCscCode
+      });
+
+      if (cscValidationError) {
+        setCertificateFormError(cscValidationError);
+        return;
+      }
+    }
+
+    const renewAlertDays = Number(certificateRenewAlertDays);
+    if (!Number.isFinite(renewAlertDays) || renewAlertDays < 1 || renewAlertDays > 180) {
+      setCertificateFormError('Alerta de renovação deve estar entre 1 e 180 dias.');
+      return;
+    }
+
+    const settings: DigitalCertificateSettings = {
+      alias: certificateAlias,
+      companyName: certificateCompanyName,
+      cnpj: certificateCnpj,
+      model: certificateModel,
+      uf: certificateUf,
+      cscId: certificateCscId,
+      cscCode: certificateCscCode,
+      fileName: certificateFileName,
+      fileSize: certificateFileSize ?? 0,
+      fileExtension: certificateFileExtension,
+      importSource: certificateImportSource,
+      expirationDate: certificateExpirationDate,
+      renewAlertDays,
+      importedAt: certificateImportedAt,
+      updatedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem(CERTIFICATE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    setSavedCertificateSettings(settings);
+    setCertificatePassword('');
+    setCertificateFormError(null);
+    setCertificateMessage('Configuração do certificado digital salva com sucesso.');
+  };
+
+  const onRemoveCertificateSettings = () => {
+    localStorage.removeItem(CERTIFICATE_SETTINGS_STORAGE_KEY);
+    setSavedCertificateSettings(null);
+    clearCertificateForm();
+    setCertificateMessage('Configuração de certificado removida.');
+  };
 
   const onProcessQueue = async () => {
     const result = await productsContainer.processSyncQueue.execute();
@@ -416,6 +606,121 @@ export function AdminPage() {
               </div>
             )}
           </section>
+        </article>
+
+        <article className="card admin-certificate">
+          <h3>Certificado digital (NFC-e)</h3>
+          <p className="admin-subtitle">Configuração fiscal centralizada no painel Admin.</p>
+
+          <form onSubmit={onSaveCertificateSettings} className="admin-certificate-form">
+            <div className="admin-audit-filters">
+              <input
+                value={certificateAlias}
+                onChange={(e) => setCertificateAlias(e.target.value)}
+                placeholder="Apelido da configuração"
+              />
+              <input
+                value={certificateCompanyName}
+                onChange={(e) => setCertificateCompanyName(e.target.value)}
+                placeholder="Razão social"
+              />
+              <input
+                value={certificateCnpj}
+                onChange={(e) => setCertificateCnpj(e.target.value)}
+                placeholder="CNPJ (14 dígitos)"
+              />
+              <select value={certificateModel} onChange={(e) => setCertificateModel(e.target.value as CertificateModel)}>
+                {CERTIFICATE_MODEL_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    Modelo {option}
+                  </option>
+                ))}
+              </select>
+              <select value={certificateUf} onChange={(e) => setCertificateUf(e.target.value)}>
+                {BR_UF_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    UF {option}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="password"
+                value={certificatePassword}
+                onChange={(e) => setCertificatePassword(e.target.value)}
+                placeholder="Senha do certificado"
+              />
+              <input
+                value={certificateCscId}
+                onChange={(e) => setCertificateCscId(e.target.value)}
+                placeholder={`CSC ID${isCscRequired ? ' (obrigatório)' : ''}`}
+              />
+              <input
+                value={certificateCscCode}
+                onChange={(e) => setCertificateCscCode(e.target.value)}
+                placeholder={`CSC${isCscRequired ? ' (obrigatório)' : ''}`}
+              />
+              <input
+                type="date"
+                value={certificateExpirationDate}
+                onChange={(e) => setCertificateExpirationDate(e.target.value)}
+              />
+              <input
+                type="number"
+                min={1}
+                max={180}
+                value={certificateRenewAlertDays}
+                onChange={(e) => setCertificateRenewAlertDays(e.target.value)}
+                placeholder="Alerta de renovação (dias)"
+              />
+            </div>
+
+            <div className="products-certificate-source-buttons">
+              <button type="button" onClick={() => openCertificateFilePicker('MAQUINA')}>
+                Importar da máquina
+              </button>
+              <button type="button" className="button-muted" onClick={() => openCertificateFilePicker('PENDRIVE')}>
+                Importar do pen drive
+              </button>
+              <input
+                id="admin-certificate-file-input"
+                type="file"
+                accept=".pfx,.p12,.cer,.crt"
+                onChange={onImportCertificateFile}
+                style={{ display: 'none' }}
+              />
+            </div>
+
+            <p className="admin-certificate-meta">
+              Arquivo: {certificateFileName || '-'} | Tamanho: {formatCertificateFileSize(certificateFileSize)} | Origem: {certificateImportSource}
+            </p>
+            <p className="admin-certificate-meta">Regra UF: {getUfNfceRuleMessage(certificateUf)}</p>
+
+            {certificateExpiryInfo?.isExpired && (
+              <p className="admin-certificate-alert admin-certificate-alert-danger">Certificado vencido. A emissão fiscal ficará bloqueada.</p>
+            )}
+            {certificateExpiryInfo?.isNearExpire && (
+              <p className="admin-certificate-alert">Certificado próximo do vencimento ({certificateExpiryInfo.daysRemaining} dia(s)).</p>
+            )}
+
+            <div className="admin-actions">
+              <button type="submit">Salvar certificado</button>
+              <button type="button" className="button-muted" onClick={clearCertificateForm}>
+                Limpar formulário
+              </button>
+              <button type="button" className="admin-danger" onClick={onRemoveCertificateSettings}>
+                Remover configuração
+              </button>
+            </div>
+          </form>
+
+          {certificateFormError && <p className="admin-message">{certificateFormError}</p>}
+          {certificateMessage && <p className="admin-message">{certificateMessage}</p>}
+
+          {savedCertificateSettings && (
+            <p className="admin-certificate-meta">
+              Configuração ativa: {savedCertificateSettings.alias || savedCertificateSettings.fileName} | Atualizada em {new Date(savedCertificateSettings.updatedAt).toLocaleString('pt-BR')}
+            </p>
+          )}
         </article>
       </div>
     </section>

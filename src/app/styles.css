@@ -1075,6 +1075,12 @@ form {
   background: #eff6ff;
 }
 
+.products-certificate-source-buttons {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
 .products-cadastro-span {
   display: grid;
   gap: 1rem;
@@ -1581,6 +1587,42 @@ form {
 .admin-audit-filters input,
 .admin-audit-filters select {
   width: 100%;
+}
+
+.admin-certificate {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid #c7d2fe;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.admin-certificate-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-certificate-meta {
+  margin: 0;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.admin-certificate-alert {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.admin-certificate-alert-danger {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .admin-table-wrap {

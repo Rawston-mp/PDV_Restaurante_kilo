@@ -18,7 +18,7 @@ Use esta skill quando precisar:
 
 ## Nao usar para
 - setup inicial do projeto do zero em outra stack
-- regras fiscais/tributarias oficiais (NFC-e/SAT/SEFAZ), que ainda nao estao implementadas
+- homologacao oficial com SEFAZ em ambiente real de producao (a integracao oficial ainda nao foi concluida)
 
 ## Stack e Arquitetura
 - React 18 + TypeScript 5 + Vite 5 + Vitest 2
@@ -110,6 +110,15 @@ Na tela /balanca:
 - Os itens importados do XML aparecem para conferencia e podem ser ajustados antes de salvar
 - O caso de uso de entrada atualiza automaticamente o estoque do produto ao salvar cada item, mantendo saldo consistente
 - Validado com `npm run build` e `npm run test -- --run` durante a implementacao
+
+### 8) Certificado digital e bloqueio fiscal operacional
+- O cadastro de certificado digital foi movido de Cadastros para o painel Admin
+- O Admin permite importar certificado da maquina ou pen drive, salvar configuracao e remover configuracao ativa
+- Validacoes fiscais ativas no cadastro: formato de CNPJ (14 digitos) e validacao de CSC/CSC ID por UF
+- Regras mais estritas por UF foram aplicadas para SP, MG, RS e RJ; demais UFs usam regra padrao
+- O alerta de vencimento usa padrao de 20 dias antes da expiracao (configuravel no Admin)
+- O fechamento fiscal do pedido (transicao PRONTO -> ENTREGUE) bloqueia quando o certificado estiver vencido
+- A tela de Novo Pedido mostra aviso de bloqueio fiscal e desabilita visualmente o botao de avancar status quando aplicavel
 
 ## Rotas oficiais
 - / (restrita para ADMIN, GERENTE, CAIXA e ATENDENTE)
@@ -237,4 +246,4 @@ Critérios de aceite da etapa Admin:
 4. npm run test e npm run build sem regressao
 
 Status atual da etapa Admin:
-- Em andamento (bloco 2 concluido: gestao de PIN, filtros/export da auditoria e logs estruturados)
+- Em andamento (bloco 2 concluido: gestao de PIN, filtros/export da auditoria, logs estruturados e modulo operacional de certificado digital)
