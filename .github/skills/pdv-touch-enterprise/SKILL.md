@@ -120,6 +120,17 @@ Na tela /balanca:
 - O fechamento fiscal do pedido (transicao PRONTO -> ENTREGUE) bloqueia quando o certificado estiver vencido
 - A tela de Novo Pedido mostra aviso de bloqueio fiscal e desabilita visualmente o botao de avancar status quando aplicavel
 
+### 9) Cadastros financeiros e operacao administrativa
+- Cadastros ganhou aba Administradoras de Cartoes com CRUD local, codigo automatico e persistencia
+- Cadastros ganhou aba Financeiro com tres subabas: Despesas, Receita e Conta Corrente
+- Fluxo Financeiro inclui cadastro, edicao, delecao e estorno de lancamentos (status ESTORNADO com trilha em observacoes)
+- Duplicacao de conta implementada com configuracao de emissao, vencimento, dia fixo, quantidade de parcelas e dias entre parcelas
+- Painel de duplicacao mostra resumo previo com quantidade de parcelas e periodo final antes de salvar
+- Campo Fornecedor no Financeiro possui sugestao por nome a partir de 3 letras e botao `+` que abre Cadastro rapido de Fornecedores
+- Campo Documento / Referencia possui lista de opcoes cadastraveis com botao `+` e persistencia local
+- Catalogo de Documento / Referencia foi separado por subaba (Despesas, Receita e Conta Corrente), com cadastro no contexto da aba ativa
+- Validado com `npm run build` apos as alteracoes
+
 ## Rotas oficiais
 - / (restrita para ADMIN, GERENTE, CAIXA e ATENDENTE)
 - /orders/new
