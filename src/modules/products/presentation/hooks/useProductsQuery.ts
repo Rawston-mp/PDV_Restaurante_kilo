@@ -7,7 +7,11 @@ export function useProductsQuery() {
   const [products, setProducts] = useState<Product[]>([]);
 
   const reload = async () => {
-    setProducts(await productsContainer.productRepository.list());
+    try {
+      setProducts(await productsContainer.productRepository.list());
+    } catch {
+      setProducts([]);
+    }
   };
 
   useEffect(() => {

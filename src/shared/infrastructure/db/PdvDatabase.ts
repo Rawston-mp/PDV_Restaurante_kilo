@@ -8,6 +8,7 @@ import type { Order } from '@/modules/orders/domain/entities/Order';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { Supplier } from '@/modules/suppliers/domain/entities/Supplier';
 import type { SyncTaskType } from '@/shared/sync/domain/entities/SyncQueueTask';
+import type { StockEntry } from '@/modules/stockEntries/domain/entities/StockEntry';
 
 type ComandaStateRow = {
   id: 'main';
@@ -39,6 +40,7 @@ export class PdvDatabase extends Dexie {
   clients!: Table<Client, string>;
   convenios!: Table<Convenio, string>;
   cashMovements!: Table<CashMovement, string>;
+  stockEntries!: Table<StockEntry, string>;
   comandaState!: Table<ComandaStateRow, 'main'>;
   weightHistory!: Table<WeightHistoryRow, string>;
   syncQueue!: Table<SyncQueueRow, string>;
@@ -124,6 +126,20 @@ export class PdvDatabase extends Dexie {
       clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
       convenios: 'id, convenioCode, name, paymentMethod, cashFlow, bankName, accountName, active, createdAt, updatedAt',
       cashMovements: 'id, movementCode, movementType, category, amount, launchedAt, convenioId, createdAt, updatedAt',
+      comandaState: 'id, comandaAtiva, updatedAt',
+      weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
+      syncQueue: 'id, type, attempts, nextRetryAt, lastError'
+    });
+
+    this.version(11).stores({
+      orders: 'id, table, status, createdAt, updatedAt',
+      products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
+      suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
+      employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
+      clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
+      convenios: 'id, convenioCode, name, paymentMethod, cashFlow, bankName, accountName, active, createdAt, updatedAt',
+      cashMovements: 'id, movementCode, movementType, category, amount, launchedAt, convenioId, createdAt, updatedAt',
+      stockEntries: 'id, stockEntryCode, noteCode, invoiceNumber, productId, productName, supplierName, receivedAt, createdAt, updatedAt',
       comandaState: 'id, comandaAtiva, updatedAt',
       weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
       syncQueue: 'id, type, attempts, nextRetryAt, lastError'
