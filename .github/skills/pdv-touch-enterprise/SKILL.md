@@ -101,6 +101,16 @@ Na tela /balanca:
 - Composicao visual inspirada em telas enterprise
 - Layout responsivo desktop/mobile
 
+### 7) Estoque e entrada de mercadorias
+- A aba Estoque fica dentro de Cadastros e abre em modo limpo para lancamento manual ou importacao de XML
+- O botao `Importar Nota` aceita o XML original da NFe carregado da maquina e preenche o cabecalho da nota
+- A tela exibe campos estruturados de cabecalho: natureza de operacao, fornecedor, numero, serie, chave de acesso, protocolo, datas e totais fiscais basicos
+- A natureza de operacao usa lista fixa de opcoes para reduzir erro de preenchimento manual
+- O campo de fornecedor possui busca de fornecedores ja cadastrados, com atalho `+` para localizar rapidamente quando o lancamento for manual
+- Os itens importados do XML aparecem para conferencia e podem ser ajustados antes de salvar
+- O caso de uso de entrada atualiza automaticamente o estoque do produto ao salvar cada item, mantendo saldo consistente
+- Validado com `npm run build` e `npm run test -- --run` durante a implementacao
+
 ## Rotas oficiais
 - / (restrita para ADMIN, GERENTE, CAIXA e ATENDENTE)
 - /orders/new

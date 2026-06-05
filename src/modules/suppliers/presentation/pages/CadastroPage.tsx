@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import type { ClientConsumptionEntry } from '@/modules/clients/domain/entities/Client';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
@@ -8,11 +8,16 @@ import { conveniosContainer } from '@/modules/convenios/infrastructure/container
 import { useConveniosQuery } from '@/modules/convenios/presentation/hooks/useConveniosQuery';
 import { useCreateConvenio } from '@/modules/convenios/presentation/hooks/useCreateConvenio';
 import { employeesContainer } from '@/modules/employees/infrastructure/container/employeesContainer';
+import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
+import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import { suppliersContainer } from '@/modules/suppliers/infrastructure/container/suppliersContainer';
 import { useCreateEmployee } from '@/modules/employees/presentation/hooks/useCreateEmployee';
 import { useEmployeesQuery } from '@/modules/employees/presentation/hooks/useEmployeesQuery';
 import { useCreateSupplier } from '@/modules/suppliers/presentation/hooks/useCreateSupplier';
 import { useSuppliersQuery } from '@/modules/suppliers/presentation/hooks/useSuppliersQuery';
+import { stockEntriesContainer } from '@/modules/stockEntries/infrastructure/container/stockEntriesContainer';
+import { useCreateStockEntry } from '@/modules/stockEntries/presentation/hooks/useCreateStockEntry';
+import { useStockEntriesQuery } from '@/modules/stockEntries/presentation/hooks/useStockEntriesQuery';
 
 const stateOptions = [
   'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT',
@@ -23,6 +28,22 @@ const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALA
 const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
 const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
 const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;
+const stockEntryNatureOfOperationOptions = [
+  '0 -',
+  '1102 - Entrada de Mercadorias',
+  '5101 - VENDAS - BC REDUZIDA',
+  '5102 - VENDA',
+  '5401 - Vnd.mer.adq.rec.ter.mer.suj.sub.tri.com.sb. / Vnd',
+  '5403 - Vda merc adq/rec terc, suj.S T Contrib-substituto',
+  '5405 - VENDA COM ST',
+  '5908 - Remessa bem por conta contrato comodato ou locacao',
+  '5910 - VENDA MERC. ADQ/RECEB. DE TERC. - REGIME DE ST / R'
+] as const;
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL'
+});
+const nfeXmlPortalUrl = 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ%20gAVw2g=';
 
 const parseLegacySupplierCode = (legalName: string) => {
   const [firstChunk] = legalName.split(' - ');
@@ -42,6 +63,85 @@ const parseLegacyClientCode = (fullName: string) => {
 const parseLegacyConvenioCode = (name: string) => {
   const [firstChunk] = name.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const parseLegacyStockEntryCode = (description: string) => {
+  const [firstChunk] = description.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const normalizeXmlValue = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const findFirstXmlText = (root: ParentNode, localName: string) => {
+  for (const element of Array.from(root.querySelectorAll('*'))) {
+    if (element.localName === localName) {
+      const text = element.textContent?.trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return '';
+};
+
+const getXmlElementsByLocalName = (root: ParentNode, localName: string) =>
+  Array.from(root.querySelectorAll('*')).filter((element): element is Element => element.localName === localName);
+
+const findFirstXmlTextWithinLocalName = (root: ParentNode, ancestorLocalName: string, localName: string) => {
+  const ancestor = getXmlElementsByLocalName(root, ancestorLocalName)[0];
+  return ancestor ? findFirstXmlText(ancestor, localName) : '';
+};
+
+const parseXmlNumber = (value: string) => {
+  const numericValue = Number(value.replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const formatDateTimeLocalInput = (date: Date) => {
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const parseXmlDateTime = (value: string) => {
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? '' : formatDateTimeLocalInput(parsedDate);
+};
+
+const parseXmlDate = (value: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  return parseXmlDateTime(value).slice(0, 10);
+};
+
+const normalizeSearchText = (value: string) => normalizeXmlValue(value).replace(/[^A-Z0-9 ]/g, ' ');
+
+const normalizeNatureOfOperation = (value: string) => {
+  const normalizedValue = normalizeXmlValue(value);
+  const matchedOption = stockEntryNatureOfOperationOptions.find((option) => normalizeXmlValue(option).includes(normalizedValue) || normalizedValue.includes(normalizeXmlValue(option)));
+  return matchedOption ?? '';
+};
+
+type ImportedStockEntryItem = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: string;
+  unitCost: string;
+  xmlProductCode: string;
 };
 
 const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalName: string }>) => {
@@ -88,6 +188,19 @@ const getUsedConvenioCodes = (convenios: Array<{ convenioCode?: string; name: st
 
   for (const convenio of convenios) {
     const code = convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const getUsedStockEntryCodes = (stockEntries: Array<{ stockEntryCode?: string; productName: string; invoiceNumber: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const entry of stockEntries) {
+    const code = entry.stockEntryCode ?? parseLegacyStockEntryCode(`${entry.productName} - ${entry.invoiceNumber}`);
     if (code) {
       usedCodes.add(code);
     }
@@ -233,8 +346,11 @@ export function CadastroPage() {
   const { createClient, saving: savingClient } = useCreateClient();
   const { convenios, setConvenios } = useConveniosQuery();
   const { createConvenio, saving: savingConvenio } = useCreateConvenio();
+  const { products } = useProductsQuery();
+  const { stockEntries, setStockEntries } = useStockEntriesQuery();
+  const { createStockEntry, saving: savingStockEntry } = useCreateStockEntry();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS' | 'ESTOQUE'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
 
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -318,6 +434,43 @@ export function CadastroPage() {
   const [convenioAccountName, setConvenioAccountName] = useState('');
   const [convenioActive, setConvenioActive] = useState(true);
   const [convenioNotes, setConvenioNotes] = useState('');
+
+  const [stockEntryFormError, setStockEntryFormError] = useState<string | null>(null);
+  const [stockEntryCode, setStockEntryCode] = useState('');
+  const [stockEntryNoteCode, setStockEntryNoteCode] = useState('');
+  const [stockEntryNatureOfOperation, setStockEntryNatureOfOperation] = useState('');
+  const [stockEntryProductId, setStockEntryProductId] = useState('');
+  const [stockEntrySupplierName, setStockEntrySupplierName] = useState('');
+  const [stockEntrySupplierPickerOpen, setStockEntrySupplierPickerOpen] = useState(false);
+  const [stockEntrySupplierSearch, setStockEntrySupplierSearch] = useState('');
+  const [stockEntryInvoiceNumber, setStockEntryInvoiceNumber] = useState('');
+  const [stockEntrySeries, setStockEntrySeries] = useState('');
+  const [stockEntryAccessKey, setStockEntryAccessKey] = useState('');
+  const [stockEntryAuthorizationProtocol, setStockEntryAuthorizationProtocol] = useState('');
+  const [stockEntryIssueDate, setStockEntryIssueDate] = useState('');
+  const [stockEntryDeliveryDate, setStockEntryDeliveryDate] = useState('');
+  const [stockEntryIcmsBase, setStockEntryIcmsBase] = useState('');
+  const [stockEntryIcmsValue, setStockEntryIcmsValue] = useState('');
+  const [stockEntryIcmsSubstitutionBase, setStockEntryIcmsSubstitutionBase] = useState('');
+  const [stockEntryIcmsSubstitutionValue, setStockEntryIcmsSubstitutionValue] = useState('');
+  const [stockEntryProductsValue, setStockEntryProductsValue] = useState('');
+  const [stockEntryFreightValue, setStockEntryFreightValue] = useState('');
+  const [stockEntryInsuranceValue, setStockEntryInsuranceValue] = useState('');
+  const [stockEntryDiscountValue, setStockEntryDiscountValue] = useState('');
+  const [stockEntryAdditionalExpensesValue, setStockEntryAdditionalExpensesValue] = useState('');
+  const [stockEntryIpiValue, setStockEntryIpiValue] = useState('');
+  const [stockEntryTotalInvoiceValue, setStockEntryTotalInvoiceValue] = useState('');
+  const [stockEntryDocumentModel, setStockEntryDocumentModel] = useState('');
+  const [stockEntryPaymentCondition, setStockEntryPaymentCondition] = useState('');
+  const [stockEntryStockLocation, setStockEntryStockLocation] = useState('PADRAO');
+  const [stockEntryPurchaseOrder, setStockEntryPurchaseOrder] = useState('');
+  const [stockEntryFreightByAccount, setStockEntryFreightByAccount] = useState('');
+  const [stockEntryQuantity, setStockEntryQuantity] = useState('');
+  const [stockEntryUnitCost, setStockEntryUnitCost] = useState('');
+  const [stockEntryReceivedAt, setStockEntryReceivedAt] = useState('');
+  const [stockEntryNotes, setStockEntryNotes] = useState('');
+  const [stockEntryImportedItems, setStockEntryImportedItems] = useState<ImportedStockEntryItem[]>([]);
+  const stockEntryXmlInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -504,6 +657,11 @@ export function CadastroPage() {
     return generateRandomCode(usedCodes);
   };
 
+  const generateStockEntryCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedStockEntryCodes(stockEntries);
+    return generateRandomCode(usedCodes);
+  };
+
   const clearSupplierForm = (nextCode?: string) => {
     setEditingSupplierId(null);
     setSupplierFormError(null);
@@ -594,6 +752,185 @@ export function CadastroPage() {
     setConvenioNotes('');
   };
 
+  const clearStockEntryForm = (nextCode?: string) => {
+    setStockEntryFormError(null);
+    setStockEntryCode(nextCode ?? generateStockEntryCodeForCurrentCatalog());
+    setStockEntryNoteCode('');
+    setStockEntryNatureOfOperation(stockEntryNatureOfOperationOptions[0]);
+    setStockEntryProductId('');
+    setStockEntrySupplierName('');
+    setStockEntrySupplierPickerOpen(false);
+    setStockEntrySupplierSearch('');
+    setStockEntryInvoiceNumber('');
+    setStockEntrySeries('');
+    setStockEntryAccessKey('');
+    setStockEntryAuthorizationProtocol('');
+    setStockEntryIssueDate('');
+    setStockEntryDeliveryDate('');
+    setStockEntryIcmsBase('');
+    setStockEntryIcmsValue('');
+    setStockEntryIcmsSubstitutionBase('');
+    setStockEntryIcmsSubstitutionValue('');
+    setStockEntryProductsValue('');
+    setStockEntryFreightValue('');
+    setStockEntryInsuranceValue('');
+    setStockEntryDiscountValue('');
+    setStockEntryAdditionalExpensesValue('');
+    setStockEntryIpiValue('');
+    setStockEntryTotalInvoiceValue('');
+    setStockEntryDocumentModel('');
+    setStockEntryPaymentCondition('');
+    setStockEntryStockLocation('PADRAO');
+    setStockEntryPurchaseOrder('');
+    setStockEntryFreightByAccount('');
+    setStockEntryQuantity('');
+    setStockEntryUnitCost('');
+    setStockEntryReceivedAt('');
+    setStockEntryNotes('');
+    setStockEntryImportedItems([]);
+  };
+
+  const openNfeXmlPortal = () => {
+    window.open(nfeXmlPortalUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const openStockEntryXmlPicker = () => {
+    stockEntryXmlInputRef.current?.click();
+  };
+
+  const toggleStockEntrySupplierPicker = () => {
+    setStockEntrySupplierPickerOpen((prev) => !prev);
+    setStockEntrySupplierSearch('');
+  };
+
+  const updateImportedStockEntryItem = (itemIndex: number, patch: Partial<ImportedStockEntryItem>) => {
+    setStockEntryImportedItems((prev) =>
+      prev.map((item, index) => (index === itemIndex ? { ...item, ...patch } : item))
+    );
+  };
+
+  const filteredStockEntrySuppliers = useMemo(() => {
+    const query = normalizeSearchText(stockEntrySupplierSearch).trim();
+
+    return [...suppliers].filter((supplier) => {
+      const searchableText = normalizeSearchText([
+        supplier.supplierCode ?? '',
+        supplier.legalName,
+        supplier.tradeName ?? '',
+        supplier.cpfCnpj ?? ''
+      ].join(' '));
+
+      return !query || searchableText.includes(query);
+    });
+  }, [suppliers, stockEntrySupplierSearch]);
+
+  const importStockEntryXml = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const xmlText = await file.text();
+      const xmlDocument = new DOMParser().parseFromString(xmlText, 'application/xml');
+
+      if (xmlDocument.querySelector('parsererror')) {
+        throw new Error('Arquivo XML invalido.');
+      }
+
+      const importedIssueDate = findFirstXmlText(xmlDocument, 'dhEmi') || findFirstXmlText(xmlDocument, 'dEmi');
+      const importedDeliveryDate = findFirstXmlText(xmlDocument, 'dhSaiEnt');
+      const importedNatureOfOperation = findFirstXmlText(xmlDocument, 'natOp');
+      const importedNoteCode = findFirstXmlText(xmlDocument, 'cNF');
+      const importedInvoiceNumber = findFirstXmlText(xmlDocument, 'nNF');
+      const importedSeries = findFirstXmlText(xmlDocument, 'serie');
+      const importedAccessKey = findFirstXmlText(xmlDocument, 'chNFe');
+      const importedProtocol = findFirstXmlText(xmlDocument, 'nProt');
+      const importedSupplierName = findFirstXmlText(xmlDocument, 'xNome');
+      const importedDocumentModel = findFirstXmlText(xmlDocument, 'mod');
+      const importedPaymentCondition = findFirstXmlTextWithinLocalName(xmlDocument, 'pag', 'tPag') || findFirstXmlText(xmlDocument, 'indPag');
+      const importedFreightByAccount = findFirstXmlTextWithinLocalName(xmlDocument, 'transp', 'modFrete');
+      const importedPurchaseOrder = findFirstXmlText(xmlDocument, 'xPed');
+      const importedTotalBase = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vBC');
+      const importedTotalIcms = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vICMS');
+      const importedTotalIcmsStBase = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vBCST');
+      const importedTotalIcmsStValue = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vST');
+      const importedTotalProducts = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vProd');
+      const importedTotalFreight = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vFrete');
+      const importedTotalInsurance = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vSeg');
+      const importedTotalDiscount = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vDesc');
+      const importedTotalAdditional = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vOutro');
+      const importedTotalIpi = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vIPI');
+      const importedInvoiceTotal = findFirstXmlTextWithinLocalName(xmlDocument, 'ICMSTot', 'vNF');
+
+      const importedProductItems = getXmlElementsByLocalName(xmlDocument, 'det').map((detElement, index) => {
+        const productCode = findFirstXmlText(detElement, 'cProd');
+        const productName = findFirstXmlText(detElement, 'xProd');
+        const quantity = findFirstXmlText(detElement, 'qCom');
+        const unitCost = findFirstXmlText(detElement, 'vUnCom');
+        const matchedProduct = products.find((product) => {
+          const normalizedProductName = normalizeXmlValue(product.name);
+          const normalizedImportedProduct = normalizeXmlValue(productName);
+          return (
+            normalizedProductName === normalizedImportedProduct ||
+            normalizedProductName.includes(normalizedImportedProduct) ||
+            normalizedImportedProduct.includes(normalizedProductName)
+          );
+        });
+
+        return {
+          id: `xml-item-${index}-${crypto.randomUUID()}`,
+          productId: matchedProduct?.id ?? '',
+          productName,
+          quantity,
+          unitCost,
+          xmlProductCode: productCode
+        } satisfies ImportedStockEntryItem;
+      });
+
+      setStockEntryNoteCode(importedNoteCode);
+      setStockEntryNatureOfOperation(normalizeNatureOfOperation(importedNatureOfOperation));
+      setStockEntrySupplierName(importedSupplierName);
+      setStockEntryInvoiceNumber(importedInvoiceNumber);
+      setStockEntrySeries(importedSeries);
+      setStockEntryAccessKey(importedAccessKey);
+      setStockEntryAuthorizationProtocol(importedProtocol);
+      setStockEntryIssueDate(importedIssueDate ? parseXmlDate(importedIssueDate) : '');
+      setStockEntryDeliveryDate(importedDeliveryDate ? parseXmlDate(importedDeliveryDate) : '');
+      setStockEntryReceivedAt(importedDeliveryDate ? parseXmlDate(importedDeliveryDate) : importedIssueDate ? parseXmlDate(importedIssueDate) : '');
+      setStockEntryIcmsBase(importedTotalBase);
+      setStockEntryIcmsValue(importedTotalIcms);
+      setStockEntryIcmsSubstitutionBase(importedTotalIcmsStBase);
+      setStockEntryIcmsSubstitutionValue(importedTotalIcmsStValue);
+      setStockEntryProductsValue(importedTotalProducts);
+      setStockEntryFreightValue(importedTotalFreight);
+      setStockEntryInsuranceValue(importedTotalInsurance);
+      setStockEntryDiscountValue(importedTotalDiscount);
+      setStockEntryAdditionalExpensesValue(importedTotalAdditional);
+      setStockEntryIpiValue(importedTotalIpi);
+      setStockEntryTotalInvoiceValue(importedInvoiceTotal);
+      setStockEntryDocumentModel(importedDocumentModel);
+      setStockEntryPaymentCondition(importedPaymentCondition);
+      setStockEntryPurchaseOrder(importedPurchaseOrder);
+      setStockEntryFreightByAccount(importedFreightByAccount);
+      setStockEntryImportedItems(importedProductItems);
+
+      if (importedProductItems.length > 0) {
+        const firstItem = importedProductItems[0];
+        setStockEntryProductId(firstItem.productId);
+        setStockEntryQuantity(firstItem.quantity.replace('.', ','));
+        setStockEntryUnitCost(firstItem.unitCost.replace('.', ','));
+      }
+
+      setStockEntryCode((prevCode) => prevCode.trim() || generateStockEntryCodeForCurrentCatalog());
+      setStockEntryFormError(null);
+    } catch (error) {
+      setStockEntryFormError(error instanceof Error ? error.message : 'Nao foi possivel importar o XML.');
+    }
+  };
+
   const supplierRows = useMemo(
     () =>
       [...suppliers].sort((a, b) => {
@@ -632,6 +969,16 @@ export function CadastroPage() {
         return aCode - bCode;
       }),
     [convenios]
+  );
+
+  const stockEntryRows = useMemo(
+    () =>
+      [...stockEntries].sort((a, b) => {
+        const aCode = Number(a.stockEntryCode ?? parseLegacyStockEntryCode(`${a.productName} - ${a.invoiceNumber}`) ?? '0');
+        const bCode = Number(b.stockEntryCode ?? parseLegacyStockEntryCode(`${b.productName} - ${b.invoiceNumber}`) ?? '0');
+        return aCode - bCode;
+      }),
+    [stockEntries]
   );
 
   const filteredClientConsumptionHistory = useMemo(() => {
@@ -788,6 +1135,126 @@ export function CadastroPage() {
       clearConvenioForm();
       setShowCadastroSpan(false);
     }
+  };
+
+  const onSubmitStockEntry = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const parseCurrencyInput = (value: string) => Number(value.replace(/\./g, '').replace(',', '.'));
+    const baseStockEntryCode = stockEntryCode && stockEntryCode.trim() ? stockEntryCode.trim() : generateStockEntryCodeForCurrentCatalog();
+    const issueDate = stockEntryIssueDate ? new Date(stockEntryIssueDate) : new Date();
+    const receivedAt = stockEntryReceivedAt
+      ? new Date(stockEntryReceivedAt)
+      : stockEntryDeliveryDate
+        ? new Date(stockEntryDeliveryDate)
+        : issueDate;
+
+    const sharedPayload = {
+      noteCode: stockEntryNoteCode.trim() || baseStockEntryCode,
+      natureOfOperation: stockEntryNatureOfOperation,
+      supplierName: stockEntrySupplierName,
+      invoiceNumber: stockEntryInvoiceNumber,
+      series: stockEntrySeries,
+      accessKey: stockEntryAccessKey,
+      authorizationProtocol: stockEntryAuthorizationProtocol,
+      issueDate,
+      deliveryDate: stockEntryDeliveryDate ? new Date(stockEntryDeliveryDate) : null,
+      icmsBase: parseCurrencyInput(stockEntryIcmsBase || '0'),
+      icmsValue: parseCurrencyInput(stockEntryIcmsValue || '0'),
+      icmsSubstitutionBase: parseCurrencyInput(stockEntryIcmsSubstitutionBase || '0'),
+      icmsSubstitutionValue: parseCurrencyInput(stockEntryIcmsSubstitutionValue || '0'),
+      productsValue: parseCurrencyInput(stockEntryProductsValue || '0'),
+      freightValue: parseCurrencyInput(stockEntryFreightValue || '0'),
+      insuranceValue: parseCurrencyInput(stockEntryInsuranceValue || '0'),
+      discountValue: parseCurrencyInput(stockEntryDiscountValue || '0'),
+      additionalExpensesValue: parseCurrencyInput(stockEntryAdditionalExpensesValue || '0'),
+      ipiValue: parseCurrencyInput(stockEntryIpiValue || '0'),
+      invoiceTotalValue: parseCurrencyInput(stockEntryTotalInvoiceValue || '0'),
+      documentModel: stockEntryDocumentModel,
+      paymentCondition: stockEntryPaymentCondition,
+      stockLocation: stockEntryStockLocation,
+      purchaseOrder: stockEntryPurchaseOrder,
+      freightByAccount: stockEntryFreightByAccount,
+      notes: stockEntryNotes,
+      receivedAt
+    };
+
+    const importedItems = stockEntryImportedItems.length > 0
+      ? stockEntryImportedItems
+      : [
+          {
+            id: 'manual-item',
+            productId: stockEntryProductId,
+            productName: '',
+            quantity: stockEntryQuantity,
+            unitCost: stockEntryUnitCost,
+            xmlProductCode: ''
+          }
+        ];
+
+    const createdEntries = [] as Awaited<ReturnType<typeof createStockEntry>>[];
+
+    for (let index = 0; index < importedItems.length; index += 1) {
+      const item = importedItems[index];
+      const quantity = Number(item.quantity.replace(',', '.'));
+      const unitCost = Number(item.unitCost.replace(/\./g, '').replace(',', '.'));
+      const selectedProduct = products.find((candidate) => candidate.id === item.productId);
+
+      if (!selectedProduct) {
+        setStockEntryFormError(`Produto da linha ${index + 1} nao foi encontrado.`);
+        return;
+      }
+
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost <= 0) {
+        setStockEntryFormError(`Informe quantidade e custo unitario validos na linha ${index + 1}.`);
+        return;
+      }
+
+      if (!isFilled(stockEntrySupplierName) || !isFilled(stockEntryInvoiceNumber)) {
+        setStockEntryFormError('Preencha fornecedor e numero da nota antes de salvar.');
+        return;
+      }
+
+      const stockEntry = await createStockEntry({
+        stockEntryCode: importedItems.length > 1 ? `${baseStockEntryCode}-${String(index + 1).padStart(2, '0')}` : baseStockEntryCode,
+        ...sharedPayload,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        quantity,
+        unitCost
+      });
+
+      createdEntries.push(stockEntry);
+    }
+
+    setStockEntries((prev) => [...prev, ...createdEntries]);
+    clearStockEntryForm(generateRandomCode(new Set([...getUsedStockEntryCodes(stockEntries), ...createdEntries.map((entry) => entry.stockEntryCode)])));
+    setShowCadastroSpan(false);
+  };
+
+  const onDeleteStockEntry = async (stockEntryId: string) => {
+    const target = stockEntries.find((entry) => entry.id === stockEntryId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar a entrada de mercadoria "${target.invoiceNumber}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const product = await productsContainer.productRepository.findById(target.productId);
+    if (product) {
+      await productsContainer.productRepository.save({
+        ...product,
+        stock: Math.max(0, product.stock - target.quantity),
+        updatedAt: new Date(),
+        version: product.version + 1
+      });
+    }
+
+    await stockEntriesContainer.stockEntryRepository.delete(stockEntryId);
+    setStockEntries((prev) => prev.filter((entry) => entry.id !== stockEntryId));
   };
 
   const onSubmitSupplier = async (event: FormEvent) => {
@@ -1176,7 +1643,9 @@ export function CadastroPage() {
       ? employees.length
       : activeTab === 'CLIENTES'
         ? clients.length
-        : convenios.length;
+        : activeTab === 'CONVENIOS'
+          ? convenios.length
+          : stockEntries.length;
 
   return (
     <section className="cadastro-page">
@@ -1195,7 +1664,9 @@ export function CadastroPage() {
                 ? 'funcionarios'
                 : activeTab === 'CLIENTES'
                   ? 'clientes'
-                  : 'convenios'}
+                  : activeTab === 'CONVENIOS'
+                    ? 'convenios'
+                    : 'estoque'}
           </span>
         </div>
       </header>
@@ -1242,32 +1713,70 @@ export function CadastroPage() {
           >
             Convênios
           </button>
+          <button
+            type="button"
+            className={activeTab === 'ESTOQUE' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('ESTOQUE');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Estoque
+          </button>
         </div>
       </article>
 
       <article className="card products-toolbar">
         <div className="products-toolbar-actions">
-          <button
-            type="button"
-            className="products-new-button"
-            onClick={() => {
-              if (!showCadastroSpan) {
-                if (activeTab === 'FORNECEDORES') {
-                  clearSupplierForm();
-                } else if (activeTab === 'FUNCIONARIOS') {
-                  clearEmployeeForm();
-                } else if (activeTab === 'CLIENTES') {
-                  clearClientForm();
-                } else {
-                  clearConvenioForm();
-                }
-              }
+          {activeTab === 'ESTOQUE' ? (
+            <>
+              <button
+                type="button"
+                className="products-new-button"
+                onClick={() => {
+                  if (!showCadastroSpan) {
+                    clearStockEntryForm();
+                  }
 
-              setShowCadastroSpan((prev) => !prev);
-            }}
-          >
-            + Novo cadastro
-          </button>
+                  setShowCadastroSpan((prev) => !prev);
+                }}
+              >
+                {showCadastroSpan ? 'Fechar nota' : 'Nova nota'}
+              </button>
+              <button type="button" className="products-secondary-button" onClick={openNfeXmlPortal}>
+                Baixar XML
+              </button>
+              <input
+                ref={stockEntryXmlInputRef}
+                type="file"
+                accept=".xml,application/xml,text/xml"
+                onChange={importStockEntryXml}
+                style={{ display: 'none' }}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              className="products-new-button"
+              onClick={() => {
+                if (!showCadastroSpan) {
+                  if (activeTab === 'FORNECEDORES') {
+                    clearSupplierForm();
+                  } else if (activeTab === 'FUNCIONARIOS') {
+                    clearEmployeeForm();
+                  } else if (activeTab === 'CLIENTES') {
+                    clearClientForm();
+                  } else {
+                    clearConvenioForm();
+                  }
+                }
+
+                setShowCadastroSpan((prev) => !prev);
+              }}
+            >
+              + Novo cadastro
+            </button>
+          )}
         </div>
       </article>
 
@@ -2053,6 +2562,556 @@ export function CadastroPage() {
 
             {convenioFormError && <p className="products-form-warning">{convenioFormError}</p>}
           </form>
+        </article>
+      )}
+
+      {activeTab === 'ESTOQUE' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <div>
+              <p className="products-eyebrow">Nota de compra</p>
+              <h3>Entrada de mercadorias | Estoque</h3>
+            </div>
+            <div className="products-toolbar-actions">
+              <button type="button" className="products-import-button" onClick={openStockEntryXmlPicker}>
+                Importar Nota
+              </button>
+              <button type="button" className="products-secondary-button" onClick={openNfeXmlPortal}>
+                Baixar XML
+              </button>
+            </div>
+            <input
+              ref={stockEntryXmlInputRef}
+              type="file"
+              accept=".xml,application/xml,text/xml"
+              onChange={importStockEntryXml}
+              style={{ display: 'none' }}
+            />
+          </header>
+
+          <form onSubmit={onSubmitStockEntry} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>Cabeçalho da nota</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-code">ID da entrada (automatico)</label>
+                  <input id="stock-entry-code" value={stockEntryCode} readOnly />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-note-code">Código da NFe</label>
+                  <input
+                    id="stock-entry-note-code"
+                    value={stockEntryNoteCode}
+                    onChange={(e) => setStockEntryNoteCode(e.target.value)}
+                    placeholder="Código interno da nota"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-nature-of-operation">Natureza de operação</label>
+                  <select
+                    id="stock-entry-nature-of-operation"
+                    value={stockEntryNatureOfOperation}
+                    onChange={(e) => setStockEntryNatureOfOperation(e.target.value)}
+                  >
+                    {stockEntryNatureOfOperationOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-supplier">Fornecedor</label>
+                  <div className="products-supplier-picker-field">
+                    <input
+                      id="stock-entry-supplier"
+                      value={stockEntrySupplierName}
+                      onChange={(e) => setStockEntrySupplierName(e.target.value)}
+                      placeholder="Nome do fornecedor da NF"
+                    />
+                    <button
+                      type="button"
+                      className="products-supplier-picker-button"
+                      onClick={toggleStockEntrySupplierPicker}
+                      aria-label="Buscar fornecedor cadastrado"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {stockEntrySupplierPickerOpen && (
+                    <div className="products-supplier-picker-panel">
+                      <div className="products-supplier-picker-search">
+                        <input
+                          value={stockEntrySupplierSearch}
+                          onChange={(e) => setStockEntrySupplierSearch(e.target.value)}
+                          placeholder="Buscar fornecedor por nome, código ou CNPJ"
+                        />
+                        <button type="button" className="button-muted" onClick={() => setStockEntrySupplierPickerOpen(false)}>
+                          Fechar
+                        </button>
+                      </div>
+                      <div className="products-supplier-picker-list">
+                        {filteredStockEntrySuppliers.length === 0 ? (
+                          <p className="empty-state">Nenhum fornecedor encontrado.</p>
+                        ) : (
+                          filteredStockEntrySuppliers.map((supplier) => (
+                            <button
+                              key={supplier.id}
+                              type="button"
+                              className="products-supplier-picker-item"
+                              onClick={() => {
+                                setStockEntrySupplierName(supplier.legalName || supplier.tradeName || '');
+                                setStockEntrySupplierPickerOpen(false);
+                              }}
+                            >
+                              <strong>{supplier.legalName}</strong>
+                              <span>
+                                {supplier.supplierCode ? `ID ${supplier.supplierCode} | ` : ''}
+                                {supplier.tradeName || 'Sem nome fantasia'}
+                                {supplier.cpfCnpj ? ` | ${supplier.cpfCnpj}` : ''}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-invoice">Número da nota</label>
+                  <input
+                    id="stock-entry-invoice"
+                    value={stockEntryInvoiceNumber}
+                    onChange={(e) => setStockEntryInvoiceNumber(e.target.value)}
+                    placeholder="Ex: NF 12345"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-series">Série</label>
+                  <input
+                    id="stock-entry-series"
+                    value={stockEntrySeries}
+                    onChange={(e) => setStockEntrySeries(e.target.value)}
+                    placeholder="Ex: 1"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-access-key">Chave de acesso da NFE</label>
+                  <input
+                    id="stock-entry-access-key"
+                    value={stockEntryAccessKey}
+                    onChange={(e) => setStockEntryAccessKey(e.target.value)}
+                    placeholder="44 dígitos"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-authorization-protocol">Protocolo de autorização</label>
+                  <input
+                    id="stock-entry-authorization-protocol"
+                    value={stockEntryAuthorizationProtocol}
+                    onChange={(e) => setStockEntryAuthorizationProtocol(e.target.value)}
+                    placeholder="Protocolo SEFAZ"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-document-model">Modelo do documento</label>
+                  <input
+                    id="stock-entry-document-model"
+                    value={stockEntryDocumentModel}
+                    onChange={(e) => setStockEntryDocumentModel(e.target.value)}
+                    placeholder="Ex: 55"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-issue-date">Emissão</label>
+                  <input
+                    id="stock-entry-issue-date"
+                    type="datetime-local"
+                    value={stockEntryIssueDate}
+                    onChange={(e) => setStockEntryIssueDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-delivery-date">Entrega</label>
+                  <input
+                    id="stock-entry-delivery-date"
+                    type="datetime-local"
+                    value={stockEntryDeliveryDate}
+                    onChange={(e) => setStockEntryDeliveryDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-payment-condition">Condição de pagamento</label>
+                  <input
+                    id="stock-entry-payment-condition"
+                    value={stockEntryPaymentCondition}
+                    onChange={(e) => setStockEntryPaymentCondition(e.target.value)}
+                    placeholder="Ex: À vista / 28 dias"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-icms-base">Base de calc. ICMS</label>
+                  <input
+                    id="stock-entry-icms-base"
+                    inputMode="decimal"
+                    value={stockEntryIcmsBase}
+                    onChange={(e) => setStockEntryIcmsBase(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-icms-value">Valor do ICMS</label>
+                  <input
+                    id="stock-entry-icms-value"
+                    inputMode="decimal"
+                    value={stockEntryIcmsValue}
+                    onChange={(e) => setStockEntryIcmsValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-icms-substitution-base">Base de calc. ICMS subst.</label>
+                  <input
+                    id="stock-entry-icms-substitution-base"
+                    inputMode="decimal"
+                    value={stockEntryIcmsSubstitutionBase}
+                    onChange={(e) => setStockEntryIcmsSubstitutionBase(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-icms-substitution-value">Valor do ICMS subst.</label>
+                  <input
+                    id="stock-entry-icms-substitution-value"
+                    inputMode="decimal"
+                    value={stockEntryIcmsSubstitutionValue}
+                    onChange={(e) => setStockEntryIcmsSubstitutionValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-products-value">Valor dos produtos</label>
+                  <input
+                    id="stock-entry-products-value"
+                    inputMode="decimal"
+                    value={stockEntryProductsValue}
+                    onChange={(e) => setStockEntryProductsValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-freight-value">Valor do frete</label>
+                  <input
+                    id="stock-entry-freight-value"
+                    inputMode="decimal"
+                    value={stockEntryFreightValue}
+                    onChange={(e) => setStockEntryFreightValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-insurance-value">Valor do seguro</label>
+                  <input
+                    id="stock-entry-insurance-value"
+                    inputMode="decimal"
+                    value={stockEntryInsuranceValue}
+                    onChange={(e) => setStockEntryInsuranceValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-discount-value">Valor de desconto</label>
+                  <input
+                    id="stock-entry-discount-value"
+                    inputMode="decimal"
+                    value={stockEntryDiscountValue}
+                    onChange={(e) => setStockEntryDiscountValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-additional-expenses-value">Valor de desp. acessórias</label>
+                  <input
+                    id="stock-entry-additional-expenses-value"
+                    inputMode="decimal"
+                    value={stockEntryAdditionalExpensesValue}
+                    onChange={(e) => setStockEntryAdditionalExpensesValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-ipi-value">Valor do IPI</label>
+                  <input
+                    id="stock-entry-ipi-value"
+                    inputMode="decimal"
+                    value={stockEntryIpiValue}
+                    onChange={(e) => setStockEntryIpiValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-total-invoice-value">Valor total da nota</label>
+                  <input
+                    id="stock-entry-total-invoice-value"
+                    inputMode="decimal"
+                    value={stockEntryTotalInvoiceValue}
+                    onChange={(e) => setStockEntryTotalInvoiceValue(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-purchase-order">Pedido compra</label>
+                  <input
+                    id="stock-entry-purchase-order"
+                    value={stockEntryPurchaseOrder}
+                    onChange={(e) => setStockEntryPurchaseOrder(e.target.value)}
+                    placeholder="Pedido de compra"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-stock-location">Local Estoque</label>
+                  <select
+                    id="stock-entry-stock-location"
+                    value={stockEntryStockLocation}
+                    onChange={(e) => setStockEntryStockLocation(e.target.value)}
+                  >
+                    <option value="PADRAO">PADRAO</option>
+                    <option value="FRIOS">FRIOS</option>
+                    <option value="BEBIDAS">BEBIDAS</option>
+                    <option value="SECOS">SECOS</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-freight-by-account">Frete por conta</label>
+                  <input
+                    id="stock-entry-freight-by-account"
+                    value={stockEntryFreightByAccount}
+                    onChange={(e) => setStockEntryFreightByAccount(e.target.value)}
+                    placeholder="Ex: Emitente / Destinatário"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-quantity">Quantidade manual</label>
+                  <input
+                    id="stock-entry-quantity"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={stockEntryQuantity}
+                    onChange={(e) => setStockEntryQuantity(e.target.value)}
+                    placeholder="Usado quando não importar XML"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="stock-entry-unit-cost">Custo unitário manual</label>
+                  <input
+                    id="stock-entry-unit-cost"
+                    inputMode="decimal"
+                    value={stockEntryUnitCost}
+                    onChange={(e) => setStockEntryUnitCost(e.target.value)}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-product">Produto manual</label>
+                  <select
+                    id="stock-entry-product"
+                    value={stockEntryProductId}
+                    onChange={(e) => setStockEntryProductId(e.target.value)}
+                  >
+                    <option value="">Selecione um produto</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} | estoque atual {product.stock}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="stock-entry-received-at">Data e hora da entrada</label>
+                  <input
+                    id="stock-entry-received-at"
+                    type="datetime-local"
+                    value={stockEntryReceivedAt}
+                    onChange={(e) => setStockEntryReceivedAt(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div className="products-field-main">
+                  <label htmlFor="stock-entry-notes">Observações</label>
+                  <textarea
+                    id="stock-entry-notes"
+                    value={stockEntryNotes}
+                    onChange={(e) => setStockEntryNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Notas da mercadoria, diferenças, recebimento parcial, etc."
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Itens importados do XML</h4>
+
+              {stockEntryImportedItems.length === 0 ? (
+                <p className="empty-state">Importe o XML para preencher automaticamente os itens da nota.</p>
+              ) : (
+                <div className="products-imported-items">
+                  {stockEntryImportedItems.map((item, index) => {
+                    const selectedProduct = products.find((product) => product.id === item.productId);
+                    const quantityValue = Number(item.quantity.replace(',', '.'));
+                    const unitCostValue = Number(item.unitCost.replace(/\./g, '').replace(',', '.'));
+                    const itemTotal = Number.isFinite(quantityValue) && Number.isFinite(unitCostValue)
+                      ? quantityValue * unitCostValue
+                      : 0;
+
+                    return (
+                      <div key={item.id} className="products-row-4 products-imported-item-row">
+                        <div>
+                          <label htmlFor={`stock-entry-imported-product-${item.id}`}>Produto</label>
+                          <select
+                            id={`stock-entry-imported-product-${item.id}`}
+                            value={item.productId}
+                            onChange={(e) => updateImportedStockEntryItem(index, { productId: e.target.value })}
+                          >
+                            <option value="">Selecione um produto</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.name} | estoque atual {product.stock}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor={`stock-entry-imported-name-${item.id}`}>Descrição</label>
+                          <input
+                            id={`stock-entry-imported-name-${item.id}`}
+                            value={item.productName}
+                            onChange={(e) => updateImportedStockEntryItem(index, { productName: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={`stock-entry-imported-quantity-${item.id}`}>Qtde.</label>
+                          <input
+                            id={`stock-entry-imported-quantity-${item.id}`}
+                            inputMode="decimal"
+                            value={item.quantity}
+                            onChange={(e) => updateImportedStockEntryItem(index, { quantity: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={`stock-entry-imported-unit-cost-${item.id}`}>Unitário</label>
+                          <input
+                            id={`stock-entry-imported-unit-cost-${item.id}`}
+                            inputMode="decimal"
+                            value={item.unitCost}
+                            onChange={(e) => updateImportedStockEntryItem(index, { unitCost: e.target.value })}
+                          />
+                        </div>
+                        <div className="products-imported-item-summary">
+                          <span>Item {index + 1}</span>
+                          <strong>{currencyFormatter.format(itemTotal)}</strong>
+                          <small>{selectedProduct ? selectedProduct.name : 'Produto nao vinculado'}</small>
+                          {item.xmlProductCode && <small>XML {item.xmlProductCode}</small>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit" disabled={savingStockEntry}>
+                {savingStockEntry ? 'Salvando...' : 'Lancar entrada'}
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearStockEntryForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {stockEntryFormError && <p className="products-form-warning">{stockEntryFormError}</p>}
+          </form>
+        </article>
+      )}
+
+      {activeTab === 'ESTOQUE' && (
+        <article className="card products-list-card">
+          <h3>Entradas de mercadorias</h3>
+
+          {stockEntryRows.length === 0 ? (
+            <p className="empty-state">Nenhuma entrada de mercadoria lancada ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {stockEntryRows.map((entry) => (
+                <li key={entry.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {entry.stockEntryCode ?? parseLegacyStockEntryCode(`${entry.productName} - ${entry.invoiceNumber}`) ?? '--'}</span>{' '}
+                      {entry.productName}
+                    </strong>
+                    <span>
+                      NF {entry.invoiceNumber} | Fornecedor: {entry.supplierName || '-'}
+                    </span>
+                    <span>
+                      Quantidade: {entry.quantity} | Custo unitario: {currencyFormatter.format(entry.unitCost)} | Total: {currencyFormatter.format(entry.totalCost)}
+                    </span>
+                    <span>Recebimento: {entry.receivedAt instanceof Date ? entry.receivedAt.toLocaleString('pt-BR') : new Date(entry.receivedAt).toLocaleString('pt-BR')}</span>
+                    <span>{entry.notes || 'Sem observacoes'}</span>
+                  </div>
+                  <div>
+                    <span>Produto vinculado e estoque ajustado automaticamente.</span>
+                    <div className="products-row-actions">
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteStockEntry(entry.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </article>
       )}
 
