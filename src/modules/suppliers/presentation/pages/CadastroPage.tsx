@@ -435,6 +435,7 @@ export function CadastroPage() {
   const [convenioActive, setConvenioActive] = useState(true);
   const [convenioNotes, setConvenioNotes] = useState('');
 
+
   const [stockEntryFormError, setStockEntryFormError] = useState<string | null>(null);
   const [stockEntryCode, setStockEntryCode] = useState('');
   const [stockEntryNoteCode, setStockEntryNoteCode] = useState('');

@@ -10,6 +10,7 @@ import { useCreateOrder } from '@/modules/orders/presentation/hooks/useCreateOrd
 import { useScaleSocket } from '@/modules/orders/presentation/hooks/useScaleSocket';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
+import { getCertificateFiscalBlockReason } from '@/shared/domain/services/digitalCertificateRules';
 
 const formatLaunchDateTime = (value: Date) => {
   const datePart = new Intl.DateTimeFormat('pt-BR', {
@@ -84,12 +85,19 @@ export function NewOrderPage() {
     setCurrentOrder(order);
   };
 
+  const fiscalBlockReason = currentOrder?.status === 'PRONTO' ? getCertificateFiscalBlockReason() : null;
+
   const onAdvanceStatus = async () => {
     if (!currentOrder) {
       return;
     }
 
     const isFinalizingOrder = currentOrder.status === 'PRONTO';
+
+    if (isFinalizingOrder && fiscalBlockReason) {
+      setFiadoFeedback(fiscalBlockReason);
+        return;
+    }
 
     if (isFinalizingOrder && paymentType === 'FIADO' && !selectedClientId) {
       setFiadoFeedback('Selecione um cliente para lancar o fiado antes de finalizar.');
@@ -238,6 +246,7 @@ export function NewOrderPage() {
           )}
 
           {fiadoFeedback && <p>{fiadoFeedback}</p>}
+          {fiscalBlockReason && <p className="products-form-warning">{fiscalBlockReason}</p>}
 
           <h3>Adicionar item</h3>
           <p>Balanca: {connected ? 'conectada' : 'desconectada'}</p>
@@ -327,7 +336,11 @@ export function NewOrderPage() {
             </button>
           </form>
 
-          <button type="button" onClick={onAdvanceStatus} disabled={!can('orders:advance-status')}>
+          <button
+            type="button"
+            onClick={onAdvanceStatus}
+            disabled={!can('orders:advance-status') || Boolean(fiscalBlockReason)}
+          >
             Avancar status do pedido
           </button>
         </>
