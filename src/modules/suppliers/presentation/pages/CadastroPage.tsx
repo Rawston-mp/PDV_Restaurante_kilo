@@ -28,6 +28,7 @@ const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALA
 const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
 const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
 const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;
+const cardBrandGroupOptions = ['MULTIBANDEIRA', 'VISA', 'MASTERCARD', 'ELO', 'AMEX', 'HIPERCARD', 'OUTRA'] as const;
 const stockEntryNatureOfOperationOptions = [
   '0 -',
   '1102 - Entrada de Mercadorias',
@@ -44,6 +45,7 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL'
 });
 const nfeXmlPortalUrl = 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ%20gAVw2g=';
+const cardManagersStorageKey = 'pdv.cardManagers.settings';
 
 const parseLegacySupplierCode = (legalName: string) => {
   const [firstChunk] = legalName.split(' - ');
@@ -61,6 +63,11 @@ const parseLegacyClientCode = (fullName: string) => {
 };
 
 const parseLegacyConvenioCode = (name: string) => {
+  const [firstChunk] = name.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const parseLegacyCardManagerCode = (name: string) => {
   const [firstChunk] = name.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
@@ -144,6 +151,21 @@ type ImportedStockEntryItem = {
   xmlProductCode: string;
 };
 
+type CardManagerSettings = {
+  id: string;
+  cardManagerCode: string;
+  name: string;
+  brandGroup: (typeof cardBrandGroupOptions)[number];
+  mdrDebit: string;
+  mdrCredit: string;
+  settlementDays: string;
+  active: boolean;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+};
+
 const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalName: string }>) => {
   const usedCodes = new Set<string>();
 
@@ -188,6 +210,19 @@ const getUsedConvenioCodes = (convenios: Array<{ convenioCode?: string; name: st
 
   for (const convenio of convenios) {
     const code = convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const getUsedCardManagerCodes = (cardManagers: Array<{ cardManagerCode?: string; name: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const manager of cardManagers) {
+    const code = manager.cardManagerCode ?? parseLegacyCardManagerCode(manager.name);
     if (code) {
       usedCodes.add(code);
     }
@@ -350,7 +385,7 @@ export function CadastroPage() {
   const { stockEntries, setStockEntries } = useStockEntriesQuery();
   const { createStockEntry, saving: savingStockEntry } = useCreateStockEntry();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS' | 'ESTOQUE'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS' | 'ADMIN_CARTOES' | 'ESTOQUE'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
 
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -435,6 +470,18 @@ export function CadastroPage() {
   const [convenioActive, setConvenioActive] = useState(true);
   const [convenioNotes, setConvenioNotes] = useState('');
 
+  const [cardManagers, setCardManagers] = useState<CardManagerSettings[]>([]);
+  const [editingCardManagerId, setEditingCardManagerId] = useState<string | null>(null);
+  const [cardManagerFormError, setCardManagerFormError] = useState<string | null>(null);
+  const [cardManagerCode, setCardManagerCode] = useState('');
+  const [cardManagerName, setCardManagerName] = useState('');
+  const [cardManagerBrandGroup, setCardManagerBrandGroup] = useState<(typeof cardBrandGroupOptions)[number]>('MULTIBANDEIRA');
+  const [cardManagerMdrDebit, setCardManagerMdrDebit] = useState('');
+  const [cardManagerMdrCredit, setCardManagerMdrCredit] = useState('');
+  const [cardManagerSettlementDays, setCardManagerSettlementDays] = useState('30');
+  const [cardManagerActive, setCardManagerActive] = useState(true);
+  const [cardManagerNotes, setCardManagerNotes] = useState('');
+
 
   const [stockEntryFormError, setStockEntryFormError] = useState<string | null>(null);
   const [stockEntryCode, setStockEntryCode] = useState('');
@@ -472,6 +519,22 @@ export function CadastroPage() {
   const [stockEntryNotes, setStockEntryNotes] = useState('');
   const [stockEntryImportedItems, setStockEntryImportedItems] = useState<ImportedStockEntryItem[]>([]);
   const stockEntryXmlInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const rawSettings = localStorage.getItem(cardManagersStorageKey);
+      if (!rawSettings) {
+        return;
+      }
+
+      const parsedSettings = JSON.parse(rawSettings) as CardManagerSettings[];
+      if (Array.isArray(parsedSettings)) {
+        setCardManagers(parsedSettings);
+      }
+    } catch {
+      localStorage.removeItem(cardManagersStorageKey);
+    }
+  }, []);
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -658,6 +721,11 @@ export function CadastroPage() {
     return generateRandomCode(usedCodes);
   };
 
+  const generateCardManagerCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedCardManagerCodes(cardManagers);
+    return generateRandomCode(usedCodes);
+  };
+
   const generateStockEntryCodeForCurrentCatalog = () => {
     const usedCodes = getUsedStockEntryCodes(stockEntries);
     return generateRandomCode(usedCodes);
@@ -751,6 +819,19 @@ export function CadastroPage() {
     setConvenioAccountName('');
     setConvenioActive(true);
     setConvenioNotes('');
+  };
+
+  const clearCardManagerForm = (nextCode?: string) => {
+    setEditingCardManagerId(null);
+    setCardManagerFormError(null);
+    setCardManagerCode(nextCode ?? generateCardManagerCodeForCurrentCatalog());
+    setCardManagerName('');
+    setCardManagerBrandGroup('MULTIBANDEIRA');
+    setCardManagerMdrDebit('');
+    setCardManagerMdrCredit('');
+    setCardManagerSettlementDays('30');
+    setCardManagerActive(true);
+    setCardManagerNotes('');
   };
 
   const clearStockEntryForm = (nextCode?: string) => {
@@ -972,6 +1053,16 @@ export function CadastroPage() {
     [convenios]
   );
 
+  const cardManagerRows = useMemo(
+    () =>
+      [...cardManagers].sort((a, b) => {
+        const aCode = Number(a.cardManagerCode ?? parseLegacyCardManagerCode(a.name) ?? '0');
+        const bCode = Number(b.cardManagerCode ?? parseLegacyCardManagerCode(b.name) ?? '0');
+        return aCode - bCode;
+      }),
+    [cardManagers]
+  );
+
   const stockEntryRows = useMemo(
     () =>
       [...stockEntries].sort((a, b) => {
@@ -1134,6 +1225,119 @@ export function CadastroPage() {
 
     if (editingConvenioId === convenioId) {
       clearConvenioForm();
+      setShowCadastroSpan(false);
+    }
+  };
+
+  const saveCardManagersLocal = (nextCardManagers: CardManagerSettings[]) => {
+    setCardManagers(nextCardManagers);
+    localStorage.setItem(cardManagersStorageKey, JSON.stringify(nextCardManagers));
+  };
+
+  const onSubmitCardManager = (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!isFilled(cardManagerName)) {
+      setCardManagerFormError('Preencha o nome da administradora antes de salvar.');
+      return;
+    }
+
+    const settlementDaysValue = Number(cardManagerSettlementDays);
+    if (!Number.isFinite(settlementDaysValue) || settlementDaysValue < 1 || settlementDaysValue > 90) {
+      setCardManagerFormError('Prazo de recebimento deve estar entre 1 e 90 dias.');
+      return;
+    }
+
+    const usedCodes = getUsedCardManagerCodes(cardManagers.filter((manager) => manager.id !== editingCardManagerId));
+    const generatedCode = cardManagerCode && !usedCodes.has(cardManagerCode)
+      ? cardManagerCode
+      : generateRandomCode(usedCodes);
+
+    if (editingCardManagerId) {
+      const existingCardManager = cardManagers.find((manager) => manager.id === editingCardManagerId);
+
+      if (!existingCardManager) {
+        setCardManagerFormError('Administradora selecionada para edicao nao foi encontrada.');
+        return;
+      }
+
+      const updatedCardManager: CardManagerSettings = {
+        ...existingCardManager,
+        cardManagerCode: generatedCode,
+        name: cardManagerName,
+        brandGroup: cardManagerBrandGroup,
+        mdrDebit: cardManagerMdrDebit,
+        mdrCredit: cardManagerMdrCredit,
+        settlementDays: cardManagerSettlementDays,
+        active: cardManagerActive,
+        notes: cardManagerNotes,
+        updatedAt: new Date().toISOString(),
+        version: existingCardManager.version + 1
+      };
+
+      saveCardManagersLocal(
+        cardManagers.map((manager) => (manager.id === editingCardManagerId ? updatedCardManager : manager))
+      );
+    } else {
+      const nowIso = new Date().toISOString();
+      const createdCardManager: CardManagerSettings = {
+        id: `card-manager-${crypto.randomUUID()}`,
+        cardManagerCode: generatedCode,
+        name: cardManagerName,
+        brandGroup: cardManagerBrandGroup,
+        mdrDebit: cardManagerMdrDebit,
+        mdrCredit: cardManagerMdrCredit,
+        settlementDays: cardManagerSettlementDays,
+        active: cardManagerActive,
+        notes: cardManagerNotes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 1
+      };
+
+      saveCardManagersLocal([...cardManagers, createdCardManager]);
+    }
+
+    clearCardManagerForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setShowCadastroSpan(false);
+  };
+
+  const onEditCardManager = (cardManagerId: string) => {
+    const cardManager = cardManagers.find((item) => item.id === cardManagerId);
+    if (!cardManager) {
+      return;
+    }
+
+    setEditingCardManagerId(cardManager.id);
+    setShowCadastroSpan(true);
+    setCardManagerFormError(null);
+
+    setCardManagerCode(cardManager.cardManagerCode ?? parseLegacyCardManagerCode(cardManager.name) ?? generateCardManagerCodeForCurrentCatalog());
+    setCardManagerName(cardManager.name);
+    setCardManagerBrandGroup(cardManager.brandGroup);
+    setCardManagerMdrDebit(cardManager.mdrDebit);
+    setCardManagerMdrCredit(cardManager.mdrCredit);
+    setCardManagerSettlementDays(cardManager.settlementDays);
+    setCardManagerActive(cardManager.active);
+    setCardManagerNotes(cardManager.notes);
+  };
+
+  const onDeleteCardManager = (cardManagerId: string) => {
+    const target = cardManagers.find((manager) => manager.id === cardManagerId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar a administradora "${target.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const nextCardManagers = cardManagers.filter((manager) => manager.id !== cardManagerId);
+    saveCardManagersLocal(nextCardManagers);
+
+    if (editingCardManagerId === cardManagerId) {
+      clearCardManagerForm();
       setShowCadastroSpan(false);
     }
   };
@@ -1646,6 +1850,8 @@ export function CadastroPage() {
         ? clients.length
         : activeTab === 'CONVENIOS'
           ? convenios.length
+          : activeTab === 'ADMIN_CARTOES'
+            ? cardManagers.length
           : stockEntries.length;
 
   return (
@@ -1667,6 +1873,8 @@ export function CadastroPage() {
                   ? 'clientes'
                   : activeTab === 'CONVENIOS'
                     ? 'convenios'
+                    : activeTab === 'ADMIN_CARTOES'
+                      ? 'administradoras'
                     : 'estoque'}
           </span>
         </div>
@@ -1713,6 +1921,16 @@ export function CadastroPage() {
             }}
           >
             Convênios
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'ADMIN_CARTOES' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('ADMIN_CARTOES');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Administradora de Cartões
           </button>
           <button
             type="button"
@@ -1767,6 +1985,8 @@ export function CadastroPage() {
                     clearEmployeeForm();
                   } else if (activeTab === 'CLIENTES') {
                     clearClientForm();
+                  } else if (activeTab === 'ADMIN_CARTOES') {
+                    clearCardManagerForm();
                   } else {
                     clearConvenioForm();
                   }
@@ -2566,6 +2786,126 @@ export function CadastroPage() {
         </article>
       )}
 
+      {activeTab === 'ADMIN_CARTOES' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <h3>Cadastro rapido | Administradora de Cartões</h3>
+          </header>
+
+          <form onSubmit={onSubmitCardManager} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>Dados basicos</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="card-manager-code">ID administradora (automatico)</label>
+                  <input id="card-manager-code" value={cardManagerCode} readOnly />
+                </div>
+                <div>
+                  <label htmlFor="card-manager-name">Nome da administradora</label>
+                  <input
+                    id="card-manager-name"
+                    value={cardManagerName}
+                    onChange={(e) => setCardManagerName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="card-manager-brand-group">Bandeira principal</label>
+                  <select
+                    id="card-manager-brand-group"
+                    value={cardManagerBrandGroup}
+                    onChange={(e) => setCardManagerBrandGroup(e.target.value as typeof cardBrandGroupOptions[number])}
+                  >
+                    {cardBrandGroupOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="card-manager-mdr-debit">Taxa debito (%)</label>
+                  <input
+                    id="card-manager-mdr-debit"
+                    value={cardManagerMdrDebit}
+                    onChange={(e) => setCardManagerMdrDebit(e.target.value)}
+                    placeholder="Ex: 1,99"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="card-manager-mdr-credit">Taxa credito (%)</label>
+                  <input
+                    id="card-manager-mdr-credit"
+                    value={cardManagerMdrCredit}
+                    onChange={(e) => setCardManagerMdrCredit(e.target.value)}
+                    placeholder="Ex: 3,49"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="card-manager-settlement-days">Prazo de recebimento (dias)</label>
+                  <input
+                    id="card-manager-settlement-days"
+                    type="number"
+                    min="1"
+                    max="90"
+                    value={cardManagerSettlementDays}
+                    onChange={(e) => setCardManagerSettlementDays(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="employee-status-field">
+                <label>Status da administradora</label>
+                <div className="employee-status-toggle" role="group" aria-label="Status da administradora de cartoes">
+                  <button type="button" className={cardManagerActive ? 'is-active' : ''} onClick={() => setCardManagerActive(true)}>
+                    Ativo
+                  </button>
+                  <button type="button" className={!cardManagerActive ? 'is-active' : ''} onClick={() => setCardManagerActive(false)}>
+                    Inativo
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Observacoes</h4>
+              <div className="suppliers-notes-field">
+                <label htmlFor="card-manager-notes">Notas</label>
+                <textarea
+                  id="card-manager-notes"
+                  value={cardManagerNotes}
+                  onChange={(e) => setCardManagerNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Ex: taxas negociadas por volume, antecipacao D+2, repasse mensal"
+                />
+              </div>
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit">
+                {editingCardManagerId ? 'Salvar edicao' : 'Salvar dados'}
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearCardManagerForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {cardManagerFormError && <p className="products-form-warning">{cardManagerFormError}</p>}
+          </form>
+        </article>
+      )}
+
       {activeTab === 'ESTOQUE' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
@@ -3330,6 +3670,51 @@ export function CadastroPage() {
                         type="button"
                         className="products-delete-button"
                         onClick={() => void onDeleteConvenio(convenio.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
+
+      {activeTab === 'ADMIN_CARTOES' && (
+        <article className="card products-list-card">
+          <h3>Administradoras de cartões cadastradas</h3>
+
+          {cardManagerRows.length === 0 ? (
+            <p className="empty-state">Nenhuma administradora cadastrada ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {cardManagerRows.map((cardManager) => (
+                <li key={cardManager.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {cardManager.cardManagerCode ?? parseLegacyCardManagerCode(cardManager.name) ?? '--'}</span>{' '}
+                      {cardManager.name}
+                    </strong>
+                    <span>
+                      Bandeira: {cardManager.brandGroup} | Prazo: {cardManager.settlementDays} dia(s)
+                    </span>
+                    <span>
+                      Debito: {cardManager.mdrDebit || '-'}% | Credito: {cardManager.mdrCredit || '-'}%
+                    </span>
+                    <span>Status: {cardManager.active ? 'ATIVO' : 'INATIVO'}</span>
+                  </div>
+                  <div>
+                    <span>{cardManager.notes || 'Sem observacoes'}</span>
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditCardManager(cardManager.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => onDeleteCardManager(cardManager.id)}
                       >
                         Deletar
                       </button>
