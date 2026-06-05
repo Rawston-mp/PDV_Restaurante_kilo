@@ -7,6 +7,7 @@ export interface ProductCard {
   name: string;
   category: ProductCategory;
   pricePerKg: number;
+  unitLabel?: 'kg' | 'un';
   isPopular?: boolean;
   disabled?: boolean;
 }
@@ -106,7 +107,7 @@ export function ProductGrid({
                       </span>
                     )}
                   </div>
-                  <p className="balanca-product-price">R$ {product.pricePerKg.toFixed(2)} / kg</p>
+                  <p className="balanca-product-price">R$ {product.pricePerKg.toFixed(2)} / {product.unitLabel ?? 'kg'}</p>
                 </button>
               );
             })}
