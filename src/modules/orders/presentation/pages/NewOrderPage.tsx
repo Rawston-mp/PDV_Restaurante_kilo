@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
+import { useConveniosQuery } from '@/modules/convenios/presentation/hooks/useConveniosQuery';
 import { loadRecentWeightHistory } from '@/modules/orders/infrastructure/local/comandaPersistence';
 import type { Order } from '@/modules/orders/domain/entities/Order';
 import { ordersContainer } from '@/modules/orders/infrastructure/container/ordersContainer';
@@ -28,6 +29,7 @@ const formatLaunchDateTime = (value: Date) => {
 export function NewOrderPage() {
   const { can } = useAuth();
   const { clients, setClients } = useClientsQuery();
+  const { convenios } = useConveniosQuery();
   const [table, setTable] = useState('01');
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [itemName, setItemName] = useState('Refrigerante');
@@ -36,8 +38,9 @@ export function NewOrderPage() {
   const [itemByWeight, setItemByWeight] = useState(false);
   const [itemWeight, setItemWeight] = useState(0.3);
   const [recentHistory, setRecentHistory] = useState<number[]>([]);
-  const [paymentType, setPaymentType] = useState<'A_VISTA' | 'FIADO'>('A_VISTA');
+  const [paymentType, setPaymentType] = useState<'A_VISTA' | 'FIADO' | 'CONVENIO'>('A_VISTA');
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedConvenioId, setSelectedConvenioId] = useState('');
   const [fiadoFeedback, setFiadoFeedback] = useState<string | null>(null);
   const { createOrder, saving } = useCreateOrder();
   const { comandaAtiva, abrirComanda, fecharComanda, loading, error } = useComandaStatus();
@@ -54,6 +57,7 @@ export function NewOrderPage() {
     setCurrentOrder(order);
     setPaymentType('A_VISTA');
     setSelectedClientId('');
+    setSelectedConvenioId('');
     setFiadoFeedback(null);
     await loadHistory();
   };
@@ -92,6 +96,11 @@ export function NewOrderPage() {
       return;
     }
 
+    if (isFinalizingOrder && paymentType === 'CONVENIO' && !selectedConvenioId) {
+      setFiadoFeedback('Selecione um convenio para fechar o caixa antes de finalizar.');
+      return;
+    }
+
     const order = await ordersContainer.advanceOrderStatus.execute({
       orderId: currentOrder.id
     });
@@ -123,6 +132,13 @@ export function NewOrderPage() {
         setClients((prev) => prev.map((client) => (client.id === targetClient.id ? updatedClient : client)));
         setFiadoFeedback(`Fiado lancado no cliente ${targetClient.fullName}.`);
       }
+    } else if (isFinalizingOrder && paymentType === 'CONVENIO' && selectedConvenioId) {
+      const targetConvenio = convenios.find((convenio) => convenio.id === selectedConvenioId);
+      setFiadoFeedback(
+        targetConvenio
+          ? `Convênio associado ao fechamento: ${targetConvenio.name}.`
+          : 'Convênio selecionado nao encontrado.'
+      );
     } else {
       setFiadoFeedback(null);
     }
@@ -168,10 +184,11 @@ export function NewOrderPage() {
           <select
             id="payment-type"
             value={paymentType}
-            onChange={(e) => setPaymentType(e.target.value as 'A_VISTA' | 'FIADO')}
+            onChange={(e) => setPaymentType(e.target.value as 'A_VISTA' | 'FIADO' | 'CONVENIO')}
           >
             <option value="A_VISTA">A vista</option>
             <option value="FIADO">Fiado</option>
+            <option value="CONVENIO">Convenio</option>
           </select>
 
           {paymentType === 'FIADO' && (
@@ -193,6 +210,29 @@ export function NewOrderPage() {
               </select>
               {clients.filter((client) => client.active).length === 0 && (
                 <p>Nenhum cliente ativo cadastrado para lancamento de fiado.</p>
+              )}
+            </>
+          )}
+
+          {paymentType === 'CONVENIO' && (
+            <>
+              <label htmlFor="convenio-select">Convênio</label>
+              <select
+                id="convenio-select"
+                value={selectedConvenioId}
+                onChange={(e) => setSelectedConvenioId(e.target.value)}
+              >
+                <option value="">Selecione um convênio</option>
+                {convenios
+                  .filter((convenio) => convenio.active)
+                  .map((convenio) => (
+                    <option key={convenio.id} value={convenio.id}>
+                      {convenio.name} ({convenio.paymentMethod})
+                    </option>
+                  ))}
+              </select>
+              {convenios.filter((convenio) => convenio.active).length === 0 && (
+                <p>Nenhum convênio ativo cadastrado para fechamento do caixa.</p>
               )}
             </>
           )}

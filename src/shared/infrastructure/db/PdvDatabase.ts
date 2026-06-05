@@ -1,7 +1,9 @@
 import Dexie, { type Table } from 'dexie';
 
 import type { Client } from '@/modules/clients/domain/entities/Client';
+import type { Convenio } from '@/modules/convenios/domain/entities/Convenio';
 import type { Employee } from '@/modules/employees/domain/entities/Employee';
+import type { CashMovement } from '@/modules/finance/domain/entities/CashMovement';
 import type { Order } from '@/modules/orders/domain/entities/Order';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { Supplier } from '@/modules/suppliers/domain/entities/Supplier';
@@ -35,6 +37,8 @@ export class PdvDatabase extends Dexie {
   suppliers!: Table<Supplier, string>;
   employees!: Table<Employee, string>;
   clients!: Table<Client, string>;
+  convenios!: Table<Convenio, string>;
+  cashMovements!: Table<CashMovement, string>;
   comandaState!: Table<ComandaStateRow, 'main'>;
   weightHistory!: Table<WeightHistoryRow, string>;
   syncQueue!: Table<SyncQueueRow, string>;
@@ -95,6 +99,31 @@ export class PdvDatabase extends Dexie {
       suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
       employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
       clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
+      comandaState: 'id, comandaAtiva, updatedAt',
+      weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
+      syncQueue: 'id, type, attempts, nextRetryAt, lastError'
+    });
+
+    this.version(8).stores({
+      orders: 'id, table, status, createdAt, updatedAt',
+      products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
+      suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
+      employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
+      clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
+      convenios: 'id, convenioCode, name, paymentMethod, cashFlow, bankName, accountName, active, createdAt, updatedAt',
+      comandaState: 'id, comandaAtiva, updatedAt',
+      weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
+      syncQueue: 'id, type, attempts, nextRetryAt, lastError'
+    });
+
+    this.version(9).stores({
+      orders: 'id, table, status, createdAt, updatedAt',
+      products: 'id, productCode, name, byWeight, category, createdAt, updatedAt',
+      suppliers: 'id, supplierCode, cpfCnpj, legalName, tradeName, city, state, createdAt, updatedAt',
+      employees: 'id, employeeCode, fullName, cpf, role, city, state, active, createdAt, updatedAt',
+      clients: 'id, clientCode, fullName, cpf, active, createdAt, updatedAt',
+      convenios: 'id, convenioCode, name, paymentMethod, cashFlow, bankName, accountName, active, createdAt, updatedAt',
+      cashMovements: 'id, movementCode, movementType, category, amount, launchedAt, convenioId, createdAt, updatedAt',
       comandaState: 'id, comandaAtiva, updatedAt',
       weightHistory: 'id, peso, origem, comandaAtiva, receivedAt',
       syncQueue: 'id, type, attempts, nextRetryAt, lastError'

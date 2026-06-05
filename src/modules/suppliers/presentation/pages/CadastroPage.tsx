@@ -4,6 +4,9 @@ import type { ClientConsumptionEntry } from '@/modules/clients/domain/entities/C
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { useCreateClient } from '@/modules/clients/presentation/hooks/useCreateClient';
+import { conveniosContainer } from '@/modules/convenios/infrastructure/container/conveniosContainer';
+import { useConveniosQuery } from '@/modules/convenios/presentation/hooks/useConveniosQuery';
+import { useCreateConvenio } from '@/modules/convenios/presentation/hooks/useCreateConvenio';
 import { employeesContainer } from '@/modules/employees/infrastructure/container/employeesContainer';
 import { suppliersContainer } from '@/modules/suppliers/infrastructure/container/suppliersContainer';
 import { useCreateEmployee } from '@/modules/employees/presentation/hooks/useCreateEmployee';
@@ -18,6 +21,8 @@ const stateOptions = [
 
 const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B', 'ADMINISTRATIVO'];
 const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
+const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
+const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;
 
 const parseLegacySupplierCode = (legalName: string) => {
   const [firstChunk] = legalName.split(' - ');
@@ -31,6 +36,11 @@ const parseLegacyEmployeeCode = (fullName: string) => {
 
 const parseLegacyClientCode = (fullName: string) => {
   const [firstChunk] = fullName.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const parseLegacyConvenioCode = (name: string) => {
+  const [firstChunk] = name.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
 
@@ -65,6 +75,19 @@ const getUsedClientCodes = (clients: Array<{ clientCode?: string; fullName: stri
 
   for (const client of clients) {
     const code = client.clientCode ?? parseLegacyClientCode(client.fullName);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const getUsedConvenioCodes = (convenios: Array<{ convenioCode?: string; name: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const convenio of convenios) {
+    const code = convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name);
     if (code) {
       usedCodes.add(code);
     }
@@ -208,8 +231,10 @@ export function CadastroPage() {
   const { createEmployee, saving: savingEmployee } = useCreateEmployee();
   const { clients, setClients } = useClientsQuery();
   const { createClient, saving: savingClient } = useCreateClient();
+  const { convenios, setConvenios } = useConveniosQuery();
+  const { createConvenio, saving: savingConvenio } = useCreateConvenio();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS' | 'CLIENTES' | 'CONVENIOS'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
 
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -282,6 +307,17 @@ export function CadastroPage() {
   const [clientHistoryPeriodEndInput, setClientHistoryPeriodEndInput] = useState('');
   const [clientHistoryPeriodStart, setClientHistoryPeriodStart] = useState('');
   const [clientHistoryPeriodEnd, setClientHistoryPeriodEnd] = useState('');
+
+  const [editingConvenioId, setEditingConvenioId] = useState<string | null>(null);
+  const [convenioFormError, setConvenioFormError] = useState<string | null>(null);
+  const [convenioCode, setConvenioCode] = useState('');
+  const [convenioName, setConvenioName] = useState('');
+  const [convenioPaymentMethod, setConvenioPaymentMethod] = useState<(typeof convenioPaymentMethodOptions)[number]>('PIX');
+  const [convenioCashFlow, setConvenioCashFlow] = useState<(typeof convenioCashFlowOptions)[number]>('ENTRADA');
+  const [convenioBankName, setConvenioBankName] = useState('');
+  const [convenioAccountName, setConvenioAccountName] = useState('');
+  const [convenioActive, setConvenioActive] = useState(true);
+  const [convenioNotes, setConvenioNotes] = useState('');
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -463,6 +499,11 @@ export function CadastroPage() {
     return generateRandomCode(usedCodes);
   };
 
+  const generateConvenioCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedConvenioCodes(convenios);
+    return generateRandomCode(usedCodes);
+  };
+
   const clearSupplierForm = (nextCode?: string) => {
     setEditingSupplierId(null);
     setSupplierFormError(null);
@@ -540,6 +581,19 @@ export function CadastroPage() {
     setClientHistoryPeriodEnd('');
   };
 
+  const clearConvenioForm = (nextCode?: string) => {
+    setEditingConvenioId(null);
+    setConvenioFormError(null);
+    setConvenioCode(nextCode ?? generateConvenioCodeForCurrentCatalog());
+    setConvenioName('');
+    setConvenioPaymentMethod('PIX');
+    setConvenioCashFlow('ENTRADA');
+    setConvenioBankName('');
+    setConvenioAccountName('');
+    setConvenioActive(true);
+    setConvenioNotes('');
+  };
+
   const supplierRows = useMemo(
     () =>
       [...suppliers].sort((a, b) => {
@@ -568,6 +622,16 @@ export function CadastroPage() {
         return aCode - bCode;
       }),
     [clients]
+  );
+
+  const convenioRows = useMemo(
+    () =>
+      [...convenios].sort((a, b) => {
+        const aCode = Number(a.convenioCode ?? parseLegacyConvenioCode(a.name) ?? '0');
+        const bCode = Number(b.convenioCode ?? parseLegacyConvenioCode(b.name) ?? '0');
+        return aCode - bCode;
+      }),
+    [convenios]
   );
 
   const filteredClientConsumptionHistory = useMemo(() => {
@@ -628,6 +692,102 @@ export function CadastroPage() {
     setClientHistoryPeriodEndInput('');
     setClientHistoryPeriodStart('');
     setClientHistoryPeriodEnd('');
+  };
+
+  const onSubmitConvenio = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!isFilled(convenioName)) {
+      setConvenioFormError('Preencha o nome do convenio antes de salvar.');
+      return;
+    }
+
+    const usedCodes = getUsedConvenioCodes(convenios.filter((convenio) => convenio.id !== editingConvenioId));
+    const generatedCode = convenioCode && !usedCodes.has(convenioCode)
+      ? convenioCode
+      : generateRandomCode(usedCodes);
+
+    if (editingConvenioId) {
+      const existingConvenio = convenios.find((convenio) => convenio.id === editingConvenioId);
+
+      if (!existingConvenio) {
+        setConvenioFormError('Convenio selecionado para edicao nao foi encontrado.');
+        return;
+      }
+
+      const updatedConvenio = {
+        ...existingConvenio,
+        convenioCode: generatedCode,
+        name: convenioName,
+        paymentMethod: convenioPaymentMethod,
+        cashFlow: convenioCashFlow,
+        bankName: convenioBankName,
+        accountName: convenioAccountName,
+        active: convenioActive,
+        notes: convenioNotes,
+        updatedAt: new Date(),
+        version: existingConvenio.version + 1
+      };
+
+      await conveniosContainer.convenioRepository.save(updatedConvenio);
+      setConvenios((prev) => prev.map((convenio) => (convenio.id === editingConvenioId ? updatedConvenio : convenio)));
+    } else {
+      const convenio = await createConvenio({
+        convenioCode: generatedCode,
+        name: convenioName,
+        paymentMethod: convenioPaymentMethod,
+        cashFlow: convenioCashFlow,
+        bankName: convenioBankName,
+        accountName: convenioAccountName,
+        active: convenioActive,
+        notes: convenioNotes
+      });
+
+      setConvenios((prev) => [...prev, convenio]);
+    }
+
+    clearConvenioForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setShowCadastroSpan(false);
+  };
+
+  const onEditConvenio = (convenioId: string) => {
+    const convenio = convenios.find((item) => item.id === convenioId);
+    if (!convenio) {
+      return;
+    }
+
+    setEditingConvenioId(convenio.id);
+    setShowCadastroSpan(true);
+    setConvenioFormError(null);
+
+    setConvenioCode(convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? generateConvenioCodeForCurrentCatalog());
+    setConvenioName(convenio.name);
+    setConvenioPaymentMethod(convenio.paymentMethod);
+    setConvenioCashFlow(convenio.cashFlow);
+    setConvenioBankName(convenio.bankName);
+    setConvenioAccountName(convenio.accountName);
+    setConvenioActive(convenio.active);
+    setConvenioNotes(convenio.notes);
+  };
+
+  const onDeleteConvenio = async (convenioId: string) => {
+    const target = convenios.find((convenio) => convenio.id === convenioId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar o convenio "${target.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await conveniosContainer.convenioRepository.delete(convenioId);
+    setConvenios((prev) => prev.filter((convenio) => convenio.id !== convenioId));
+
+    if (editingConvenioId === convenioId) {
+      clearConvenioForm();
+      setShowCadastroSpan(false);
+    }
   };
 
   const onSubmitSupplier = async (event: FormEvent) => {
@@ -1014,7 +1174,9 @@ export function CadastroPage() {
     ? suppliers.length
     : activeTab === 'FUNCIONARIOS'
       ? employees.length
-      : clients.length;
+      : activeTab === 'CLIENTES'
+        ? clients.length
+        : convenios.length;
 
   return (
     <section className="cadastro-page">
@@ -1031,7 +1193,9 @@ export function CadastroPage() {
               ? 'fornecedores'
               : activeTab === 'FUNCIONARIOS'
                 ? 'funcionarios'
-                : 'clientes'}
+                : activeTab === 'CLIENTES'
+                  ? 'clientes'
+                  : 'convenios'}
           </span>
         </div>
       </header>
@@ -1068,6 +1232,16 @@ export function CadastroPage() {
           >
             Clientes
           </button>
+          <button
+            type="button"
+            className={activeTab === 'CONVENIOS' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('CONVENIOS');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Convênios
+          </button>
         </div>
       </article>
 
@@ -1082,8 +1256,10 @@ export function CadastroPage() {
                   clearSupplierForm();
                 } else if (activeTab === 'FUNCIONARIOS') {
                   clearEmployeeForm();
-                } else {
+                } else if (activeTab === 'CLIENTES') {
                   clearClientForm();
+                } else {
+                  clearConvenioForm();
                 }
               }
 
@@ -1757,6 +1933,129 @@ export function CadastroPage() {
         </article>
       )}
 
+      {activeTab === 'CONVENIOS' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <h3>Cadastro rapido | Convênios</h3>
+          </header>
+
+          <form onSubmit={onSubmitConvenio} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>Dados basicos</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="convenio-code">ID convenio (automatico)</label>
+                  <input id="convenio-code" value={convenioCode} readOnly />
+                </div>
+                <div>
+                  <label htmlFor="convenio-name">Nome do convenio</label>
+                  <input
+                    id="convenio-name"
+                    value={convenioName}
+                    onChange={(e) => setConvenioName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-payment-method">Meio de pagamento</label>
+                  <select
+                    id="convenio-payment-method"
+                    value={convenioPaymentMethod}
+                    onChange={(e) => setConvenioPaymentMethod(e.target.value as typeof convenioPaymentMethodOptions[number])}
+                  >
+                    {convenioPaymentMethodOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="convenio-cash-flow">Direcao</label>
+                  <select
+                    id="convenio-cash-flow"
+                    value={convenioCashFlow}
+                    onChange={(e) => setConvenioCashFlow(e.target.value as typeof convenioCashFlowOptions[number])}
+                  >
+                    {convenioCashFlowOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="convenio-bank-name">Banco / Origem</label>
+                  <input
+                    id="convenio-bank-name"
+                    value={convenioBankName}
+                    onChange={(e) => setConvenioBankName(e.target.value)}
+                    placeholder="Ex: Banco Z"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-account-name">Conta / Destino</label>
+                  <input
+                    id="convenio-account-name"
+                    value={convenioAccountName}
+                    onChange={(e) => setConvenioAccountName(e.target.value)}
+                    placeholder="Ex: Conta corrente"
+                  />
+                </div>
+              </div>
+
+              <div className="employee-status-field">
+                <label>Status do convenio</label>
+                <div className="employee-status-toggle" role="group" aria-label="Status do convenio">
+                  <button type="button" className={convenioActive ? 'is-active' : ''} onClick={() => setConvenioActive(true)}>
+                    Ativo
+                  </button>
+                  <button type="button" className={!convenioActive ? 'is-active' : ''} onClick={() => setConvenioActive(false)}>
+                    Inativo
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Observacoes</h4>
+              <div className="suppliers-notes-field">
+                <label htmlFor="convenio-notes">Notas</label>
+                <textarea
+                  id="convenio-notes"
+                  value={convenioNotes}
+                  onChange={(e) => setConvenioNotes(e.target.value)}
+                  rows={4}
+                  placeholder="Ex: PIX Banco Z, dinheiro em especie, convenios de cartao, saidas e entradas"
+                />
+              </div>
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit" disabled={savingConvenio}>
+                {savingConvenio ? 'Salvando...' : editingConvenioId ? 'Salvar edicao' : 'Salvar dados'}
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearConvenioForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {convenioFormError && <p className="products-form-warning">{convenioFormError}</p>}
+          </form>
+        </article>
+      )}
+
       {activeTab === 'FORNECEDORES' && (
         <article className="card products-list-card">
           <h3>Fornecedores ativos</h3>
@@ -1925,6 +2224,52 @@ export function CadastroPage() {
                         type="button"
                         className="products-delete-button"
                         onClick={() => void onDeleteClient(client.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
+
+      {activeTab === 'CONVENIOS' && (
+        <article className="card products-list-card">
+          <h3>Convênios cadastrados</h3>
+
+          {convenioRows.length === 0 ? (
+            <p className="empty-state">Nenhum convênio cadastrado ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {convenioRows.map((convenio) => (
+                <li key={convenio.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '--'}</span>{' '}
+                      {convenio.name}
+                    </strong>
+                    <span>
+                      {convenio.paymentMethod} | {convenio.cashFlow}
+                    </span>
+                    <span>
+                      {convenio.bankName || 'Sem banco informado'}
+                      {convenio.accountName ? ` | ${convenio.accountName}` : ''}
+                    </span>
+                    <span>Status: {convenio.active ? 'ATIVO' : 'INATIVO'}</span>
+                  </div>
+                  <div>
+                    <span>{convenio.notes || 'Sem observacoes'}</span>
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteConvenio(convenio.id)}
                       >
                         Deletar
                       </button>
