@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
+import { employeesContainer } from '@/modules/employees/infrastructure/container/employeesContainer';
 import { suppliersContainer } from '@/modules/suppliers/infrastructure/container/suppliersContainer';
+import { useCreateEmployee } from '@/modules/employees/presentation/hooks/useCreateEmployee';
+import { useEmployeesQuery } from '@/modules/employees/presentation/hooks/useEmployeesQuery';
 import { useCreateSupplier } from '@/modules/suppliers/presentation/hooks/useCreateSupplier';
 import { useSuppliersQuery } from '@/modules/suppliers/presentation/hooks/useSuppliersQuery';
 
@@ -9,8 +12,16 @@ const stateOptions = [
   'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'
 ];
 
+const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B', 'ADMINISTRATIVO'];
+const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
+
 const parseLegacySupplierCode = (legalName: string) => {
   const [firstChunk] = legalName.split(' - ');
+  return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
+};
+
+const parseLegacyEmployeeCode = (fullName: string) => {
+  const [firstChunk] = fullName.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
 
@@ -27,7 +38,20 @@ const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalNam
   return usedCodes;
 };
 
-const generateRandomSupplierCode = (usedCodes: Set<string>) => {
+const getUsedEmployeeCodes = (employees: Array<{ employeeCode?: string; fullName: string }>) => {
+  const usedCodes = new Set<string>();
+
+  for (const employee of employees) {
+    const code = employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName);
+    if (code) {
+      usedCodes.add(code);
+    }
+  }
+
+  return usedCodes;
+};
+
+const generateRandomCode = (usedCodes: Set<string>) => {
   for (let attempts = 0; attempts < 300; attempts += 1) {
     const candidate = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
     if (!usedCodes.has(candidate)) {
@@ -130,38 +154,65 @@ type ViaCepResponse = {
 
 export function CadastroPage() {
   const { suppliers, setSuppliers } = useSuppliersQuery();
-  const { createSupplier, saving } = useCreateSupplier();
+  const { createSupplier, saving: savingSupplier } = useCreateSupplier();
+  const { employees, setEmployees } = useEmployeesQuery();
+  const { createEmployee, saving: savingEmployee } = useCreateEmployee();
 
-  const [activeTab, setActiveTab] = useState<'FORNECEDORES'>('FORNECEDORES');
+  const [activeTab, setActiveTab] = useState<'FORNECEDORES' | 'FUNCIONARIOS'>('FORNECEDORES');
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
-  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
 
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [supplierFormError, setSupplierFormError] = useState<string | null>(null);
   const [supplierCode, setSupplierCode] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [stateRegistration, setStateRegistration] = useState('');
   const [legalName, setLegalName] = useState('');
   const [tradeName, setTradeName] = useState('');
-  const [cep, setCep] = useState('');
-  const [address, setAddress] = useState('');
-  const [number, setNumber] = useState('');
-  const [neighborhood, setNeighborhood] = useState('');
-  const [state, setState] = useState('SP');
-  const [city, setCity] = useState('');
-  const [complement, setComplement] = useState('');
+  const [supplierCep, setSupplierCep] = useState('');
+  const [supplierAddress, setSupplierAddress] = useState('');
+  const [supplierNumber, setSupplierNumber] = useState('');
+  const [supplierNeighborhood, setSupplierNeighborhood] = useState('');
+  const [supplierState, setSupplierState] = useState('SP');
+  const [supplierCity, setSupplierCity] = useState('');
+  const [supplierComplement, setSupplierComplement] = useState('');
   const [serviceFee, setServiceFee] = useState('');
-  const [phone, setPhone] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [cepSuggestionMessage, setCepSuggestionMessage] = useState<string | null>(null);
-  const [isCepLookupLoading, setIsCepLookupLoading] = useState(false);
+  const [supplierPhone, setSupplierPhone] = useState('');
+  const [supplierMobile, setSupplierMobile] = useState('');
+  const [supplierEmail, setSupplierEmail] = useState('');
+  const [supplierCepSuggestionMessage, setSupplierCepSuggestionMessage] = useState<string | null>(null);
+  const [isSupplierCepLookupLoading, setIsSupplierCepLookupLoading] = useState(false);
+
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [employeeFormError, setEmployeeFormError] = useState<string | null>(null);
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [employeeFullName, setEmployeeFullName] = useState('');
+  const [employeeCpf, setEmployeeCpf] = useState('');
+  const [employeeRole, setEmployeeRole] = useState(employeeRoleOptions[0]);
+  const [employeeBirthDate, setEmployeeBirthDate] = useState('');
+  const [employeeGender, setEmployeeGender] = useState<(typeof employeeGenderOptions)[number]>('MASCULINO');
+  const [employeeAdmissionDate, setEmployeeAdmissionDate] = useState('');
+  const [employeeDismissalDate, setEmployeeDismissalDate] = useState('');
+  const [employeeNotes, setEmployeeNotes] = useState('');
+  const [employeeCep, setEmployeeCep] = useState('');
+  const [employeeAddress, setEmployeeAddress] = useState('');
+  const [employeeNumber, setEmployeeNumber] = useState('');
+  const [employeeNeighborhood, setEmployeeNeighborhood] = useState('');
+  const [employeeState, setEmployeeState] = useState('SP');
+  const [employeeCity, setEmployeeCity] = useState('');
+  const [employeeComplement, setEmployeeComplement] = useState('');
+  const [employeePhone, setEmployeePhone] = useState('');
+  const [employeeMobile, setEmployeeMobile] = useState('');
+  const [employeeEmail, setEmployeeEmail] = useState('');
+  const [employeeActive, setEmployeeActive] = useState(true);
+  const [employeeCepSuggestionMessage, setEmployeeCepSuggestionMessage] = useState<string | null>(null);
+  const [isEmployeeCepLookupLoading, setIsEmployeeCepLookupLoading] = useState(false);
 
   useEffect(() => {
-    const cepDigits = normalizeCepDigits(cep);
+    const cepDigits = normalizeCepDigits(supplierCep);
 
     if (cepDigits.length < 8) {
-      setIsCepLookupLoading(false);
-      setCepSuggestionMessage(null);
+      setIsSupplierCepLookupLoading(false);
+      setSupplierCepSuggestionMessage(null);
       return;
     }
 
@@ -169,7 +220,7 @@ export function CadastroPage() {
 
     const lookupTimer = window.setTimeout(async () => {
       try {
-        setIsCepLookupLoading(true);
+        setIsSupplierCepLookupLoading(true);
 
         const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
           signal: controller.signal
@@ -182,25 +233,25 @@ export function CadastroPage() {
         const data = (await response.json()) as ViaCepResponse;
 
         if (data.erro) {
-          setCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          setSupplierCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
           return;
         }
 
-        setAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
-        setNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
-        setCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
-        setState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+        setSupplierAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
+        setSupplierNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
+        setSupplierCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
+        setSupplierState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
 
-        const suggestedCity = data.localidade ?? city;
-        const suggestedUf = data.uf ?? state;
-        setCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
-      } catch (error) {
+        const suggestedCity = data.localidade ?? supplierCity;
+        const suggestedUf = data.uf ?? supplierState;
+        setSupplierCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+      } catch {
         if (!controller.signal.aborted) {
-          setCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+          setSupplierCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
         }
       } finally {
         if (!controller.signal.aborted) {
-          setIsCepLookupLoading(false);
+          setIsSupplierCepLookupLoading(false);
         }
       }
     }, 450);
@@ -209,34 +260,121 @@ export function CadastroPage() {
       controller.abort();
       window.clearTimeout(lookupTimer);
     };
-  }, [cep, city, state]);
+  }, [supplierCep, supplierCity, supplierState]);
 
-  const generateCodeForCurrentCatalog = () => {
+  useEffect(() => {
+    const cepDigits = normalizeCepDigits(employeeCep);
+
+    if (cepDigits.length < 8) {
+      setIsEmployeeCepLookupLoading(false);
+      setEmployeeCepSuggestionMessage(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const lookupTimer = window.setTimeout(async () => {
+      try {
+        setIsEmployeeCepLookupLoading(true);
+
+        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Falha na consulta de CEP.');
+        }
+
+        const data = (await response.json()) as ViaCepResponse;
+
+        if (data.erro) {
+          setEmployeeCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          return;
+        }
+
+        setEmployeeAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
+        setEmployeeNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
+        setEmployeeCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
+        setEmployeeState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+
+        const suggestedCity = data.localidade ?? employeeCity;
+        const suggestedUf = data.uf ?? employeeState;
+        setEmployeeCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+      } catch {
+        if (!controller.signal.aborted) {
+          setEmployeeCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsEmployeeCepLookupLoading(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(lookupTimer);
+    };
+  }, [employeeCep, employeeCity, employeeState]);
+
+  const generateSupplierCodeForCurrentCatalog = () => {
     const usedCodes = getUsedSupplierCodes(suppliers);
-    return generateRandomSupplierCode(usedCodes);
+    return generateRandomCode(usedCodes);
   };
 
-  const clearForm = (nextCode?: string) => {
+  const generateEmployeeCodeForCurrentCatalog = () => {
+    const usedCodes = getUsedEmployeeCodes(employees);
+    return generateRandomCode(usedCodes);
+  };
+
+  const clearSupplierForm = (nextCode?: string) => {
     setEditingSupplierId(null);
-    setFormError(null);
-    setSupplierCode(nextCode ?? generateCodeForCurrentCatalog());
+    setSupplierFormError(null);
+    setSupplierCode(nextCode ?? generateSupplierCodeForCurrentCatalog());
     setCpfCnpj('');
     setStateRegistration('');
     setLegalName('');
     setTradeName('');
-    setCep('');
-    setAddress('');
-    setNumber('');
-    setNeighborhood('');
-    setState('SP');
-    setCity('');
-    setComplement('');
+    setSupplierCep('');
+    setSupplierAddress('');
+    setSupplierNumber('');
+    setSupplierNeighborhood('');
+    setSupplierState('SP');
+    setSupplierCity('');
+    setSupplierComplement('');
     setServiceFee('');
-    setPhone('');
-    setMobile('');
-    setEmail('');
-    setCepSuggestionMessage(null);
-    setIsCepLookupLoading(false);
+    setSupplierPhone('');
+    setSupplierMobile('');
+    setSupplierEmail('');
+    setSupplierCepSuggestionMessage(null);
+    setIsSupplierCepLookupLoading(false);
+  };
+
+  const clearEmployeeForm = (nextCode?: string) => {
+    setEditingEmployeeId(null);
+    setEmployeeFormError(null);
+    setEmployeeCode(nextCode ?? generateEmployeeCodeForCurrentCatalog());
+    setEmployeeFullName('');
+    setEmployeeCpf('');
+    setEmployeeRole(employeeRoleOptions[0]);
+    setEmployeeBirthDate('');
+    setEmployeeGender('MASCULINO');
+    setEmployeeAdmissionDate('');
+    setEmployeeDismissalDate('');
+    setEmployeeNotes('');
+    setEmployeeCep('');
+    setEmployeeAddress('');
+    setEmployeeNumber('');
+    setEmployeeNeighborhood('');
+    setEmployeeState('SP');
+    setEmployeeCity('');
+    setEmployeeComplement('');
+    setEmployeePhone('');
+    setEmployeeMobile('');
+    setEmployeeEmail('');
+    setEmployeeActive(true);
+    setEmployeeCepSuggestionMessage(null);
+    setIsEmployeeCepLookupLoading(false);
   };
 
   const supplierRows = useMemo(
@@ -249,24 +387,34 @@ export function CadastroPage() {
     [suppliers]
   );
 
-  const onSubmit = async (event: FormEvent) => {
+  const employeeRows = useMemo(
+    () =>
+      [...employees].sort((a, b) => {
+        const aCode = Number(a.employeeCode ?? parseLegacyEmployeeCode(a.fullName) ?? '0');
+        const bCode = Number(b.employeeCode ?? parseLegacyEmployeeCode(b.fullName) ?? '0');
+        return aCode - bCode;
+      }),
+    [employees]
+  );
+
+  const onSubmitSupplier = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!isFilled(cpfCnpj) || !isFilled(legalName) || !isFilled(city)) {
-      setFormError('Preencha CPF/CNPJ, Razao social e Cidade antes de salvar.');
+    if (!isFilled(cpfCnpj) || !isFilled(legalName) || !isFilled(supplierCity)) {
+      setSupplierFormError('Preencha CPF/CNPJ, Razao social e Cidade antes de salvar.');
       return;
     }
 
     const usedCodes = getUsedSupplierCodes(suppliers.filter((supplier) => supplier.id !== editingSupplierId));
     const generatedCode = supplierCode && !usedCodes.has(supplierCode)
       ? supplierCode
-      : generateRandomSupplierCode(usedCodes);
+      : generateRandomCode(usedCodes);
 
     if (editingSupplierId) {
       const existingSupplier = suppliers.find((supplier) => supplier.id === editingSupplierId);
 
       if (!existingSupplier) {
-        setFormError('Fornecedor selecionado para edicao nao foi encontrado.');
+        setSupplierFormError('Fornecedor selecionado para edicao nao foi encontrado.');
         return;
       }
 
@@ -277,17 +425,17 @@ export function CadastroPage() {
         stateRegistration,
         legalName,
         tradeName,
-        cep,
-        address,
-        number,
-        neighborhood,
-        state,
-        city,
-        complement,
+        cep: supplierCep,
+        address: supplierAddress,
+        number: supplierNumber,
+        neighborhood: supplierNeighborhood,
+        state: supplierState,
+        city: supplierCity,
+        complement: supplierComplement,
         serviceFee,
-        phone,
-        mobile,
-        email,
+        phone: supplierPhone,
+        mobile: supplierMobile,
+        email: supplierEmail,
         updatedAt: new Date(),
         version: existingSupplier.version + 1
       };
@@ -301,23 +449,103 @@ export function CadastroPage() {
         stateRegistration,
         legalName,
         tradeName,
-        cep,
-        address,
-        number,
-        neighborhood,
-        state,
-        city,
-        complement,
+        cep: supplierCep,
+        address: supplierAddress,
+        number: supplierNumber,
+        neighborhood: supplierNeighborhood,
+        state: supplierState,
+        city: supplierCity,
+        complement: supplierComplement,
         serviceFee,
-        phone,
-        mobile,
-        email
+        phone: supplierPhone,
+        mobile: supplierMobile,
+        email: supplierEmail
       });
 
       setSuppliers((prev) => [...prev, supplier]);
     }
 
-    clearForm(generateRandomSupplierCode(new Set([...usedCodes, generatedCode])));
+    clearSupplierForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setShowCadastroSpan(false);
+  };
+
+  const onSubmitEmployee = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!isFilled(employeeCpf) || !isFilled(employeeFullName) || !isFilled(employeeCity)) {
+      setEmployeeFormError('Preencha CPF, Nome completo e Cidade antes de salvar.');
+      return;
+    }
+
+    const usedCodes = getUsedEmployeeCodes(employees.filter((employee) => employee.id !== editingEmployeeId));
+    const generatedCode = employeeCode && !usedCodes.has(employeeCode)
+      ? employeeCode
+      : generateRandomCode(usedCodes);
+
+    if (editingEmployeeId) {
+      const existingEmployee = employees.find((employee) => employee.id === editingEmployeeId);
+
+      if (!existingEmployee) {
+        setEmployeeFormError('Funcionario selecionado para edicao nao foi encontrado.');
+        return;
+      }
+
+      const updatedEmployee = {
+        ...existingEmployee,
+        employeeCode: generatedCode,
+        fullName: employeeFullName,
+        cpf: employeeCpf,
+        role: employeeRole,
+        admissionDate: employeeAdmissionDate,
+        dismissalDate: employeeDismissalDate,
+        notes: employeeNotes,
+        birthDate: employeeBirthDate,
+        gender: employeeGender,
+        cep: employeeCep,
+        address: employeeAddress,
+        number: employeeNumber,
+        neighborhood: employeeNeighborhood,
+        state: employeeState,
+        city: employeeCity,
+        complement: employeeComplement,
+        phone: employeePhone,
+        mobile: employeeMobile,
+        email: employeeEmail,
+        active: employeeActive,
+        updatedAt: new Date(),
+        version: existingEmployee.version + 1
+      };
+
+      await employeesContainer.employeeRepository.save(updatedEmployee);
+      setEmployees((prev) => prev.map((employee) => (employee.id === editingEmployeeId ? updatedEmployee : employee)));
+    } else {
+      const employee = await createEmployee({
+        employeeCode: generatedCode,
+        fullName: employeeFullName,
+        cpf: employeeCpf,
+        role: employeeRole,
+        admissionDate: employeeAdmissionDate,
+        dismissalDate: employeeDismissalDate,
+        notes: employeeNotes,
+        birthDate: employeeBirthDate,
+        gender: employeeGender,
+        cep: employeeCep,
+        address: employeeAddress,
+        number: employeeNumber,
+        neighborhood: employeeNeighborhood,
+        state: employeeState,
+        city: employeeCity,
+        complement: employeeComplement,
+        phone: employeePhone,
+        mobile: employeeMobile,
+        email: employeeEmail,
+        active: employeeActive
+      });
+
+      setEmployees((prev) => [...prev, employee]);
+    }
+
+    clearEmployeeForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
     setShowCadastroSpan(false);
   };
 
@@ -329,26 +557,60 @@ export function CadastroPage() {
 
     setEditingSupplierId(supplier.id);
     setShowCadastroSpan(true);
-    setFormError(null);
+    setSupplierFormError(null);
 
-    setSupplierCode(supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? generateCodeForCurrentCatalog());
+    setSupplierCode(supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? generateSupplierCodeForCurrentCatalog());
     setCpfCnpj(supplier.cpfCnpj);
     setStateRegistration(supplier.stateRegistration);
     setLegalName(supplier.legalName);
     setTradeName(supplier.tradeName);
-    setCep(supplier.cep);
-    setAddress(supplier.address);
-    setNumber(supplier.number);
-    setNeighborhood(supplier.neighborhood);
-    setState(supplier.state || 'SP');
-    setCity(supplier.city);
-    setComplement(supplier.complement);
+    setSupplierCep(supplier.cep);
+    setSupplierAddress(supplier.address);
+    setSupplierNumber(supplier.number);
+    setSupplierNeighborhood(supplier.neighborhood);
+    setSupplierState(supplier.state || 'SP');
+    setSupplierCity(supplier.city);
+    setSupplierComplement(supplier.complement);
     setServiceFee(supplier.serviceFee);
-    setPhone(supplier.phone);
-    setMobile(supplier.mobile);
-    setEmail(supplier.email);
-    setCepSuggestionMessage(null);
-    setIsCepLookupLoading(false);
+    setSupplierPhone(supplier.phone);
+    setSupplierMobile(supplier.mobile);
+    setSupplierEmail(supplier.email);
+    setSupplierCepSuggestionMessage(null);
+    setIsSupplierCepLookupLoading(false);
+  };
+
+  const onEditEmployee = (employeeId: string) => {
+    const employee = employees.find((item) => item.id === employeeId);
+    if (!employee) {
+      return;
+    }
+
+    setEditingEmployeeId(employee.id);
+    setShowCadastroSpan(true);
+    setEmployeeFormError(null);
+
+    setEmployeeCode(employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName) ?? generateEmployeeCodeForCurrentCatalog());
+    setEmployeeFullName(employee.fullName);
+    setEmployeeCpf(employee.cpf);
+    setEmployeeRole(employee.role || employeeRoleOptions[0]);
+    setEmployeeBirthDate(employee.birthDate || '');
+    setEmployeeGender(employee.gender || 'MASCULINO');
+    setEmployeeAdmissionDate(employee.admissionDate || '');
+    setEmployeeDismissalDate(employee.dismissalDate || '');
+    setEmployeeNotes(employee.notes || '');
+    setEmployeeCep(employee.cep);
+    setEmployeeAddress(employee.address);
+    setEmployeeNumber(employee.number);
+    setEmployeeNeighborhood(employee.neighborhood);
+    setEmployeeState(employee.state || 'SP');
+    setEmployeeCity(employee.city);
+    setEmployeeComplement(employee.complement);
+    setEmployeePhone(employee.phone);
+    setEmployeeMobile(employee.mobile);
+    setEmployeeEmail(employee.email);
+    setEmployeeActive(employee.active);
+    setEmployeeCepSuggestionMessage(null);
+    setIsEmployeeCepLookupLoading(false);
   };
 
   const onDeleteSupplier = async (supplierId: string) => {
@@ -366,22 +628,44 @@ export function CadastroPage() {
     setSuppliers((prev) => prev.filter((supplier) => supplier.id !== supplierId));
 
     if (editingSupplierId === supplierId) {
-      clearForm();
+      clearSupplierForm();
       setShowCadastroSpan(false);
     }
   };
+
+  const onDeleteEmployee = async (employeeId: string) => {
+    const target = employees.find((employee) => employee.id === employeeId);
+    if (!target) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja deletar o funcionario "${target.fullName}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await employeesContainer.employeeRepository.delete(employeeId);
+    setEmployees((prev) => prev.filter((employee) => employee.id !== employeeId));
+
+    if (editingEmployeeId === employeeId) {
+      clearEmployeeForm();
+      setShowCadastroSpan(false);
+    }
+  };
+
+  const currentCount = activeTab === 'FORNECEDORES' ? suppliers.length : employees.length;
 
   return (
     <section className="cadastro-page">
       <header className="products-header card">
         <div>
-          <p className="products-eyebrow">Cadastro e relacionamento</p>
-          <h2>Cadastro</h2>
-          <p className="products-subtitle">Gestao de fornecedores para operacao administrativa, gerencial e caixa.</p>
+          <p className="products-eyebrow">Cadastros e relacionamento</p>
+          <h2>Cadastros</h2>
+          <p className="products-subtitle">Gestao de fornecedores e funcionarios para operacao administrativa.</p>
         </div>
         <div className="products-kpi">
-          <strong>{suppliers.length}</strong>
-          <span>fornecedores</span>
+          <strong>{currentCount}</strong>
+          <span>{activeTab === 'FORNECEDORES' ? 'fornecedores' : 'funcionarios'}</span>
         </div>
       </header>
 
@@ -390,9 +674,22 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'FORNECEDORES' ? 'is-active' : ''}
-            onClick={() => setActiveTab('FORNECEDORES')}
+            onClick={() => {
+              setActiveTab('FORNECEDORES');
+              setShowCadastroSpan(false);
+            }}
           >
             Fornecedores
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'FUNCIONARIOS' ? 'is-active' : ''}
+            onClick={() => {
+              setActiveTab('FUNCIONARIOS');
+              setShowCadastroSpan(false);
+            }}
+          >
+            Funcionarios
           </button>
         </div>
       </article>
@@ -404,7 +701,11 @@ export function CadastroPage() {
             className="products-new-button"
             onClick={() => {
               if (!showCadastroSpan) {
-                clearForm();
+                if (activeTab === 'FORNECEDORES') {
+                  clearSupplierForm();
+                } else {
+                  clearEmployeeForm();
+                }
               }
 
               setShowCadastroSpan((prev) => !prev);
@@ -415,13 +716,13 @@ export function CadastroPage() {
         </div>
       </article>
 
-      {showCadastroSpan && (
+      {activeTab === 'FORNECEDORES' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
             <h3>Cadastro rapido | Fornecedores</h3>
           </header>
 
-          <form onSubmit={onSubmit} className="suppliers-form">
+          <form onSubmit={onSubmitSupplier} className="suppliers-form">
             <section className="suppliers-section">
               <h4>Dados basicos</h4>
 
@@ -467,34 +768,34 @@ export function CadastroPage() {
               <div className="suppliers-row-address-top">
                 <div>
                   <label htmlFor="cep">CEP</label>
-                  <input id="cep" value={cep} onChange={(e) => setCep(formatCep(e.target.value))} />
+                  <input id="cep" value={supplierCep} onChange={(e) => setSupplierCep(formatCep(e.target.value))} />
                 </div>
                 <div>
                   <label htmlFor="address">Logradouro</label>
-                  <input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
+                  <input id="address" value={supplierAddress} onChange={(e) => setSupplierAddress(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="number">Numero</label>
-                  <input id="number" value={number} onChange={(e) => setNumber(e.target.value)} />
+                  <input id="number" value={supplierNumber} onChange={(e) => setSupplierNumber(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="neighborhood">Bairro</label>
-                  <input id="neighborhood" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} />
+                  <input id="neighborhood" value={supplierNeighborhood} onChange={(e) => setSupplierNeighborhood(e.target.value)} />
                 </div>
               </div>
 
-              {(isCepLookupLoading || cepSuggestionMessage) && (
+              {(isSupplierCepLookupLoading || supplierCepSuggestionMessage) && (
                 <p className="suppliers-cep-feedback">
-                  {isCepLookupLoading
+                  {isSupplierCepLookupLoading
                     ? 'Buscando sugestao de endereco pelo CEP...'
-                    : cepSuggestionMessage}
+                    : supplierCepSuggestionMessage}
                 </p>
               )}
 
               <div className="suppliers-row-address-bottom">
                 <div>
                   <label htmlFor="state">UF</label>
-                  <select id="state" value={state} onChange={(e) => setState(e.target.value)}>
+                  <select id="state" value={supplierState} onChange={(e) => setSupplierState(e.target.value)}>
                     {stateOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
@@ -504,11 +805,11 @@ export function CadastroPage() {
                 </div>
                 <div>
                   <label htmlFor="city">Cidade</label>
-                  <input id="city" value={city} onChange={(e) => setCity(e.target.value)} required />
+                  <input id="city" value={supplierCity} onChange={(e) => setSupplierCity(e.target.value)} required />
                 </div>
                 <div>
                   <label htmlFor="complement">Complemento</label>
-                  <input id="complement" value={complement} onChange={(e) => setComplement(e.target.value)} />
+                  <input id="complement" value={supplierComplement} onChange={(e) => setSupplierComplement(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="service-fee">Taxa entrega/servico</label>
@@ -523,97 +824,434 @@ export function CadastroPage() {
               <div className="suppliers-row-3">
                 <div>
                   <label htmlFor="phone">Telefone</label>
-                  <input id="phone" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
+                  <input id="phone" value={supplierPhone} onChange={(e) => setSupplierPhone(formatPhone(e.target.value))} />
                 </div>
                 <div>
                   <label htmlFor="mobile">Celular</label>
-                  <input id="mobile" value={mobile} onChange={(e) => setMobile(formatPhone(e.target.value))} />
+                  <input id="mobile" value={supplierMobile} onChange={(e) => setSupplierMobile(formatPhone(e.target.value))} />
                 </div>
                 <div>
                   <label htmlFor="email">E-Mail</label>
-                  <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input id="email" type="email" value={supplierEmail} onChange={(e) => setSupplierEmail(e.target.value)} />
                 </div>
               </div>
             </section>
 
             <div className="products-cadastro-footer">
-              <button type="submit" disabled={saving}>
-                {saving ? 'Salvando...' : editingSupplierId ? 'Salvar edicao' : 'Salvar dados'}
+              <button type="submit" disabled={savingSupplier}>
+                {savingSupplier ? 'Salvando...' : editingSupplierId ? 'Salvar edicao' : 'Salvar dados'}
               </button>
               <button
                 type="button"
                 className="button-muted"
                 onClick={() => {
                   setShowCadastroSpan(false);
-                  clearForm();
+                  clearSupplierForm();
                 }}
               >
                 Fechar cadastro
               </button>
             </div>
 
-            {formError && <p className="products-form-warning">{formError}</p>}
+            {supplierFormError && <p className="products-form-warning">{supplierFormError}</p>}
           </form>
         </article>
       )}
 
-      <article className="card products-list-card">
-        <h3>Fornecedores ativos</h3>
+      {activeTab === 'FUNCIONARIOS' && showCadastroSpan && (
+        <article className="card products-cadastro-span">
+          <header className="products-cadastro-header">
+            <h3>Cadastro rapido | Funcionarios</h3>
+          </header>
 
-        {supplierRows.length === 0 ? (
-          <p className="empty-state">Nenhum fornecedor cadastrado ainda.</p>
-        ) : (
-          <ul className="products-list suppliers-list">
-            {supplierRows.map((supplier) => (
-              <li key={supplier.id}>
+          <form onSubmit={onSubmitEmployee} className="suppliers-form">
+            <section className="suppliers-section">
+              <h4>Dados basicos</h4>
+
+              <div className="suppliers-row-3">
                 <div>
-                  <strong>
-                    <span className="products-id-tag">ID {supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? '--'}</span>{' '}
-                    {supplier.legalName}
-                  </strong>
-                  <span>{supplier.tradeName || 'Sem nome fantasia'}</span>
-                  <span>
-                    {supplier.city} - {supplier.state} | CPF/CNPJ {supplier.cpfCnpj}
-                  </span>
+                  <label htmlFor="employee-code">ID funcionario (automatico)</label>
+                  <input id="employee-code" value={employeeCode} readOnly />
                 </div>
                 <div>
-                  <span>
-                    Contato: {supplier.mobile || supplier.phone || '-'}{' '}
-                    {supplier.mobile && (
-                      <span className="whatsapp-badge" title="Numero com WhatsApp" aria-label="Numero com WhatsApp">
-                        <svg
-                          className="whatsapp-icon"
-                          viewBox="0 0 24 24"
-                          role="img"
-                          aria-label="WhatsApp"
-                        >
-                          <path
-                            d="M12 3.2a8.8 8.8 0 0 0-7.58 13.26L3.2 20.8l4.45-1.17A8.8 8.8 0 1 0 12 3.2Zm0 15.98a7.15 7.15 0 0 1-3.65-1l-.26-.15-2.64.69.7-2.57-.17-.27a7.17 7.17 0 1 1 6.02 3.3Zm3.93-5.34c-.22-.11-1.28-.63-1.48-.7-.2-.07-.34-.11-.49.11-.14.22-.56.7-.69.84-.13.14-.25.16-.47.05a5.87 5.87 0 0 1-2.9-2.54c-.12-.2 0-.31.1-.42.1-.1.22-.25.33-.38.1-.12.14-.22.22-.36.07-.14.04-.27-.02-.38-.06-.11-.5-1.21-.7-1.66-.18-.44-.36-.38-.5-.38h-.43c-.14 0-.37.05-.56.27-.2.22-.75.73-.75 1.79 0 1.06.77 2.08.87 2.22.11.14 1.5 2.29 3.63 3.21.5.22.9.35 1.2.45.5.16.95.13 1.31.08.4-.06 1.28-.52 1.46-1.02.18-.5.18-.94.13-1.03-.05-.09-.2-.14-.41-.25Z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      </span>
-                    )}
-                  </span>
-                  <span>E-mail: {supplier.email || '-'}</span>
-                  <div className="products-row-actions">
-                    <button type="button" className="products-edit-button" onClick={() => onEditSupplier(supplier.id)}>
-                      Editar
+                  <label htmlFor="employee-cpf">CPF</label>
+                  <input
+                    id="employee-cpf"
+                    value={employeeCpf}
+                    onChange={(e) => setEmployeeCpf(formatCpfCnpj(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-role">Cargo</label>
+                  <select
+                    id="employee-role"
+                    value={employeeRole}
+                    onChange={(e) => setEmployeeRole(e.target.value)}
+                  >
+                    {employeeRoleOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-2-wide">
+                <div>
+                  <label htmlFor="employee-full-name">Nome completo</label>
+                  <input
+                    id="employee-full-name"
+                    value={employeeFullName}
+                    onChange={(e) => setEmployeeFullName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="employee-status-field">
+                  <label>Status do funcionario</label>
+                  <div className="employee-status-toggle" role="group" aria-label="Status do funcionario">
+                    <button
+                      type="button"
+                      className={employeeActive ? 'is-active' : ''}
+                      onClick={() => setEmployeeActive(true)}
+                    >
+                      Ativo
                     </button>
                     <button
                       type="button"
-                      className="products-delete-button"
-                      onClick={() => void onDeleteSupplier(supplier.id)}
+                      className={!employeeActive ? 'is-active' : ''}
+                      onClick={() => setEmployeeActive(false)}
                     >
-                      Deletar
+                      Inativo
                     </button>
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </article>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="employee-birth-date">Data de nascimento</label>
+                  <input
+                    id="employee-birth-date"
+                    type="date"
+                    value={employeeBirthDate}
+                    onChange={(e) => setEmployeeBirthDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-gender">Genero</label>
+                  <select
+                    id="employee-gender"
+                    value={employeeGender}
+                    onChange={(e) => setEmployeeGender(e.target.value as (typeof employeeGenderOptions)[number])}
+                  >
+                    {employeeGenderOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="employee-admission-date">Data de admissao</label>
+                  <input
+                    id="employee-admission-date"
+                    type="date"
+                    value={employeeAdmissionDate}
+                    onChange={(e) => setEmployeeAdmissionDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="employee-dismissal-date">Data de demissao</label>
+                  <input
+                    id="employee-dismissal-date"
+                    type="date"
+                    value={employeeDismissalDate}
+                    onChange={(e) => setEmployeeDismissalDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-status">Status</label>
+                  <input id="employee-status" value={employeeActive ? 'ATIVO' : 'INATIVO'} readOnly />
+                </div>
+              </div>
+
+              <div className="suppliers-notes-field">
+                <label htmlFor="employee-notes">Observacoes</label>
+                <textarea
+                  id="employee-notes"
+                  value={employeeNotes}
+                  onChange={(e) => setEmployeeNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Informacoes adicionais sobre o funcionario"
+                />
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Endereco</h4>
+
+              <div className="suppliers-row-address-top">
+                <div>
+                  <label htmlFor="employee-cep">CEP</label>
+                  <input
+                    id="employee-cep"
+                    value={employeeCep}
+                    onChange={(e) => setEmployeeCep(formatCep(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-address">Logradouro</label>
+                  <input
+                    id="employee-address"
+                    value={employeeAddress}
+                    onChange={(e) => setEmployeeAddress(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-number">Numero</label>
+                  <input
+                    id="employee-number"
+                    value={employeeNumber}
+                    onChange={(e) => setEmployeeNumber(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-neighborhood">Bairro</label>
+                  <input
+                    id="employee-neighborhood"
+                    value={employeeNeighborhood}
+                    onChange={(e) => setEmployeeNeighborhood(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {(isEmployeeCepLookupLoading || employeeCepSuggestionMessage) && (
+                <p className="suppliers-cep-feedback">
+                  {isEmployeeCepLookupLoading
+                    ? 'Buscando sugestao de endereco pelo CEP...'
+                    : employeeCepSuggestionMessage}
+                </p>
+              )}
+
+              <div className="suppliers-row-address-bottom">
+                <div>
+                  <label htmlFor="employee-state">UF</label>
+                  <select id="employee-state" value={employeeState} onChange={(e) => setEmployeeState(e.target.value)}>
+                    {stateOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="employee-city">Cidade</label>
+                  <input
+                    id="employee-city"
+                    value={employeeCity}
+                    onChange={(e) => setEmployeeCity(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-complement">Complemento</label>
+                  <input
+                    id="employee-complement"
+                    value={employeeComplement}
+                    onChange={(e) => setEmployeeComplement(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-role-readonly">Cargo</label>
+                  <input id="employee-role-readonly" value={employeeRole} readOnly />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Contato</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="employee-phone">Telefone</label>
+                  <input
+                    id="employee-phone"
+                    value={employeePhone}
+                    onChange={(e) => setEmployeePhone(formatPhone(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-mobile">Celular</label>
+                  <input
+                    id="employee-mobile"
+                    value={employeeMobile}
+                    onChange={(e) => setEmployeeMobile(formatPhone(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="employee-email">E-Mail</label>
+                  <input
+                    id="employee-email"
+                    type="email"
+                    value={employeeEmail}
+                    onChange={(e) => setEmployeeEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <div className="products-cadastro-footer">
+              <button type="submit" disabled={savingEmployee}>
+                {savingEmployee ? 'Salvando...' : editingEmployeeId ? 'Salvar edicao' : 'Salvar dados'}
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  clearEmployeeForm();
+                }}
+              >
+                Fechar cadastro
+              </button>
+            </div>
+
+            {employeeFormError && <p className="products-form-warning">{employeeFormError}</p>}
+          </form>
+        </article>
+      )}
+
+      {activeTab === 'FORNECEDORES' && (
+        <article className="card products-list-card">
+          <h3>Fornecedores ativos</h3>
+
+          {supplierRows.length === 0 ? (
+            <p className="empty-state">Nenhum fornecedor cadastrado ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {supplierRows.map((supplier) => (
+                <li key={supplier.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? '--'}</span>{' '}
+                      {supplier.legalName}
+                    </strong>
+                    <span>{supplier.tradeName || 'Sem nome fantasia'}</span>
+                    <span>
+                      {supplier.city} - {supplier.state} | CPF/CNPJ {supplier.cpfCnpj}
+                    </span>
+                  </div>
+                  <div>
+                    <span>
+                      Contato: {supplier.mobile || supplier.phone || '-'}{' '}
+                      {supplier.mobile && (
+                        <span className="whatsapp-badge" title="Numero com WhatsApp" aria-label="Numero com WhatsApp">
+                          <svg
+                            className="whatsapp-icon"
+                            viewBox="0 0 24 24"
+                            role="img"
+                            aria-label="WhatsApp"
+                          >
+                            <path
+                              d="M12 3.2a8.8 8.8 0 0 0-7.58 13.26L3.2 20.8l4.45-1.17A8.8 8.8 0 1 0 12 3.2Zm0 15.98a7.15 7.15 0 0 1-3.65-1l-.26-.15-2.64.69.7-2.57-.17-.27a7.17 7.17 0 1 1 6.02 3.3Zm3.93-5.34c-.22-.11-1.28-.63-1.48-.7-.2-.07-.34-.11-.49.11-.14.22-.56.7-.69.84-.13.14-.25.16-.47.05a5.87 5.87 0 0 1-2.9-2.54c-.12-.2 0-.31.1-.42.1-.1.22-.25.33-.38.1-.12.14-.22.22-.36.07-.14.04-.27-.02-.38-.06-.11-.5-1.21-.7-1.66-.18-.44-.36-.38-.5-.38h-.43c-.14 0-.37.05-.56.27-.2.22-.75.73-.75 1.79 0 1.06.77 2.08.87 2.22.11.14 1.5 2.29 3.63 3.21.5.22.9.35 1.2.45.5.16.95.13 1.31.08.4-.06 1.28-.52 1.46-1.02.18-.5.18-.94.13-1.03-.05-.09-.2-.14-.41-.25Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </span>
+                      )}
+                    </span>
+                    <span>E-mail: {supplier.email || '-'}</span>
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditSupplier(supplier.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteSupplier(supplier.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
+
+      {activeTab === 'FUNCIONARIOS' && (
+        <article className="card products-list-card">
+          <h3>Funcionarios ativos</h3>
+
+          {employeeRows.length === 0 ? (
+            <p className="empty-state">Nenhum funcionario cadastrado ainda.</p>
+          ) : (
+            <ul className="products-list suppliers-list">
+              {employeeRows.map((employee) => (
+                <li key={employee.id}>
+                  <div>
+                    <strong>
+                      <span className="products-id-tag">ID {employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName) ?? '--'}</span>{' '}
+                      {employee.fullName}
+                    </strong>
+                    <span>{employee.role}</span>
+                    <span>
+                      {employee.city} - {employee.state} | CPF {employee.cpf}
+                    </span>
+                    <span>
+                      Nascimento: {employee.birthDate || '-'} | Genero: {employee.gender || '-'}
+                    </span>
+                    <span>
+                      Admissao: {employee.admissionDate || '-'} | Demissao: {employee.dismissalDate || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span>
+                      Contato: {employee.mobile || employee.phone || '-'}{' '}
+                      {employee.mobile && (
+                        <span className="whatsapp-badge" title="Numero com WhatsApp" aria-label="Numero com WhatsApp">
+                          <svg
+                            className="whatsapp-icon"
+                            viewBox="0 0 24 24"
+                            role="img"
+                            aria-label="WhatsApp"
+                          >
+                            <path
+                              d="M12 3.2a8.8 8.8 0 0 0-7.58 13.26L3.2 20.8l4.45-1.17A8.8 8.8 0 1 0 12 3.2Zm0 15.98a7.15 7.15 0 0 1-3.65-1l-.26-.15-2.64.69.7-2.57-.17-.27a7.17 7.17 0 1 1 6.02 3.3Zm3.93-5.34c-.22-.11-1.28-.63-1.48-.7-.2-.07-.34-.11-.49.11-.14.22-.56.7-.69.84-.13.14-.25.16-.47.05a5.87 5.87 0 0 1-2.9-2.54c-.12-.2 0-.31.1-.42.1-.1.22-.25.33-.38.1-.12.14-.22.22-.36.07-.14.04-.27-.02-.38-.06-.11-.5-1.21-.7-1.66-.18-.44-.36-.38-.5-.38h-.43c-.14 0-.37.05-.56.27-.2.22-.75.73-.75 1.79 0 1.06.77 2.08.87 2.22.11.14 1.5 2.29 3.63 3.21.5.22.9.35 1.2.45.5.16.95.13 1.31.08.4-.06 1.28-.52 1.46-1.02.18-.5.18-.94.13-1.03-.05-.09-.2-.14-.41-.25Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </span>
+                      )}
+                    </span>
+                    <span>E-mail: {employee.email || '-'}</span>
+                    <span>Status: {employee.active ? 'ATIVO' : 'INATIVO'}</span>
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditEmployee(employee.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteEmployee(employee.id)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      )}
     </section>
   );
 }

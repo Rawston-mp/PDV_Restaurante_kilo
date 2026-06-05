@@ -1,0 +1,26 @@
+export type Employee = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  cpf: string;
+  role: string;
+  birthDate: string;
+  gender: 'MASCULINO' | 'FEMININO';
+  admissionDate: string;
+  dismissalDate: string;
+  notes: string;
+  cep: string;
+  address: string;
+  number: string;
+  neighborhood: string;
+  state: string;
+  city: string;
+  complement: string;
+  phone: string;
+  mobile: string;
+  email: string;
+  active: boolean;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
