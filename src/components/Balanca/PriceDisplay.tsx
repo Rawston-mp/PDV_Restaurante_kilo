@@ -10,6 +10,7 @@ type PriceEventPayload = {
 export interface PriceDisplayProps {
   weight: number;
   unitPrice?: number;
+  unitLabel?: 'kg' | 'un';
   currency?: 'BRL';
   isLoading?: boolean;
   error?: string | null;
@@ -30,6 +31,7 @@ const isPriceEvent = (payload: unknown): payload is PriceEventPayload => {
 export function PriceDisplay({
   weight,
   unitPrice = 69.9,
+  unitLabel = 'kg',
   currency = 'BRL',
   isLoading = false,
   error = null,
@@ -96,7 +98,7 @@ export function PriceDisplay({
           <>
             <p className="balanca-muted">Total atual</p>
             <p className="price-value">{formatter.format(total)}</p>
-            <p className="price-unit">{formatter.format(displayUnitPrice)} / kg</p>
+            <p className="price-unit">{formatter.format(displayUnitPrice)} / {unitLabel}</p>
           </>
         )}
       </div>
