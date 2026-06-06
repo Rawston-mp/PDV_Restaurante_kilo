@@ -48,5 +48,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build (dist-mode)
+        run: npm run build -- --base ./
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdv-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
