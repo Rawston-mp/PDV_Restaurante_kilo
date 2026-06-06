@@ -22,7 +22,7 @@ Sincronizacao offline/online:
 - Fila de reenvio para tarefas de sincronizacao com reagendamento automatico, persistida em Dexie quando disponivel.
 - Processamento multi-modulo da fila para `SYNC_PRODUCTS` e `SYNC_ORDERS`.
 
-Balanca em tempo real:
+Sensor de peso em tempo real:
 - Backend publica `atualizar_peso` via Socket.IO somente com comanda ativa.
 - Frontend recebe peso estavel e permite aplicar no item por peso.
 
@@ -105,7 +105,7 @@ Regra de negocio coberta:
   - falha ao ajustar estoque de produto inexistente
 
 - E2E (fluxo de tela):
-  - abre comanda, cria pedido, aplica peso da balanca e avanca status
+  - abre comanda, cria pedido, aplica peso do sensor e avanca status
 
 - Sincronizacao:
   - sincroniza pedidos com merge local/remoto e resolucao de conflito por versao/timestamp
@@ -154,7 +154,7 @@ Contras:
 
 ## Skill Consolidada Do Projeto
 
-Foi criada uma skill consolidada com todo o estado atual do sistema, incluindo arquitetura, fluxos operacionais, balancas A/B, autenticacao por PIN, confirmacao de acoes sensiveis, atalhos de teclado e checklist de validacao:
+Foi criada uma skill consolidada com todo o estado atual do sistema, incluindo arquitetura, fluxos operacionais de comanda, autenticacao por PIN, confirmacao de acoes sensiveis, atalhos de teclado e checklist de validacao:
 
 - `.github/skills/pdv-touch-enterprise/SKILL.md`
 

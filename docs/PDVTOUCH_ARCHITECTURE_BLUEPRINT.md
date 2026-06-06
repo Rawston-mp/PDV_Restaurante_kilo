@@ -35,8 +35,8 @@ Build a POS platform with fast touch UX, resilient scale integration, and secure
 - GERENTE
 - CAIXA
 - ATENDENTE
-- BALANCA_A
-- BALANCA_B
+- COMANDA_A
+- COMANDA_B
 
 ### Mandatory Controls
 - JWT middleware for authenticated routes

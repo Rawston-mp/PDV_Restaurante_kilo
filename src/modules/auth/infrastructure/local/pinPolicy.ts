@@ -22,8 +22,8 @@ const defaultLoginPins: Record<Role, string> = {
   GERENTE: '7070',
   CAIXA: '2025',
   ATENDENTE: '3030',
-  BALANCA_A: '1111',
-  BALANCA_B: '2222'
+  COMANDA_A: '1111',
+  COMANDA_B: '2222'
 };
 
 const defaultSensitivePins: Record<Role, string> = {
@@ -31,8 +31,8 @@ const defaultSensitivePins: Record<Role, string> = {
   GERENTE: '7700',
   CAIXA: '2200',
   ATENDENTE: '3300',
-  BALANCA_A: '1100',
-  BALANCA_B: '2201'
+  COMANDA_A: '1100',
+  COMANDA_B: '2201'
 };
 
 let memoryLoginPins = { ...defaultLoginPins };

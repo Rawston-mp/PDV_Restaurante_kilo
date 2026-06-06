@@ -24,7 +24,7 @@ const stateOptions = [
   'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'
 ];
 
-const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B', 'ADMINISTRATIVO'];
+const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B', 'ADMINISTRATIVO'];
 const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
 const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
 const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;

@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { saveWeightHistoryLocal } from '@/modules/orders/infrastructure/local/comandaPersistence';
 import { applyWeightFilter } from '@/modules/orders/presentation/utils/weightFilter';
 
-type PesoBalancaPayload = {
+type PesoSensorPayload = {
   peso: number;
   origem?: string;
   timestamp?: string;
@@ -41,7 +41,7 @@ export function useScaleSocket(enabled = true, comandaAtiva = false) {
       setConnected(false);
     });
 
-    socket.on('atualizar_peso', (payload: PesoBalancaPayload) => {
+    socket.on('atualizar_peso', (payload: PesoSensorPayload) => {
       if (Number.isFinite(payload.peso) && payload.peso > 0) {
         const filtered = applyWeightFilter(
           payload.peso,

@@ -31,8 +31,8 @@ export function ComandaScreen() {
       <div className="comanda-container">
         <div className="comanda-header-wrap">
           <ComandaHeader
-            status={state.isBalancaConectada ? 'Conectada' : 'Sem conexao'}
-            title="BALANCA - TELA DE COMANDA"
+            status={state.isComandaConectada ? 'Conectada' : 'Sem conexao'}
+            title="TELA DE COMANDA"
           />
           <div className="comanda-top-fields">
             <div className="comanda-field-group">

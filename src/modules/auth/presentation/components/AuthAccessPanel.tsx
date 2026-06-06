@@ -8,8 +8,8 @@ const roleLabel: Record<Role, string> = {
   GERENTE: 'Gerente',
   CAIXA: 'Caixa',
   ATENDENTE: 'Atendente',
-  BALANCA_A: 'Balanca A',
-  BALANCA_B: 'Balanca B'
+  COMANDA_A: 'Comanda A',
+  COMANDA_B: 'Comanda B'
 };
 
 export function AuthAccessPanel() {
@@ -103,7 +103,7 @@ export function AuthAccessPanel() {
         {message && <p className="auth-message">{message}</p>}
 
         <p className="auth-hint">
-          PIN login: Admin 9000, Caixa 2025, Balanca A 1111, Balanca B 2222. PIN sensivel: Admin 9900, Caixa 2200.
+          PIN login: Admin 9000, Caixa 2025, Comanda A 1111, Comanda B 2222. PIN sensivel: Admin 9900, Caixa 2200.
         </p>
       </section>
     </div>

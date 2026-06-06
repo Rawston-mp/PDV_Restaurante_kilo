@@ -3,5 +3,5 @@ export type Role =
   | 'GERENTE'
   | 'CAIXA'
   | 'ATENDENTE'
-  | 'BALANCA_A'
-  | 'BALANCA_B';
+  | 'COMANDA_A'
+  | 'COMANDA_B';

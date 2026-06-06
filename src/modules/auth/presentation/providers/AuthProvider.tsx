@@ -52,11 +52,11 @@ const roleNames: Record<Role, string> = {
   GERENTE: 'Gerente',
   CAIXA: 'Caixa',
   ATENDENTE: 'Atendente',
-  BALANCA_A: 'Balanca A',
-  BALANCA_B: 'Balanca B'
+  COMANDA_A: 'Comanda A',
+  COMANDA_B: 'Comanda B'
 };
 
-const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'BALANCA_A', 'BALANCA_B', 'GERENTE', 'ATENDENTE'];
+const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];
 
 const defaultUser: User = {
   id: 'u-admin-default',

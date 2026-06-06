@@ -32,7 +32,7 @@ import {
 const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLOSE_COMANDA', 'CANCEL_ORDER'];
 const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
 
-const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'BALANCA_A', 'BALANCA_B'];
+const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
 
 const parseLegacyProductCode = (productName: string) => {
   const [firstChunk] = productName.split(' - ');
@@ -550,7 +550,7 @@ export function AdminPage() {
                     <th>Quando</th>
                     <th>Acao</th>
                     <th>Perfil</th>
-                    <th>Balanca</th>
+                    <th>Estacao</th>
                     <th>Resultado</th>
                     <th>Motivo</th>
                   </tr>
