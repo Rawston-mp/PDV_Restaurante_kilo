@@ -1,18 +1,17 @@
 import { SerialPort } from 'serialport';
 
-type BalancaOptions = {
+type ScaleReaderOptions = {
   samplesToConfirm?: number;
   tolerance?: number;
   onStableWeight?: (peso: number) => void;
 };
 
-export const lerBalanca = (path: string, options: BalancaOptions = {}) => {
+export const startScaleReader = (path: string, options: ScaleReaderOptions = {}) => {
   const samplesToConfirm = options.samplesToConfirm ?? 3;
   const tolerance = options.tolerance ?? 0.02;
   const onStableWeight = options.onStableWeight;
 
   const port = new SerialPort({ path, baudRate: 9600 });
-
   const window: number[] = [];
 
   port.on('data', (data) => {

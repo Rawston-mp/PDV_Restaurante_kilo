@@ -20,7 +20,7 @@ vi.mock('socket.io-client', () => ({
 }));
 
 describe('New order flow e2e', () => {
-  it('acessa pagina, abre comanda, usa peso da balanca e avanca status', async () => {
+  it('acessa pagina, abre comanda, usa peso do sensor e avanca status', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url =
           typeof input === 'string'
@@ -74,7 +74,7 @@ describe('New order flow e2e', () => {
     socketHandlers.get('atualizar_peso')?.({ peso: 0.456 });
     expect(await screen.findByText('Peso recebido: 0.455 kg')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Usar peso da balanca' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usar peso do sensor' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar item ao pedido' }));
 

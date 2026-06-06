@@ -1,9 +1,9 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { lerBalanca } from './services/balanca.service';
+import { startScaleReader } from './services/scaleReader.service';
 
-type PesoBalancaPayload = {
+type PesoSensorPayload = {
   peso: number;
   origem?: string;
   timestamp?: string;
@@ -36,7 +36,7 @@ app.post('/comandas/fechar', (_req, res) => {
 });
 
 io.on('connection', (socket) => {
-  socket.on('peso_balanca', (data: PesoBalancaPayload) => {
+  socket.on('peso_sensor', (data: PesoSensorPayload) => {
     if (comandaAtiva) {
       io.emit('atualizar_peso', data);
     }
@@ -47,20 +47,20 @@ const serialPath = process.env.SERIAL_PORT_PATH;
 
 if (serialPath) {
   try {
-    lerBalanca(serialPath, {
+    startScaleReader(serialPath, {
       onStableWeight: (peso) => {
         if (comandaAtiva) {
           io.emit('atualizar_peso', {
             peso,
-            origem: 'balanca_serial',
+            origem: 'sensor_serial',
             timestamp: new Date().toISOString()
-          } satisfies PesoBalancaPayload);
+          } satisfies PesoSensorPayload);
         }
       }
     });
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('Falha ao iniciar leitura da balanca:', error);
+    console.error('Falha ao iniciar leitura do sensor:', error);
   }
 }
 

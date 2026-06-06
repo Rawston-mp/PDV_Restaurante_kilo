@@ -6,8 +6,8 @@ const rolePermissions: Record<Role, Permission[]> = {
   GERENTE: ['orders:create', 'orders:add-item', 'orders:advance-status', 'products:view', 'products:manage'],
   CAIXA: ['orders:create', 'orders:add-item', 'orders:advance-status', 'products:view', 'products:manage'],
   ATENDENTE: ['orders:create', 'orders:add-item', 'products:view', 'products:manage'],
-  BALANCA_A: ['orders:add-item', 'products:view'],
-  BALANCA_B: ['orders:add-item', 'products:view']
+  COMANDA_A: ['orders:add-item', 'products:view'],
+  COMANDA_B: ['orders:add-item', 'products:view']
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

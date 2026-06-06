@@ -249,7 +249,7 @@ export function NewOrderPage() {
           {fiscalBlockReason && <p className="products-form-warning">{fiscalBlockReason}</p>}
 
           <h3>Adicionar item</h3>
-          <p>Balanca: {connected ? 'conectada' : 'desconectada'}</p>
+          <p>Sensor de peso: {connected ? 'conectado' : 'desconectado'}</p>
           <p>Peso recebido: {weight ? `${weight.toFixed(3)} kg` : 'aguardando leitura'}</p>
           <form onSubmit={onAddItem}>
             <label htmlFor="item-name">Nome do item</label>
@@ -312,7 +312,7 @@ export function NewOrderPage() {
                     }
                   }}
                 >
-                  Usar peso da balanca
+                  Usar peso do sensor
                 </button>
                 <button
                   type="button"

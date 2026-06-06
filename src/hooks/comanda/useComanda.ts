@@ -36,7 +36,7 @@ export function useComanda(taxaImposto = 0.1) {
   const [precoAtual, setPrecoAtual] = useState(catalogoProdutos[0].precoUnitario);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
-  const { pesoAtual, pesoManual, setPesoManual, isBalancaConectada } = useWeight();
+  const { pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight();
 
   const subtotal = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens]);
   const impostos = useMemo(() => Number((subtotal * taxaImposto).toFixed(2)), [subtotal, taxaImposto]);
@@ -59,7 +59,7 @@ export function useComanda(taxaImposto = 0.1) {
 
     const quantidade = produto.porUnidade ? 1 : Number(pesoAtual.toFixed(3));
     if (!produto.porUnidade && quantidade <= 0) {
-      setErro('Aguardando peso da balanca ou informe peso manual.');
+      setErro('Aguardando peso do sensor ou informe peso manual.');
       return;
     }
 
@@ -203,7 +203,7 @@ export function useComanda(taxaImposto = 0.1) {
     precoAtual,
     pesquisa,
     tecladoAtivo,
-    isBalancaConectada,
+    isComandaConectada,
     erro,
     canFinalize: itens.length > 0
   };

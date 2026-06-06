@@ -7,14 +7,13 @@ import { RequirePermission } from '@/modules/auth/presentation/components/Requir
 import { RequireRole } from '@/modules/auth/presentation/components/RequireRole';
 import { AuthAccessPanel } from '@/modules/auth/presentation/components/AuthAccessPanel';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
-import { BalancaScreen } from '@/components/Balanca/BalancaScreen';
 import { ComandaScreen } from '@/components/Comanda/ComandaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
 
 export function App() {
   const { user } = useAuth();
-  const canAccessDashboard = user?.role !== 'BALANCA_A' && user?.role !== 'BALANCA_B';
+  const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
 
   return (
@@ -25,7 +24,6 @@ export function App() {
           {canAccessDashboard && <NavLink to="/">Dashboard</NavLink>}
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
-          <NavLink to="/balanca">Balancas</NavLink>
           <NavLink to="/comanda">Comanda</NavLink>
           {canAccessCadastro && <NavLink to="/cadastro">Cadastros</NavLink>}
           <NavLink to="/admin">Admin</NavLink>
@@ -61,17 +59,9 @@ export function App() {
             }
           />
           <Route
-            path="/balanca"
-            element={
-              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
-                <BalancaScreen />
-              </RequireRole>
-            }
-          />
-          <Route
             path="/comanda"
             element={
-              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'COMANDA_A', 'COMANDA_B']}>
                 <ComandaScreen />
               </RequireRole>
             }

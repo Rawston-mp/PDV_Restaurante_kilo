@@ -196,7 +196,7 @@ export function ProductsPage() {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const canEditOrDelete = user?.role !== 'BALANCA_A' && user?.role !== 'BALANCA_B';
+  const canEditOrDelete = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
 
   const ncmLookupResults = useMemo(() => {
     const query = ncmSearchQuery.trim().toLowerCase();
@@ -253,7 +253,7 @@ export function ProductsPage() {
     event.preventDefault();
 
     if (!canEditOrDelete) {
-      setFormError('Perfil de balanca nao pode cadastrar ou editar produtos.');
+      setFormError('Perfil de comanda nao pode cadastrar ou editar produtos.');
       return;
     }
 
@@ -364,7 +364,7 @@ export function ProductsPage() {
 
   const onEditProduct = (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('Perfil de balanca nao pode editar produtos.');
+      setFormError('Perfil de comanda nao pode editar produtos.');
       return;
     }
 
@@ -404,7 +404,7 @@ export function ProductsPage() {
 
   const onDeleteProduct = async (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('Perfil de balanca nao pode deletar produtos.');
+      setFormError('Perfil de comanda nao pode deletar produtos.');
       return;
     }
 

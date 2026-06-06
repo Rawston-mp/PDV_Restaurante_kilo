@@ -39,7 +39,7 @@ export interface EstadoComanda {
   precoAtual: number;
   pesquisa: string;
   tecladoAtivo: 'NUMERICO' | 'VIRTUAL';
-  isBalancaConectada: boolean;
+  isComandaConectada: boolean;
   erro: string | null;
   canFinalize: boolean;
 }
