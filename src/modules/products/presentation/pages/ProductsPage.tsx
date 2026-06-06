@@ -1,6 +1,17 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
+import {
+  buildComandaCategories,
+  defaultProductCategories,
+  getCategoryVisual,
+  isSameCategoryName,
+  mergeCategoryOptions,
+  normalizeCategoryName,
+  persistProductCategories,
+  readStoredProductCategories,
+  sanitizeCategoryOptions
+} from '@/modules/products/domain/services/productCategories';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
@@ -43,14 +54,6 @@ const cstPisCofinsOptions = [
 ];
 
 const taxSituationCodeOptions = ['61', '102', '300', '400', '500', '900'];
-
-const groupOptions = ['Por kilo', 'Bebidas', 'A la Carte'];
-
-const groupVisuals: Record<string, { label: string; icon: string; className: string }> = {
-  'Por kilo': { label: 'Por kilo', icon: '⚖', className: 'is-por-kilo' },
-  Bebidas: { label: 'Bebidas', icon: '🥤', className: 'is-bebidas' },
-  'A la Carte': { label: 'A la Carte', icon: '🍽', className: 'is-ala-carte' }
-};
 
 const ncmLookupCatalog = [
   { code: '02013000', description: 'Carne bovina desossada, fresca ou refrigerada' },
@@ -165,6 +168,7 @@ export function ProductsPage() {
   const { products, setProducts, reload } = useProductsQuery();
   const { createProduct, saving } = useCreateProduct();
   const { user } = useAuth();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
@@ -172,7 +176,12 @@ export function ProductsPage() {
   const [name, setName] = useState('');
   const [productCode, setProductCode] = useState('');
   const [barcode, setBarcode] = useState('');
-  const [category, setCategory] = useState(groupOptions[0]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>(readStoredProductCategories);
+  const [category, setCategory] = useState(defaultProductCategories[0]);
+  const [categoryManagerMode, setCategoryManagerMode] = useState<'ADD' | 'EDIT' | 'DELETE' | null>(null);
+  const [categoryTargetName, setCategoryTargetName] = useState(defaultProductCategories[0]);
+  const [categoryDraftName, setCategoryDraftName] = useState('');
+  const [categoryActionError, setCategoryActionError] = useState<string | null>(null);
   const [ncm, setNcm] = useState('');
   const [showNcmLookup, setShowNcmLookup] = useState(false);
   const [ncmSearchQuery, setNcmSearchQuery] = useState('');
@@ -197,6 +206,209 @@ export function ProductsPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const canEditOrDelete = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
+  const isNewCadastro = editingProductId === null;
+
+  const getNumericInputValue = (value: number) => {
+    if (isNewCadastro && value === 0) {
+      return '';
+    }
+
+    return String(value);
+  };
+
+  useEffect(() => {
+    const mergedCategories = mergeCategoryOptions(readStoredProductCategories(), products);
+    setCategoryOptions((current) => {
+      const currentNormalized = sanitizeCategoryOptions(current);
+      const nextNormalized = sanitizeCategoryOptions(mergedCategories);
+
+      if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
+        return current;
+      }
+
+      persistProductCategories(nextNormalized);
+      return nextNormalized;
+    });
+  }, [products]);
+
+  useEffect(() => {
+    if (categoryOptions.length === 0) {
+      return;
+    }
+
+    if (!categoryOptions.some((option) => isSameCategoryName(option, category))) {
+      setCategory(categoryOptions[0]);
+    }
+  }, [category, categoryOptions]);
+
+  useEffect(() => {
+    if (!showCadastroSpan || activeTab !== 'PRODUTO' || !isNewCadastro) {
+      return;
+    }
+
+    nameInputRef.current?.focus();
+  }, [activeTab, isNewCadastro, showCadastroSpan]);
+
+  const resetCadastroForm = () => {
+    setEditingProductId(null);
+    setFormError(null);
+    setName('');
+    setProductCode(generateCodeForCurrentCatalog());
+    setBarcode('');
+    setCategory(categoryOptions[0] ?? defaultProductCategories[0]);
+    setNcm('');
+    setNcmSearchQuery('');
+    setShowNcmLookup(false);
+    setCostValue(0);
+    setMarginProfit(0);
+    setSalePrice(0);
+    setStock(0);
+    setByWeight(false);
+    setCfop(cfopOptions[0]);
+    setCstIcms(cstIcmsOptions[0]);
+    setTaxSituationCode(taxSituationCodeOptions[0]);
+    setAliqIcms('');
+    setCstPis(cstPisCofinsOptions[0]);
+    setAliqPis('');
+    setCstCofins(cstPisCofinsOptions[0]);
+    setAliqCofins('');
+    setFiscalType(fiscalTypeOptions[0]);
+    setActiveTab('PRODUTO');
+  };
+
+  const saveCategoryOptions = (nextCategories: string[]) => {
+    const sanitized = sanitizeCategoryOptions(nextCategories);
+    setCategoryOptions(sanitized);
+    persistProductCategories(sanitized);
+    return sanitized;
+  };
+
+  const syncProductsCategory = async (currentCategory: string, nextCategory: string) => {
+    if (isSameCategoryName(currentCategory, nextCategory)) {
+      return;
+    }
+
+    const now = new Date();
+    const affectedProducts = products.filter((product) => isSameCategoryName(product.category, currentCategory));
+
+    if (affectedProducts.length === 0) {
+      return;
+    }
+
+    const updatedProducts = affectedProducts.map((product) => ({
+      ...product,
+      category: nextCategory,
+      updatedAt: now,
+      version: product.version + 1
+    }));
+
+    await Promise.all(updatedProducts.map((product) => productsContainer.productRepository.save(product)));
+
+    setProducts((prev) =>
+      prev.map((product) => updatedProducts.find((updated) => updated.id === product.id) ?? product)
+    );
+  };
+
+  const closeCategoryManager = () => {
+    setCategoryManagerMode(null);
+    setCategoryTargetName(category);
+    setCategoryDraftName('');
+    setCategoryActionError(null);
+  };
+
+  const openCategoryManager = (mode: 'ADD' | 'EDIT' | 'DELETE') => {
+    const targetCategory = categoryOptions.find((option) => isSameCategoryName(option, category)) ?? categoryOptions[0];
+    setCategoryManagerMode(mode);
+    setCategoryTargetName(targetCategory);
+    setCategoryDraftName(mode === 'EDIT' ? targetCategory : '');
+    setCategoryActionError(null);
+  };
+
+  const onSubmitCategoryManager = async (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!categoryManagerMode) {
+      return;
+    }
+
+    if (categoryManagerMode === 'ADD') {
+      const nextCategoryName = normalizeCategoryName(categoryDraftName);
+
+      if (!nextCategoryName) {
+        setCategoryActionError('Informe o nome da nova categoria.');
+        return;
+      }
+
+      if (categoryOptions.some((option) => isSameCategoryName(option, nextCategoryName))) {
+        setCategoryActionError('Ja existe uma categoria com esse nome.');
+        return;
+      }
+
+      saveCategoryOptions([...categoryOptions, nextCategoryName]);
+      setCategory(nextCategoryName);
+      closeCategoryManager();
+      return;
+    }
+
+    const targetCategory = categoryOptions.find((option) => isSameCategoryName(option, categoryTargetName));
+    if (!targetCategory) {
+      setCategoryActionError('Selecione uma categoria valida.');
+      return;
+    }
+
+    if (categoryManagerMode === 'EDIT') {
+      const nextCategoryName = normalizeCategoryName(categoryDraftName);
+
+      if (!nextCategoryName) {
+        setCategoryActionError('Informe o novo nome da categoria.');
+        return;
+      }
+
+      if (
+        categoryOptions.some(
+          (option) => !isSameCategoryName(option, targetCategory) && isSameCategoryName(option, nextCategoryName)
+        )
+      ) {
+        setCategoryActionError('Ja existe outra categoria com esse nome.');
+        return;
+      }
+
+      saveCategoryOptions(categoryOptions.map((option) => (isSameCategoryName(option, targetCategory) ? nextCategoryName : option)));
+      await syncProductsCategory(targetCategory, nextCategoryName);
+
+      if (isSameCategoryName(category, targetCategory)) {
+        setCategory(nextCategoryName);
+      }
+
+      closeCategoryManager();
+      return;
+    }
+
+    if (categoryOptions.length === 1) {
+      setCategoryActionError('Nao e possivel excluir a unica categoria cadastrada.');
+      return;
+    }
+
+    const fallbackCategory = categoryOptions.find((option) => !isSameCategoryName(option, targetCategory));
+    if (!fallbackCategory) {
+      setCategoryActionError('Nao foi possivel definir a categoria de destino.');
+      return;
+    }
+
+    await syncProductsCategory(targetCategory, fallbackCategory);
+    saveCategoryOptions(categoryOptions.filter((option) => !isSameCategoryName(option, targetCategory)));
+
+    if (isSameCategoryName(category, targetCategory)) {
+      setCategory(fallbackCategory);
+    }
+
+    closeCategoryManager();
+  };
+
+  const deleteFallbackCategory =
+    categoryManagerMode === 'DELETE'
+      ? categoryOptions.find((option) => !isSameCategoryName(option, categoryTargetName)) ?? null
+      : null;
 
   const ncmLookupResults = useMemo(() => {
     const query = ncmSearchQuery.trim().toLowerCase();
@@ -333,33 +545,9 @@ export function ProductsPage() {
       setProducts((prev) => [...prev, product]);
     }
 
-    setFormError(null);
-    setEditingProductId(null);
-
-    setName('');
+    resetCadastroForm();
     setProductCode(generateRandomProductCode(new Set([...usedCodes, generatedCode])));
-    setBarcode('');
-    setNcm('');
-    setNcmSearchQuery('');
-    setShowNcmLookup(false);
-    setCostValue(0);
-    setMarginProfit(0);
-    setSalePrice(0);
-    setStock(0);
-    setByWeight(false);
-
-    setCfop(cfopOptions[0]);
-    setCstIcms(cstIcmsOptions[0]);
-    setTaxSituationCode(taxSituationCodeOptions[0]);
-    setAliqIcms('');
-    setCstPis(cstPisCofinsOptions[0]);
-    setAliqPis('');
-    setCstCofins(cstPisCofinsOptions[0]);
-    setAliqCofins('');
-    setFiscalType(fiscalTypeOptions[0]);
-
     setShowCadastroSpan(false);
-    setActiveTab('PRODUTO');
   };
 
   const onEditProduct = (productId: string) => {
@@ -450,10 +638,7 @@ export function ProductsPage() {
               className="products-new-button"
               onClick={() => {
                 if (!showCadastroSpan) {
-                  setEditingProductId(null);
-                  setFormError(null);
-                  setProductCode(generateCodeForCurrentCatalog());
-                  setActiveTab('PRODUTO');
+                  resetCadastroForm();
                 }
 
                 setShowCadastroSpan((prev) => !prev);
@@ -494,7 +679,7 @@ export function ProductsPage() {
             </div>
           </header>
 
-          <form onSubmit={onSubmit} className="products-form">
+          <form onSubmit={onSubmit} className="products-form" autoComplete="off">
             {activeTab === 'PRODUTO' ? (
               <>
                 <div className="products-row-4">
@@ -504,31 +689,75 @@ export function ProductsPage() {
                       id="product-code"
                       placeholder="Gerado automaticamente"
                       value={productCode}
+                      autoComplete="off"
                       readOnly
                     />
                     <small className="products-help-note">Gerado aleatoriamente e sem repeticao no catalogo.</small>
                   </div>
                   <div className="products-field-main">
                     <label htmlFor="name">Nome</label>
-                    <input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                    <input
+                      id="name"
+                      ref={nameInputRef}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                    />
                   </div>
                   <div>
                     <label htmlFor="barcode">Codigo de barra</label>
-                    <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+                    <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} autoComplete="off" />
                   </div>
-                  <div>
-                    <label htmlFor="category">Grupo</label>
-                    <select
-                      id="category"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                    >
-                      {groupOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="products-group-field">
+                    <label htmlFor="category">Categorias</label>
+                    <div className="products-group-row">
+                      <div className="products-group-input-row">
+                        <select
+                          id="category"
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value)}
+                        >
+                          {categoryOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="products-group-action-button"
+                          onClick={() => openCategoryManager('ADD')}
+                          aria-label="Cadastrar categoria"
+                          title="Cadastrar categoria"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          className="products-group-action-button is-edit"
+                          onClick={() => openCategoryManager('EDIT')}
+                          aria-label="Editar categoria"
+                          title="Editar categoria"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="products-group-action-button is-delete"
+                          onClick={() => openCategoryManager('DELETE')}
+                          aria-label="Excluir categoria"
+                          title="Excluir categoria"
+                          disabled={categoryOptions.length <= 1}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <small className="products-help-note products-group-help-note">
+                        Cadastre, edite ou exclua categorias daqui. As telas de comanda usam a mesma lista.
+                      </small>
+                    </div>
                   </div>
                 </div>
 
@@ -541,6 +770,7 @@ export function ProductsPage() {
                         value={ncm}
                         onChange={(e) => setNcm(formatNcmCode(e.target.value))}
                         placeholder="0000.00.00"
+                        autoComplete="off"
                       />
                       <button
                         type="button"
@@ -563,6 +793,7 @@ export function ProductsPage() {
                           onChange={(e) => setNcmSearchQuery(e.target.value)}
                           placeholder="Buscar por codigo ou descricao"
                           aria-label="Buscar por codigo ou descricao de NCM"
+                          autoComplete="off"
                         />
                         <ul>
                           {ncmLookupResults.length === 0 ? (
@@ -595,8 +826,8 @@ export function ProductsPage() {
                       type="number"
                       min={0}
                       step="1"
-                      value={stock}
-                      onChange={(e) => setStock(Number(e.target.value))}
+                      value={getNumericInputValue(stock)}
+                      onChange={(e) => setStock(e.target.value === '' ? 0 : Number(e.target.value))}
                       required
                     />
                   </div>
@@ -612,9 +843,9 @@ export function ProductsPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        value={costValue}
+                        value={getNumericInputValue(costValue)}
                         onChange={(e) => {
-                          const nextCost = parseDecimalInput(e.target.value);
+                          const nextCost = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
                           setCostValue(nextCost);
 
                           if (salePrice > 0) {
@@ -633,9 +864,9 @@ export function ProductsPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        value={marginProfit}
+                        value={getNumericInputValue(marginProfit)}
                         onChange={(e) => {
-                          const nextMargin = parseDecimalInput(e.target.value);
+                          const nextMargin = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
                           setMarginProfit(nextMargin);
                           setSalePrice(calculateSalePrice(costValue, nextMargin));
                         }}
@@ -648,9 +879,9 @@ export function ProductsPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        value={salePrice}
+                        value={getNumericInputValue(salePrice)}
                         onChange={(e) => {
-                          const nextSale = parseDecimalInput(e.target.value);
+                          const nextSale = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
                           setSalePrice(nextSale);
                           setMarginProfit(calculateMarginProfit(costValue, nextSale));
                         }}
@@ -818,8 +1049,8 @@ export function ProductsPage() {
                       <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
                       {getProductDisplayName(product)}
                     </strong>
-                    <span className={['products-group-tag', groupVisuals[product.category]?.className ?? ''].join(' ')}>
-                      <b>{groupVisuals[product.category]?.icon ?? '📦'}</b> {groupVisuals[product.category]?.label ?? product.category}
+                    <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
+                      <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
                     </span>
                   </div>
                   <div>
@@ -856,6 +1087,89 @@ export function ProductsPage() {
           )}
         </article>
       </div>
+
+      {categoryManagerMode && (
+        <div className="sensitive-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="products-group-manager-title">
+          <section className="sensitive-modal">
+            <h3 id="products-group-manager-title">
+              {categoryManagerMode === 'ADD'
+                ? 'Cadastrar categoria'
+                : categoryManagerMode === 'EDIT'
+                  ? 'Editar categoria'
+                  : 'Excluir categoria'}
+            </h3>
+            <p>
+              {categoryManagerMode === 'ADD'
+                ? 'Cadastre uma nova categoria para usar no cadastro e na tela de comanda.'
+                : categoryManagerMode === 'EDIT'
+                  ? 'Renomeie uma categoria existente e atualize os produtos vinculados.'
+                  : 'Exclua uma categoria e mova os produtos vinculados para outra categoria automaticamente.'}
+            </p>
+
+            <form onSubmit={onSubmitCategoryManager} autoComplete="off">
+              {categoryManagerMode !== 'ADD' && (
+                <>
+                  <label htmlFor="products-group-target">Categoria</label>
+                  <select
+                    id="products-group-target"
+                    value={categoryTargetName}
+                    onChange={(event) => {
+                      setCategoryTargetName(event.target.value);
+                      if (categoryManagerMode === 'EDIT') {
+                        setCategoryDraftName(event.target.value);
+                      }
+                    }}
+                  >
+                    {categoryOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              {categoryManagerMode !== 'DELETE' && (
+                <>
+                  <label htmlFor="products-group-name">
+                    {categoryManagerMode === 'ADD' ? 'Nome da nova categoria' : 'Novo nome da categoria'}
+                  </label>
+                  <input
+                    id="products-group-name"
+                    value={categoryDraftName}
+                    onChange={(event) => setCategoryDraftName(event.target.value)}
+                    placeholder={categoryManagerMode === 'ADD' ? 'Ex.: Massas' : 'Digite o novo nome'}
+                    autoComplete="off"
+                    spellCheck={false}
+                    autoFocus
+                  />
+                </>
+              )}
+
+              {categoryManagerMode === 'DELETE' && deleteFallbackCategory && (
+                <p className="products-group-modal-note">
+                  Os produtos dessa categoria serao movidos para <strong>{deleteFallbackCategory}</strong>.
+                </p>
+              )}
+
+              <div className="sensitive-modal-actions">
+                <button type="submit" className={categoryManagerMode === 'DELETE' ? 'sensitive-cancel' : ''}>
+                  {categoryManagerMode === 'ADD'
+                    ? 'Cadastrar'
+                    : categoryManagerMode === 'EDIT'
+                      ? 'Salvar alteracao'
+                      : 'Confirmar exclusao'}
+                </button>
+                <button type="button" className="button-muted" onClick={closeCategoryManager}>
+                  Cancelar
+                </button>
+              </div>
+
+              {categoryActionError && <p className="products-form-warning">{categoryActionError}</p>}
+            </form>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

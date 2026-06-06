@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { Categoria, EstadoComanda, ItemComanda } from '@/types/comanda';
 import { useKeyboard } from '@/hooks/comanda/useKeyboard';
 import { useWeight } from '@/hooks/comanda/useWeight';
+import {
+  buildComandaCategories,
+  mergeCategoryOptions,
+  readStoredProductCategories
+} from '@/modules/products/domain/services/productCategories';
+import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 
 type ProdutoCatalogo = {
   id: string;
@@ -12,52 +18,185 @@ type ProdutoCatalogo = {
   porUnidade: boolean;
 };
 
-const categoriasPadrao: Categoria[] = [
-  { id: 'saladas', nome: 'Saladas', cor: '#10b981' },
-  { id: 'quentes', nome: 'Quentes', cor: '#f59e0b' },
-  { id: 'sobremesas', nome: 'Sobremesas', cor: '#a78bfa' },
-  { id: 'bebidas', nome: 'Bebidas', cor: '#38bdf8' }
-];
+type ComandaSnapshot = {
+  itens: ItemComanda[];
+  dataAbertura: Date;
+};
 
-const catalogoProdutos: ProdutoCatalogo[] = [
-  { id: 'p1', nome: 'Buffet kilo', precoUnitario: 74.9, categoriaId: 'quentes', porUnidade: false },
-  { id: 'p2', nome: 'Sobremesa da casa', precoUnitario: 64.9, categoriaId: 'sobremesas', porUnidade: false },
-  { id: 'p3', nome: 'Refrigerante lata 350ml', precoUnitario: 7.5, categoriaId: 'bebidas', porUnidade: true },
-  { id: 'p4', nome: 'Agua sem gas 500ml', precoUnitario: 4.5, categoriaId: 'bebidas', porUnidade: true }
-];
+const normalizeSearchText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[^\x00-\x7F]/g, '')
+    .toLowerCase();
+
+const isPorQuiloCategoryName = (value: string) => {
+  const normalized = normalizeSearchText(value).replace(/\s+/g, ' ').trim();
+  return normalized === 'por quilo' || normalized === 'por kilo';
+};
+
+const isSelServiceProduct = (value: string) => {
+  const normalized = normalizeSearchText(value);
+  return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
+};
 
 export function useComanda(taxaImposto = 0.1) {
   const [comandaNumber, setComandaNumber] = useState('');
+  const [comandaAtivaId, setComandaAtivaId] = useState<string | null>(null);
+  const [dataAberturaAtual, setDataAberturaAtual] = useState<Date | null>(null);
+  const [comandasAbertas, setComandasAbertas] = useState<Record<string, ComandaSnapshot>>({});
   const [campoAtivo, setCampoAtivo] = useState<'COMANDA' | 'PESQUISA'>('COMANDA');
-  const [categoriaSelecionada, setCategoriaSelecionada] = useState(categoriasPadrao[0].id);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
+  const [catalogoProdutos, setCatalogoProdutos] = useState<ProdutoCatalogo[]>([]);
   const [pesquisa, setPesquisa] = useState('');
   const [itens, setItens] = useState<ItemComanda[]>([]);
   const [erro, setErro] = useState<string | null>(null);
-  const [precoAtual, setPrecoAtual] = useState(catalogoProdutos[0].precoUnitario);
+  const [precoAtual, setPrecoAtual] = useState(0);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
-  const { pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight();
+  const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight();
+
+  useEffect(() => {
+    const loadCatalogo = async () => {
+      try {
+        const products = await productsContainer.productRepository.list();
+        const mappedProducts: ProdutoCatalogo[] = products.map((product) => ({
+          id: product.id,
+          nome: product.name,
+          precoUnitario: product.price,
+          categoriaId: product.category,
+          porUnidade: !product.byWeight
+        }));
+
+        const nextCategorias = buildComandaCategories(
+          mergeCategoryOptions(readStoredProductCategories(), products)
+        );
+
+        setCatalogoProdutos(mappedProducts);
+        setCategorias(nextCategorias);
+        setCategoriaSelecionada((current) => {
+          if (nextCategorias.some((categoria) => categoria.id === current)) {
+            return current;
+          }
+
+          return nextCategorias[0]?.id ?? '';
+        });
+        setPrecoAtual((current) => current || mappedProducts[0]?.precoUnitario || 0);
+      } catch {
+        setCatalogoProdutos([]);
+        setCategorias([]);
+        setCategoriaSelecionada('');
+        setPrecoAtual(0);
+      }
+    };
+
+    void loadCatalogo();
+  }, []);
 
   const subtotal = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens]);
   const impostos = useMemo(() => Number((subtotal * taxaImposto).toFixed(2)), [subtotal, taxaImposto]);
   const total = useMemo(() => Number((subtotal + impostos).toFixed(2)), [subtotal, impostos]);
+  const porQuiloCategoryId = useMemo(
+    () => categorias.find((categoria) => isPorQuiloCategoryName(categoria.nome))?.id ?? null,
+    [categorias]
+  );
+  const isComandaAberta = Boolean(comandaAtivaId);
 
   const produtosFiltrados = useMemo(() => {
     const termo = pesquisa.trim().toLowerCase();
+
+    if (termo.length > 0 && termo.length < 3) {
+      return [];
+    }
+
+    const isBuscaGlobalPorNome = termo.length >= 3;
+
     return catalogoProdutos.filter((produto) => {
-      const matchCategoria = produto.categoriaId === categoriaSelecionada;
+      const matchCategoria =
+        isBuscaGlobalPorNome || !categoriaSelecionada || produto.categoriaId === categoriaSelecionada;
       const matchPesquisa = termo.length === 0 || produto.nome.toLowerCase().includes(termo);
       return matchCategoria && matchPesquisa;
     });
-  }, [categoriaSelecionada, pesquisa]);
+  }, [catalogoProdutos, categoriaSelecionada, pesquisa]);
 
-  const adicionarProduto = (produto: ProdutoCatalogo) => {
-    if (!comandaNumber.trim()) {
-      setErro('Informe o numero da comanda para adicionar itens.');
+  const salvarSnapshotComandaAtual = () => {
+    if (!comandaAtivaId) {
       return;
     }
 
-    const quantidade = produto.porUnidade ? 1 : Number(pesoAtual.toFixed(3));
+    setComandasAbertas((prev) => ({
+      ...prev,
+      [comandaAtivaId]: {
+        itens,
+        dataAbertura: dataAberturaAtual ?? prev[comandaAtivaId]?.dataAbertura ?? new Date()
+      }
+    }));
+  };
+
+  const abrirComanda = () => {
+    const nextId = comandaNumber.trim();
+    if (!nextId) {
+      setErro('Informe o numero da comanda e pressione Enter para abrir.');
+      return false;
+    }
+
+    const snapshotAtual = comandaAtivaId
+      ? {
+          itens,
+          dataAbertura: dataAberturaAtual ?? comandasAbertas[comandaAtivaId]?.dataAbertura ?? new Date()
+        }
+      : null;
+
+    const snapshotDestino = comandasAbertas[nextId];
+
+    setComandasAbertas((prev) => {
+      if (!comandaAtivaId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [comandaAtivaId]: snapshotAtual ?? prev[comandaAtivaId]
+      };
+    });
+
+    if (snapshotDestino) {
+      setItens(snapshotDestino.itens);
+      setDataAberturaAtual(snapshotDestino.dataAbertura);
+    } else {
+      setItens([]);
+      setDataAberturaAtual(new Date());
+      setComandasAbertas((prev) => ({
+        ...prev,
+        [nextId]: {
+          itens: [],
+          dataAbertura: new Date()
+        }
+      }));
+
+      if (porQuiloCategoryId) {
+        setCategoriaSelecionada(porQuiloCategoryId);
+      }
+    }
+
+    setComandaAtivaId(nextId);
+    setErro(null);
+
+    return true;
+  };
+
+  const adicionarProduto = (produto: ProdutoCatalogo) => {
+    if (!isComandaAberta) {
+      setErro('Abra a comanda (Enter no numero) antes de adicionar itens.');
+      return;
+    }
+
+    let pesoLido = Number(pesoAtual.toFixed(3));
+    if (!produto.porUnidade && isSelServiceProduct(produto.nome) && pesoSensor > 0) {
+      pesoLido = Number(pesoSensor.toFixed(3));
+    }
+
+    const quantidade = produto.porUnidade ? 1 : pesoLido;
     if (!produto.porUnidade && quantidade <= 0) {
       setErro('Aguardando peso do sensor ou informe peso manual.');
       return;
@@ -79,6 +218,10 @@ export function useComanda(taxaImposto = 0.1) {
     setPesquisa('');
     setErro(null);
     setPrecoAtual(produto.precoUnitario);
+
+    if (!produto.porUnidade && pesoManual !== null) {
+      setPesoManual(null);
+    }
   };
 
   const removerItem = (id: string) => {
@@ -113,10 +256,25 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const finalizeComanda = () => {
+    salvarSnapshotComandaAtual();
+
+    if (comandaAtivaId) {
+      setComandasAbertas((prev) => ({
+        ...prev,
+        [comandaAtivaId]: {
+          itens,
+          dataAbertura: dataAberturaAtual ?? prev[comandaAtivaId]?.dataAbertura ?? new Date()
+        }
+      }));
+    }
+
     setComandaNumber('');
+    setComandaAtivaId(null);
+    setDataAberturaAtual(null);
     setItens([]);
     setPesquisa('');
     setErro(null);
+    setPesoManual(null);
     setCampoAtivo('COMANDA');
     toggleToNumerico();
   };
@@ -127,8 +285,22 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const focarPesquisa = () => {
+    if (!abrirComanda()) {
+      return;
+    }
+
     setCampoAtivo('PESQUISA');
     toggleToVirtual();
+  };
+
+  const selecionarCategoria = (nextCategoryId: string) => {
+    if (nextCategoryId === porQuiloCategoryId && !isComandaAberta) {
+      setErro('A categoria Por quilo so pode ser usada com a comanda aberta.');
+      return;
+    }
+
+    setCategoriaSelecionada(nextCategoryId);
+    setErro(null);
   };
 
   const handleKeyPress = (key: string) => {
@@ -180,19 +352,19 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const state: EstadoComanda = {
-    comandaAtual: comandaNumber
+    comandaAtual: comandaAtivaId
       ? {
-          id: comandaNumber,
-          numeroMesa: Number(comandaNumber) || 0,
+          id: comandaAtivaId,
+          numeroMesa: Number(comandaAtivaId) || 0,
           itens,
           total,
           status: 'aberta',
-          dataAbertura: new Date()
+          dataAbertura: dataAberturaAtual ?? new Date()
         }
       : null,
     comandaNumber,
     campoAtivo,
-    categorias: categoriasPadrao,
+    categorias,
     categoriaSelecionada,
     itens,
     subtotal,
@@ -205,7 +377,7 @@ export function useComanda(taxaImposto = 0.1) {
     tecladoAtivo,
     isComandaConectada,
     erro,
-    canFinalize: itens.length > 0
+    canFinalize: isComandaAberta
   };
 
   const actions = {
@@ -214,7 +386,7 @@ export function useComanda(taxaImposto = 0.1) {
     setPesoManual,
     focarComanda,
     focarPesquisa,
-    selecionarCategoria: setCategoriaSelecionada,
+    selecionarCategoria,
     selecionarProduto: adicionarProduto,
     removerItem,
     ajustarQuantidade,
