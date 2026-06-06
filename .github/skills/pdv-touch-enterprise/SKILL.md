@@ -38,6 +38,7 @@ Fluxo arquitetural base:
 - stock: ajuste de estoque
 - shared/sync: fila, retry/backoff, processamento multi-modulo
 - balanca UI: WeightDisplay, PriceDisplay, ProductGrid, BalancaScreen
+- comanda UI: ComandaScreen, teclados (numerico/virtual), itens lancados e totalizacao operacional
 
 ## Funcionalidades implementadas (estado atual)
 
@@ -53,7 +54,7 @@ Fluxo arquitetural base:
 - Rota protegida por permissao e por role
 - Fallback seguro para ambiente de teste sem localStorage
 
-Matriz de acesso atual (atualizada em 04/06/2026):
+Matriz de acesso atual (atualizada em 05/06/2026):
 - Dashboard (/):
   - Permitido: ADMIN, GERENTE, CAIXA, ATENDENTE
   - Negado: BALANCA_A, BALANCA_B
@@ -63,15 +64,18 @@ Matriz de acesso atual (atualizada em 04/06/2026):
   - BALANCA_A e BALANCA_B operam em modo consulta de produtos
 - Balancas (/balanca):
   - Permitido: ADMIN, GERENTE, CAIXA, BALANCA_A, BALANCA_B
+- Comanda (/comanda):
+  - Permitido: ADMIN, GERENTE, CAIXA, BALANCA_A, BALANCA_B
 - Admin (/admin):
   - Permitido: ADMIN
 
 ### 2) Acoes sensiveis com PIN separado (enterprise)
 - Confirmacao por senha diferente da senha de login
 - Acoes criticas implementadas na tela de balanca:
-  - CLOSE_COMANDA
   - CANCEL_ORDER
-- Fluxo com modal de confirmacao e feedback de sucesso/falha
+- Fluxo com modal de confirmacao e feedback de sucesso/falha para cancelamento
+- Regra operacional atualizada:
+  - Proximo cliente (encerrar atendimento) nao exige PIN para perfis autorizados, priorizando agilidade
 
 ### 3) Balanca em tempo real (A/B)
 - Rota oficial de navegacao: /balanca
@@ -79,6 +83,12 @@ Matriz de acesso atual (atualizada em 04/06/2026):
 - Filtro de leitura por origem (quando payload contem origem)
 - Peso e preco em tempo real
 - Comanda ativa com tabela de itens e total
+- Carrinho de lancamento com itens recentes e total parcial
+- Produtos por unidade (ex.: refrigerantes/bebidas) com regra de lancamento por `un` em vez de `kg`
+- Trava de comanda por balanca:
+  - comanda aberta na Balanca A nao abre na B
+  - comanda aberta na Balanca B nao abre na A
+  - troca de balanca bloqueada enquanto comanda ativa na escala oposta
 
 ### 4) Pesquisa e atalhos de teclado
 Na tela /balanca:
@@ -86,6 +96,22 @@ Na tela /balanca:
 - Ctrl+1: seleciona Balanca A
 - Ctrl+2: seleciona Balanca B
 - Enter: adiciona item rapidamente
+
+### 10) Tela de Comanda dedicada (/comanda)
+- Nova rota operacional para fluxo de lancamento assistido
+- Layout com numero da comanda e pesquisa no topo em duas colunas (desktop), com empilhamento em telas menores
+- Campos compactos para melhor aproveitamento de espaco
+- Area de itens lancados com rolagem interna dedicada (sem expandir a tela)
+- Teclado por foco de campo:
+  - foco em Numero da comanda -> teclado numerico
+  - foco em Pesquisa de item -> teclado virtual
+- Teclas especiais implementadas nos dois teclados:
+  - Enter
+  - Voltar (Backspace)
+  - Limpar
+- Lista de itens com controles de ajuste e exclusao:
+  - botao `-` e `+` por item
+  - botao `Excluir`
 
 ### 5) Offline/Online e sincronizacao
 - Conflito por version e updatedAt
@@ -136,6 +162,7 @@ Na tela /balanca:
 - /orders/new
 - /products (consulta para todos os perfis; gestao bloqueada para BALANCA_A/B)
 - /balanca
+- /comanda
 - /admin (somente ADMIN)
 
 ## Componentes-chave
@@ -143,6 +170,10 @@ Na tela /balanca:
 - src/components/Balanca/PriceDisplay.tsx
 - src/components/Balanca/ProductGrid.tsx
 - src/components/Balanca/BalancaScreen.tsx
+- src/components/Comanda/ComandaScreen.tsx
+- src/components/Comanda/NumericKeypad.tsx
+- src/components/Comanda/VirtualKeyboard.tsx
+- src/hooks/comanda/useComanda.ts
 - src/modules/auth/presentation/components/AuthAccessPanel.tsx
 - src/modules/auth/presentation/providers/AuthProvider.tsx
 
@@ -183,11 +214,19 @@ Na tela /balanca:
 2. npm run build
 3. verificar rota /balanca com:
    - troca A/B
+  - bloqueio de comanda por balanca A/B
    - pesquisa por teclado
    - inclusao de item
-   - confirmacao por PIN sensivel
-4. verificar permissao de acesso por perfil
-5. validar RBAC operacional:
+  - cancelamento com PIN sensivel
+  - Proximo cliente sem PIN para perfis autorizados
+4. verificar rota /comanda com:
+  - foco em Numero da comanda aciona teclado numerico
+  - foco em Pesquisa de item aciona teclado virtual
+  - teclas Enter, Voltar (Backspace) e Limpar funcionais
+  - itens lancados com rolagem interna sem expandir a tela
+  - controles -, + e Excluir por item
+5. verificar permissao de acesso por perfil
+6. validar RBAC operacional:
   - BALANCA_A/B sem acesso ao Dashboard
   - BALANCA_A/B sem botao de novo cadastro em Produtos
   - BALANCA_A/B sem editar/deletar em Produtos

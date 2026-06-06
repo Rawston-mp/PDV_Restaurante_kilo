@@ -8,6 +8,7 @@ import { RequireRole } from '@/modules/auth/presentation/components/RequireRole'
 import { AuthAccessPanel } from '@/modules/auth/presentation/components/AuthAccessPanel';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { BalancaScreen } from '@/components/Balanca/BalancaScreen';
+import { ComandaScreen } from '@/components/Comanda/ComandaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
 
@@ -25,6 +26,7 @@ export function App() {
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
           <NavLink to="/balanca">Balancas</NavLink>
+          <NavLink to="/comanda">Comanda</NavLink>
           {canAccessCadastro && <NavLink to="/cadastro">Cadastros</NavLink>}
           <NavLink to="/admin">Admin</NavLink>
         </nav>
@@ -63,6 +65,14 @@ export function App() {
             element={
               <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
                 <BalancaScreen />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/comanda"
+            element={
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'BALANCA_A', 'BALANCA_B']}>
+                <ComandaScreen />
               </RequireRole>
             }
           />

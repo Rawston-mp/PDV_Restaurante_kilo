@@ -2515,6 +2515,402 @@ form {
   padding: 1rem;
 }
 
+.comanda-screen {
+  height: calc(100vh - 2.7rem);
+  background: radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 48%), #071226;
+  color: #e2e8f0;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.comanda-container {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.comanda-header-wrap {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.comanda-top-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.comanda-field-group {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.comanda-field-group label {
+  color: #93c5fd;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.comanda-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 12px;
+  padding: 0.85rem;
+}
+
+.comanda-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.comanda-header p {
+  margin: 0.2rem 0 0;
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+.comanda-status {
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(6, 95, 70, 0.42);
+  color: #6ee7b7;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.comanda-number-input,
+.comanda-search-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(71, 85, 105, 0.65);
+  background: rgba(2, 12, 27, 0.7);
+  color: #f8fafc;
+  min-height: 36px;
+  padding: 0 0.68rem;
+  font-size: 0.84rem;
+}
+
+.comanda-layout-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.comanda-left-column,
+.comanda-right-column {
+  display: grid;
+  gap: 0.8rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.comanda-left-column {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+}
+
+.comanda-display-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+
+.comanda-panel {
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.panel-label {
+  margin: 0 0 0.45rem;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.panel-value {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.8vw, 2.7rem);
+  line-height: 1;
+  font-weight: 700;
+}
+
+.panel-value-warning {
+  color: #fbbf24;
+}
+
+.panel-value-success {
+  color: #34d399;
+}
+
+.comanda-categories {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.comanda-categories button {
+  border-radius: 8px;
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  background: rgba(2, 12, 27, 0.65);
+  color: #cbd5e1;
+  min-height: 36px;
+  font-size: 0.78rem;
+}
+
+.comanda-categories button.is-active {
+  background: rgba(14, 165, 233, 0.22);
+  color: #e0f2fe;
+}
+
+.comanda-suggestions {
+  margin-top: 0.55rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.comanda-suggestions-panel {
+  min-height: 0;
+}
+
+.comanda-suggestions-panel .comanda-suggestions {
+  max-height: 120px;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.comanda-suggestions button {
+  border-radius: 8px;
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  background: rgba(2, 12, 27, 0.72);
+  color: #f8fafc;
+  display: grid;
+  text-align: left;
+  gap: 0.15rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.comanda-suggestions button small {
+  color: #34d399;
+}
+
+.comanda-items {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.comanda-items-panel {
+  max-height: 460px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.comanda-items-panel .comanda-items {
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.comanda-items-panel .comanda-items::-webkit-scrollbar {
+  width: 8px;
+}
+
+.comanda-items-panel .comanda-items::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.38);
+}
+
+.comanda-item-row {
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 8px;
+  padding: 0.45rem;
+  background: rgba(2, 12, 27, 0.6);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.comanda-item-row small {
+  display: block;
+  color: #93c5fd;
+  margin-top: 0.15rem;
+}
+
+.comanda-item-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.comanda-item-actions button {
+  min-height: 30px;
+  border-radius: 7px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(2, 132, 199, 0.2);
+  color: #e0f2fe;
+  padding: 0 0.5rem;
+  font-size: 0.78rem;
+}
+
+.comanda-item-actions .is-danger {
+  border-color: rgba(248, 113, 113, 0.6);
+  background: rgba(127, 29, 29, 0.45);
+  color: #fecaca;
+}
+
+.comanda-empty {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.total-panel {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.total-panel p {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.total-panel .is-total {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.45);
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.comanda-keyboard-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.comanda-keyboard-toggle button {
+  min-height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(71, 85, 105, 0.65);
+  background: rgba(2, 12, 27, 0.6);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+.comanda-keyboard-toggle button.is-active {
+  border-color: rgba(56, 189, 248, 0.7);
+  background: rgba(2, 132, 199, 0.22);
+}
+
+.numeric-keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.numeric-keypad-grid button,
+.virtual-row button {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  background: rgba(2, 12, 27, 0.7);
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.numeric-keypad-grid .is-enter {
+  grid-column: span 3;
+  border-color: rgba(16, 185, 129, 0.6);
+  background: linear-gradient(120deg, #059669 0%, #10b981 100%);
+}
+
+.virtual-keyboard-grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.virtual-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.virtual-row:nth-child(2) {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.virtual-row:nth-child(3) {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.virtual-row-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.virtual-row-actions .is-enter {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: linear-gradient(120deg, #059669 0%, #10b981 100%);
+}
+
+.virtual-row-actions .is-backspace {
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(120, 53, 15, 0.45);
+  color: #fde68a;
+}
+
+.next-comanda-button {
+  min-height: 52px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.65);
+  background: linear-gradient(120deg, #059669 0%, #10b981 100%);
+  color: #f8fafc;
+  font-weight: 800;
+  font-size: 0.94rem;
+}
+
+.next-comanda-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comanda-error {
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 113, 133, 0.5);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecdd3;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1080px) {
+  .comanda-top-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .comanda-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .comanda-left-column {
+    grid-template-rows: auto;
+  }
+}
+
 .sensitive-modal h3 {
   margin: 0;
   font-size: 1.18rem;
