@@ -66,7 +66,15 @@ const defaultUser: User = {
 
 const loadStoredUser = (): User | null => {
   if (typeof window === 'undefined') {
-    return defaultUser;
+    return null;
+  }
+
+  if (import.meta.env.DEV) {
+    if (window.localStorage && typeof window.localStorage.removeItem === 'function') {
+      window.localStorage.removeItem(storageKey);
+    }
+
+    return null;
   }
 
   if (!window.localStorage || typeof window.localStorage.getItem !== 'function') {
