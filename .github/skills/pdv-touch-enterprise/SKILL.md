@@ -146,57 +146,60 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 npm run build
 npm run test
 npm run dev
-
-O que ja foi desenvolvido
-
-Fluxo operacional de comanda na UI com abertura por numero, pesquisa, lancamento, totais e teclado numerico/virtual em ComandaScreen.tsx.
-Regras de comanda recentes no hook:
-categoria Por quilo bloqueada sem comanda aberta
-pesquisa com minimo de 3 letras
-busca global por nome com 3+ letras
-priorizacao de Sel-Service por peso automatico
-fallback manual com Enter
-proxima comanda limpa numero sem sugestao
-em useComanda.ts.
-Painel de peso unificado (automatico/manual) em WeightDisplay.tsx.
-Bloqueio visual de categorias no grid em CategoryGrid.tsx.
-Backend com status de comanda ativa e eventos de peso via websocket em server.ts.
-RBAC e perfis operacionais integrados nas rotas em App.tsx.
-Base de persistencia local Dexie e sincronizacao offline/online ja existentes em PdvDatabase.ts.
-Pipeline CI com build/test e artifact dist no Actions em ci.yml.
-
-
-
-O que falta desenvolver
-
-Maquina de estados formal da comanda conforme documento (ABERTA, PESAGEM_EM_ANDAMENTO, PRONTA_PARA_CAIXA, ENCERRADA, FINALIZADA, ARQUIVADA) no dominio/backend.
-Modelo de duas balancas com lock por comanda (EM_USO), timeout de lock e prevencao de concorrencia.
-Leitura de codigo de barras da comanda e fallback explicito de digitacao na tela da balanca (hoje o fluxo e numero digitado).
-Backend versionado da especificacao (familia de endpoints /api/v1 para comandas, pesagens, pagamentos, relatorios).
-Persistencia backend completa para comandas, pesagens, itens complementares, pagamentos e auditoria no formato do documento.
-Integracao fim-a-fim com caixa para encerramento formal da comanda no fluxo da propria comanda.
-Regras de timeout e abandono de comanda (2h alerta, 4h politica opcional) nao estao implementadas no fluxo de comanda atual.
-Relatorios de discrepancia balanca x caixa e reconciliacao operacional.
-O que pode melhorar
-
-Consolidar regras de negocio de comanda em camada de dominio unica para reduzir logica dispersa em hooks.
-Reduzir duplicacao de normalizacao de texto (Sel-Service/Por quilo) entre tela e hook.
-Cobrir novos cenarios em testes automatizados da tela de comanda (categoria bloqueada, Enter no manual, proxima comanda sem sugestao).
-Separar claramente fluxo de comanda operacional e fluxo de caixa para evitar ambiguidades de encerramento.
-Fortalecer observabilidade operacional (eventos de transicao de estado, falhas de peso/sincronizacao).
-Pendencias ou duvidas abertas
-
-Politica final de numeracao de comanda (01-200 ciclico) e regra de reutilizacao por turno/dia.
-Definicao oficial de hardware e biblioteca para leitura de codigo de barras.
-Definicao exata de quando cada estado final deve existir no sistema (ENCERRADA vs FINALIZADA vs ARQUIVADA).
-Regra final para autoencerramento por inatividade: obrigatoria ou configuravel por loja.
-No texto-base ha trechos truncados/corrompidos em validacoes (Secao 6 PA-05 e Secao 9), que precisam saneamento antes de virarem criterio tecnico fechado.
-Recomendacoes prioritarias
-
-Prioridade alta: implementar modelo de estado de comanda no backend com persistencia e transicoes auditaveis.
-Prioridade alta: implementar lock por comanda para duas balancas, com timeout de seguranca.
-Prioridade alta: entregar identificacao por codigo de barras da comanda com fallback manual.
-Prioridade media: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.
-Prioridade media: fechar pacote minimo de testes E2E do fluxo comanda por kilo (automatico, manual, excecoes).
-Prioridade media: normalizar o documento-base em requisitos testaveis antes de expandir API e banco.
 ```
+
+## O que ja foi desenvolvido
+- Fluxo operacional de comanda na UI com abertura por numero, pesquisa, lancamento, totais e teclado numerico/virtual.
+- Regras recentes no hook da comanda:
+	- categoria Por quilo bloqueada sem comanda aberta
+	- pesquisa com minimo de 3 letras
+	- busca global por nome com 3+ letras
+	- priorizacao de Sel-Service por peso automatico
+	- fallback manual com Enter
+	- proxima comanda limpa numero sem sugestao
+- Painel de peso unificado (automatico/manual).
+- Bloqueio visual de categorias no grid.
+- Backend com estado de comanda ativa e eventos de peso via websocket.
+- RBAC e perfis operacionais integrados nas rotas.
+- Base de persistencia local Dexie e sincronizacao offline/online.
+- Pipeline CI com build/test e artifact dist no Actions.
+- Maquina de estados formal da comanda implementada no backend, com transicoes:
+	- ABERTA -> PESAGEM_EM_ANDAMENTO
+	- PESAGEM_EM_ANDAMENTO -> PRONTA_PARA_CAIXA
+	- PRONTA_PARA_CAIXA -> ENCERRADA
+	- ENCERRADA -> FINALIZADA
+	- FINALIZADA -> ARQUIVADA
+- Persistencia backend-side do estado da comanda em arquivo (`backend/data/comandas-state.json`) com hidratacao no startup.
+- Trilha de auditoria append-only de eventos/transicoes (`backend/data/comandas-audit.jsonl`).
+
+## O que falta desenvolver
+- Persistir a maquina de estados em banco relacional (PostgreSQL) para substituir armazenamento em arquivo local.
+- Modelo de duas balancas com lock por comanda (EM_USO), timeout de lock e prevencao de concorrencia.
+- Leitura de codigo de barras da comanda e fallback explicito de digitacao na tela da balanca.
+- Completar familia de endpoints da especificacao (`/api/v1/comandas`, `/api/v1/pesagens`, `/api/v1/pagamentos`, `/api/v1/relatorios`) com contratos finais.
+- Persistencia backend completa para comandas, pesagens, itens complementares e pagamentos (auditoria basica append-only ja ativa em arquivo).
+- Integracao fim-a-fim com caixa para encerramento formal da comanda no fluxo da propria comanda.
+- Regras de timeout e abandono de comanda (2h alerta, 4h politica opcional).
+- Relatorios de discrepancia balanca x caixa e reconciliacao operacional.
+
+## O que pode melhorar
+- Consolidar regras de negocio de comanda em camada de dominio unica para reduzir logica dispersa em hooks.
+- Reduzir duplicacao de normalizacao de texto (Sel-Service/Por quilo) entre tela e hook.
+- Cobrir novos cenarios em testes automatizados da tela de comanda (categoria bloqueada, Enter no manual, proxima comanda sem sugestao).
+- Separar claramente fluxo de comanda operacional e fluxo de caixa para evitar ambiguidades de encerramento.
+- Fortalecer observabilidade operacional (eventos de transicao de estado, falhas de peso/sincronizacao).
+
+## Pendencias ou duvidas abertas
+- Politica final de numeracao de comanda (01-200 ciclico) e regra de reutilizacao por turno/dia.
+- Definicao oficial de hardware e biblioteca para leitura de codigo de barras.
+- Definicao exata de quando cada estado final deve existir no sistema (ENCERRADA vs FINALIZADA vs ARQUIVADA).
+- Regra final para autoencerramento por inatividade: obrigatoria ou configuravel por loja.
+- Trechos truncados/corrompidos no texto-base (Secao 6 PA-05 e Secao 9) precisam saneamento antes de virarem criterio tecnico fechado.
+
+## Recomendacoes prioritarias
+- Prioridade alta: persistir modelo de estado da comanda com transicoes auditaveis no backend.
+- Prioridade alta: implementar lock por comanda para duas balancas, com timeout de seguranca.
+- Prioridade alta: entregar identificacao por codigo de barras da comanda com fallback manual.
+- Prioridade media: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.
+- Prioridade media: fechar pacote minimo de testes E2E do fluxo comanda por kilo (automatico, manual, excecoes).
+- Prioridade media: normalizar o documento-base em requisitos testaveis antes de expandir API e banco.
