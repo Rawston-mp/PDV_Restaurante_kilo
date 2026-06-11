@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { ComandaStateMachineService, type ComandaStatus } from './domain/comandaStateMachine';
+import { COMANDA_STATUSES, ComandaStateMachineService, type ComandaStatus } from './domain/comandaStateMachine';
 import { ComandaFileStore } from './infrastructure/comandaFileStore';
 import { startScaleReader } from './services/scaleReader.service';
 
@@ -32,16 +32,7 @@ const parseStatus = (value: unknown): ComandaStatus | null => {
   }
 
   const normalized = value.trim().toUpperCase();
-  const allowed: ComandaStatus[] = [
-    'ABERTA',
-    'PESAGEM_EM_ANDAMENTO',
-    'PRONTA_PARA_CAIXA',
-    'ENCERRADA',
-    'FINALIZADA',
-    'ARQUIVADA'
-  ];
-
-  return allowed.includes(normalized as ComandaStatus) ? (normalized as ComandaStatus) : null;
+  return COMANDA_STATUSES.includes(normalized as ComandaStatus) ? (normalized as ComandaStatus) : null;
 };
 
 const persistComandas = async () => {

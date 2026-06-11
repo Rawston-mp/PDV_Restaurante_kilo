@@ -13,7 +13,7 @@
 
 ## 2. Objetivo da Integracao
 1. Sincronizar catalogo de produtos do ERP para o PDV.
-2. Enviar vendas/comandas finalizadas do PDV para o ERP.
+2. Enviar vendas e fechamentos do fluxo de balancas/comanda do PDV para o ERP.
 3. Garantir rastreabilidade, idempotencia e reconciliacao de valores.
 
 ## 3. Escopo Funcional (MVP)
@@ -23,7 +23,7 @@
    3. categoria
    4. tipo (por quilo/unidade)
 2. Fluxo B - Vendas (PDV -> ERP):
-   1. comanda finalizada
+   1. comanda encerrada no caixa
    2. itens vendidos
    3. total e forma de pagamento
    4. status de integracao
@@ -39,10 +39,10 @@
    4. Acesso direto ao banco: evitar.
 2. Direcao dos dados:
    1. ERP -> PDV: produtos e precos.
-   2. PDV -> ERP: vendas/comandas finalizadas e pagamentos.
+   2. PDV -> ERP: vendas, encerramentos e pagamentos.
 3. Frequencia:
    1. ERP -> PDV: lote (inicialmente a cada 15 minutos).
-   2. PDV -> ERP: evento de fechamento de comanda + retentativa em fila.
+   2. PDV -> ERP: evento de encerramento de comanda + retentativa em fila.
 4. Protocolo/Transporte:
    1. HTTPS
    2. SFTP
@@ -108,7 +108,8 @@
    4. PDV CARTAO_DEBITO -> ERP [pendente codigo ERP]
 2. Status:
    1. PDV PRONTA_PARA_CAIXA -> ERP [pendente status ERP]
-   2. PDV ENCERRADA/FINALIZADA -> ERP [pendente status ERP]
+   2. PDV ENCERRADA (modo VENDA) -> ERP [pendente status ERP]
+   3. PDV ENCERRADA (modo ORCAMENTO) -> ERP [nao fiscal / pendente regra ERP]
 3. Unidade:
    1. PDV KG -> ERP [pendente codigo ERP]
    2. PDV UN -> ERP [pendente codigo ERP]
