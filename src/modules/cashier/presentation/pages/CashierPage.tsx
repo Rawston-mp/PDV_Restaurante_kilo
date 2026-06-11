@@ -103,48 +103,35 @@ export function CashierPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="pdv-caixa-root flex h-full overflow-hidden bg-slate-50">
+    <div className="pdv-caixa-root flex h-full w-full overflow-hidden">
 
-      {/* ── LEFT ZONE 60% ─────────────────────────────────────────────────── */}
-      <div className="w-[60%] flex flex-col h-full overflow-hidden">
+      {/* ── LEFT 60%: busca + categorias + grid ────────────────────────────── */}
+      <main className="w-[60%] bg-slate-50 flex flex-col overflow-hidden border-r border-slate-200">
 
         {view === 'cashclose' ? (
-          /* Fechamento de caixa ocupa toda a zona esquerda */
-          <CashRegisterClose
-            onBack={() => setView('pos')}
-            onClose={() => {
-              // In production: confirm close, send to backend
-              setView('pos');
-            }}
-          />
+          <CashRegisterClose onBack={() => setView('pos')} onClose={() => setView('pos')} />
         ) : view === 'payment' ? (
-          /* Painel de pagamento substitui a grade de produtos */
-          <PaymentPanel
-            total={subtotal}
-            onConfirm={handlePaymentConfirm}
-            onBack={() => setView('pos')}
-          />
+          <PaymentPanel total={subtotal} onConfirm={handlePaymentConfirm} onBack={() => setView('pos')} />
         ) : (
-          /* POS normal: busca + categorias + grid */
-          <div className="flex flex-col h-full overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+          <>
+            {/* ── Header ─────────────────────────────────────────── */}
+            <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200 shrink-0">
               <div>
-                <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">PDV Touch</p>
-                <h1 className="text-base font-bold text-slate-800">Atendimento 1.267</h1>
+                <p className="text-[11px] text-slate-400 uppercase tracking-widest font-semibold">PDV Touch</p>
+                <h1 className="text-lg font-extrabold text-slate-800 leading-tight">Atendimento 1.267</h1>
               </div>
-              <span className="text-xs font-semibold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                Comanda #{comandaNumber}
+              <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
+                #{comandaNumber}
               </span>
             </div>
 
-            {/* SmartInput */}
-            <div className="px-4 pt-3 pb-2">
+            {/* ── SmartInput ─────────────────────────────────────── */}
+            <div className="px-5 pt-4 pb-2 shrink-0">
               <SmartInput value={query} onChange={setQuery} />
             </div>
 
-            {/* CategoryTabs */}
-            <div className="px-4 pb-2">
+            {/* ── CategoryTabs ───────────────────────────────────── */}
+            <div className="px-5 pb-3 shrink-0">
               <CategoryTabs
                 categories={CATEGORIES}
                 selected={activeCategory}
@@ -152,16 +139,16 @@ export function CashierPage() {
               />
             </div>
 
-            {/* ProductGrid — scrollable */}
-            <div className="flex-1 overflow-y-auto px-2 pb-2">
+            {/* ── ProductGrid — área com scroll ───────────────────── */}
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
               <ProductGrid products={filteredProducts} onAdd={addProduct} />
             </div>
-          </div>
+          </>
         )}
-      </div>
+      </main>
 
-      {/* ── RIGHT ZONE 40% ────────────────────────────────────────────────── */}
-      <div className="w-[40%] h-full overflow-hidden">
+      {/* ── RIGHT 40%: carrinho + footer ───────────────────────────────────── */}
+      <aside className="w-[40%] bg-white flex flex-col overflow-hidden">
         <CartPanel
           items={cartItems}
           comandaNumber={comandaNumber}
@@ -171,7 +158,7 @@ export function CashierPage() {
           onReceive={() => setView('payment')}
           onCashClose={() => setView('cashclose')}
         />
-      </div>
+      </aside>
 
     </div>
   );
