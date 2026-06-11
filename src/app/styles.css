@@ -30,6 +30,13 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-columns: 240px 1fr;
+  grid-template-rows: 100%;
+}
+
+/* Essencial: grid children precisam de min-height:0 para h-full funcionar em netos */
+.layout > * {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -37,6 +44,7 @@ body {
   color: #f8fafc;
   padding: 1.2rem 1rem;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-y: auto;
 }
 
 .sidebar h1 {
