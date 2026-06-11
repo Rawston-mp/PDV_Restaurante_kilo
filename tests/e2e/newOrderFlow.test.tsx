@@ -55,6 +55,11 @@ describe('New order flow e2e', () => {
       </MemoryRouter>
     );
 
+    fireEvent.change(screen.getByLabelText('Senha'), { target: { value: '2025' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    expect(await screen.findByText('Usuario logado')).toBeTruthy();
+
     fireEvent.click(screen.getByRole('button', { name: 'Abrir comanda' }));
     expect(await screen.findByText(/Comanda ativa:\s*sim/)).toBeTruthy();
 

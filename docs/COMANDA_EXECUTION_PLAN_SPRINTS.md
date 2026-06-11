@@ -1,8 +1,8 @@
-# Plano Tecnico de Execucao - Comanda (Sprint 1, 2 e 3)
+# Plano Tecnico de Execucao - Balancas (fluxo de comanda por kilo)
 
 ## Contexto
 Este plano deriva diretamente do bloco "O que falta desenvolver" da skill `pdv-touch-enterprise`.
-Objetivo: fechar as lacunas do fluxo de comanda por kilo com duas balancas, encerramento exclusivo no caixa e rastreabilidade operacional.
+Objetivo: fechar as lacunas do fluxo de balancas/comanda por kilo com duas balancas, encerramento exclusivo no caixa e rastreabilidade operacional.
 
 ## Principios de Execucao
 1. Ordem de implementacao por risco e dependencia tecnica: dominio -> persistencia -> API -> UI -> testes -> docs.
@@ -86,7 +86,8 @@ Fechar ciclo operacional ponta a ponta ate o caixa e entregar visao minima de re
 ### Escopo
 1. Encerramento formal no caixa:
    1. somente caixa pode fechar comanda
-   2. transicao `PRONTA_PARA_CAIXA -> ENCERRADA -> FINALIZADA`
+   2. transicao operacional `PRONTA_PARA_CAIXA -> ENCERRADA`
+   3. definicao do modo de fechamento (`VENDA` ou `ORCAMENTO`) para integracao e relatorios
 2. Timeout e abandono:
    1. alerta de inatividade em 2h
    2. politica de 4h configuravel por loja
@@ -115,7 +116,7 @@ Fechar ciclo operacional ponta a ponta ate o caixa e entregar visao minima de re
 ## Dependencias Externas (bloqueantes)
 1. Confirmacao da politica de numeracao ciclica (01-200) e reuso por turno.
 2. Definicao oficial da biblioteca/hardware de leitor de codigo de barras.
-3. Definicao final de quando cada estado (`ENCERRADA`, `FINALIZADA`, `ARQUIVADA`) e visivel para operacao.
+3. Definicao final de quando cada estado (`ABERTA`, `PESAGEM_EM_ANDAMENTO`, `PRONTA_PARA_CAIXA`, `ENCERRADA`, `FINALIZADA`, `ARQUIVADA`) e visivel para operacao.
 
 ## Cadencia de Entrega
 1. Sprint 1: 1 a 2 semanas

@@ -24,7 +24,7 @@ export function App() {
           {canAccessDashboard && <NavLink to="/">Dashboard</NavLink>}
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
-          <NavLink to="/comanda">Comanda</NavLink>
+          <NavLink to="/comanda">Balanças</NavLink>
           {canAccessCadastro && <NavLink to="/cadastro">Cadastros</NavLink>}
           <NavLink to="/admin">Admin</NavLink>
         </nav>
