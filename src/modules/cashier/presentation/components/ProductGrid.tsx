@@ -31,7 +31,7 @@ export function ProductGrid({ products, onAdd, loading }: ProductGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 p-2 overflow-y-auto">
+    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 p-0 content-start">
       {products.map((product) => (
         <ProductCard key={product.id} product={product} onAdd={onAdd} />
       ))}
