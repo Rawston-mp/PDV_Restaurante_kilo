@@ -103,7 +103,7 @@ export function CashierPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="pdv-caixa-root flex h-screen overflow-hidden bg-slate-50">
+    <div className="pdv-caixa-root flex h-full overflow-hidden bg-slate-50">
 
       {/* ── LEFT ZONE 60% ─────────────────────────────────────────────────── */}
       <div className="w-[60%] flex flex-col h-full overflow-hidden">

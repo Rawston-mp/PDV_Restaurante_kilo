@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 
 import { DashboardPage } from '@/modules/orders/presentation/pages/DashboardPage';
 import { NewOrderPage } from '@/modules/orders/presentation/pages/NewOrderPage';
@@ -12,10 +12,14 @@ import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
 import { CashierPage } from '@/modules/cashier/presentation/pages/CashierPage';
 
+const FLUSH_ROUTES = ['/caixa', '/comanda'];
+
 export function App() {
   const { user } = useAuth();
+  const location = useLocation();
   const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
+  const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
 
   return (
     <div className="layout">
@@ -34,7 +38,7 @@ export function App() {
         <AuthAccessPanel />
       </aside>
 
-      <main className="content">
+      <main className={isFlush ? 'content--flush' : 'content'}>
         <Routes>
           <Route
             path="/"

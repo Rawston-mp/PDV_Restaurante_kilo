@@ -26,7 +26,8 @@ body {
 }
 
 .layout {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 240px 1fr;
 }
@@ -66,6 +67,15 @@ body {
 
 .content {
   padding: 1.35rem;
+  overflow: auto;
+  height: 100%;
+}
+
+/* Rota /caixa ocupa toda a area sem padding */
+.content--flush {
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
 }
 
 .card {
@@ -76,7 +86,8 @@ body {
   box-shadow: var(--shadow);
 }
 
-button {
+/* Estilos globais de button/input — excluídos da área .pdv-caixa-root */
+:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']) {
   border: none;
   padding: 0.66rem 1rem;
   border-radius: 10px;
@@ -87,11 +98,11 @@ button {
   transition: filter 0.2s ease, transform 0.1s ease;
 }
 
-button:hover {
+:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']):hover {
   filter: brightness(1.08);
 }
 
-button:active {
+:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']):active {
   transform: translateY(1px);
 }
 
