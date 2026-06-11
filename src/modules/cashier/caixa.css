@@ -1,0 +1,8 @@
+/* Tailwind utilities and components — sem preflight para não conflitar com styles.css existente */
+@tailwind components;
+@tailwind utilities;
+
+/* Garante que a área do caixa não vaze scroll global */
+.pdv-caixa-root {
+  font-family: 'Inter', 'Roboto', system-ui, sans-serif;
+}

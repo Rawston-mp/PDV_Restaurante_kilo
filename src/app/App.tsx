@@ -10,6 +10,7 @@ import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { ComandaScreen } from '@/components/Comanda/ComandaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
+import { CashierPage } from '@/modules/cashier/presentation/pages/CashierPage';
 
 export function App() {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ export function App() {
           <NavLink to="/orders/new">Novo Pedido</NavLink>
           <NavLink to="/products">Produtos</NavLink>
           <NavLink to="/comanda">Balanças</NavLink>
+          <NavLink to="/caixa">Caixa</NavLink>
           {canAccessCadastro && <NavLink to="/cadastro">Cadastros</NavLink>}
           <NavLink to="/admin">Admin</NavLink>
         </nav>
@@ -63,6 +65,14 @@ export function App() {
             element={
               <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'COMANDA_A', 'COMANDA_B']}>
                 <ComandaScreen />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/caixa"
+            element={
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA']}>
+                <CashierPage />
               </RequireRole>
             }
           />
