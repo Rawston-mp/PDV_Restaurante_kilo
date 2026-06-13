@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import '@/modules/cashier/caixa.css';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Clock3, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
@@ -16,15 +16,37 @@ import { SmartInput } from '@/modules/cashier/presentation/components/SmartInput
 import { CategoryTabs } from '@/modules/cashier/presentation/components/CategoryTabs';
 import { ProductGrid } from '@/modules/cashier/presentation/components/ProductGrid';
 import { CartPanel } from '@/modules/cashier/presentation/components/CartPanel';
-import { PaymentPanel } from '@/modules/cashier/presentation/components/PaymentPanel';
+import { PaymentPanel, type PaymentConfirmPayload } from '@/modules/cashier/presentation/components/PaymentPanel';
 import { CashRegisterClose } from '@/modules/cashier/presentation/components/CashRegisterClose';
 import { type PaymentEntry } from '@/modules/cashier/types';
+import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
+import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CashierPage — tela de caixa unificada
 // ─────────────────────────────────────────────────────────────────────────────
 
 type View = 'pos' | 'payment' | 'cashclose';
+type CashCloseTab = 'MENU' | 'FECHAMENTO' | 'ADMINISTRATIVO';
+type CashCloseSection = 'INICIO' | 'RECEBIMENTO_FIADO';
+
+type HeaderComandaStatus =
+  | 'ABERTA'
+  | 'EM_USO_BALANCA'
+  | 'PRONTA_PARA_CAIXA'
+  | 'EM_FECHAMENTO'
+  | 'FECHADA_ORCAMENTO'
+  | 'FECHADA_VENDA'
+  | 'CANCELADA'
+  | 'ARQUIVADA';
+
+type HeaderComandaRecord = {
+  numero: string;
+  status: HeaderComandaStatus;
+};
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
 
 const normalizeSearchText = (value: string) =>
   value
@@ -46,14 +68,55 @@ const formatQuantity = (quantity: number, unit: 'KG' | 'UN') =>
     maximumFractionDigits: unit === 'KG' ? 3 : 0
   });
 
+const formatLaunchDateTime = (date: Date) =>
+  date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
 export function CashierPage() {
   const { user, signOut } = useAuth();
   const { products, setProducts } = useProductsQuery();
+  const { clients, setClients } = useClientsQuery();
   const [view, setView]                     = useState<View>('pos');
+  const [cashCloseInitialTab, setCashCloseInitialTab] = useState<CashCloseTab>('MENU');
+  const [cashCloseInitialSection, setCashCloseInitialSection] = useState<CashCloseSection>('INICIO');
   const [query, setQuery]                   = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [comandaNumber]                     = useState('113942');
   const [cartItems, setCartItems]           = useState<CashierCartItem[]>([]);
+  const [openComandasCount, setOpenComandasCount] = useState(0);
+  const [closedComandasCount, setClosedComandasCount] = useState(0);
+
+  const focusProductSearchInput = () => {
+    window.requestAnimationFrame(() => {
+      const searchInput = document.getElementById('cashier-smart-input') as HTMLInputElement | null;
+      searchInput?.focus();
+      searchInput?.select();
+    });
+  };
+
+  const openProductSearch = () => {
+    setView('pos');
+    focusProductSearchInput();
+  };
+
+  const notifyFeaturePending = (featureLabel: string) => {
+    window.alert(`${featureLabel} em breve.`);
+  };
+
+  const handleCancelLastSale = () => {
+    setCartItems([]);
+    setView('pos');
+  };
+
+  const handleCancelCoupons = () => {
+    notifyFeaturePending('Cancelar cupons');
+    setView('pos');
+  };
 
   const now = new Date();
 
@@ -89,6 +152,87 @@ export function CashierPage() {
 
     return ['Todos', ...[...categorySet].sort((a, b) => a.localeCompare(b, 'pt-BR'))];
   }, [catalogProducts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadComandaIndicators = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/v1/comandas`);
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as { ok?: boolean; comandas?: HeaderComandaRecord[] };
+        if (cancelled || !Array.isArray(payload.comandas)) {
+          return;
+        }
+
+        const totalOpen = payload.comandas.filter((comanda) => !CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
+        const totalClosed = payload.comandas.filter((comanda) => CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
+        setOpenComandasCount(totalOpen);
+        setClosedComandasCount(totalClosed);
+      } catch {
+        if (!cancelled) {
+          setOpenComandasCount(0);
+          setClosedComandasCount(0);
+        }
+      }
+    };
+
+    void loadComandaIndicators();
+    const intervalId = window.setInterval(() => {
+      void loadComandaIndicators();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F11') {
+        // F11 abre fullscreen no navegador; aqui priorizamos atalho operacional do caixa.
+        event.preventDefault();
+        setCashCloseInitialTab('FECHAMENTO');
+        setCashCloseInitialSection('INICIO');
+        setView('cashclose');
+        return;
+      }
+
+      if (event.key === 'F4') {
+        event.preventDefault();
+        setCashCloseInitialTab('ADMINISTRATIVO');
+        setCashCloseInitialSection('RECEBIMENTO_FIADO');
+        setView('cashclose');
+        return;
+      }
+
+      if (event.key === 'F7') {
+        event.preventDefault();
+        openProductSearch();
+        return;
+      }
+
+      if (event.key === 'F8') {
+        event.preventDefault();
+        handleCancelLastSale();
+        return;
+      }
+
+      if (event.altKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        handleCancelCoupons();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // ── Filtered products ──────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => {
@@ -361,9 +505,52 @@ export function CashierPage() {
     setCartItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const handlePaymentConfirm = (_payments: PaymentEntry[]) => {
-    // In production: persist sale, emit to backend, print receipt
-    printReceipt(_payments);
+  const handlePaymentConfirm = async ({ payments, fiadoClientId }: PaymentConfirmPayload) => {
+    const isFiadoFlow = Boolean(fiadoClientId) || payments.some((payment) => payment.method === 'FIADO');
+
+    if (isFiadoFlow) {
+      const clientId = fiadoClientId;
+      if (clientId) {
+        const targetClient = clients.find((client) => client.id === clientId)
+          ?? await clientsContainer.clientRepository.findById(clientId);
+
+        if (targetClient) {
+          const launchedAt = formatLaunchDateTime(new Date());
+          const entryDescription = `Fiado atendimento ${comandaNumber} - Total R$ ${subtotal.toFixed(2)} - Sem valor fiscal (definir Fiscal ou Orcamento no pagamento)`;
+
+          const updatedClient = {
+            ...targetClient,
+            consumptionHistory: [
+              {
+                id: `entry-${crypto.randomUUID()}`,
+                description: entryDescription,
+                launchedAt
+              },
+              ...targetClient.consumptionHistory
+            ],
+            version: targetClient.version + 1,
+            updatedAt: new Date()
+          };
+
+          await clientsContainer.clientRepository.save(updatedClient);
+          setClients((prev) => {
+            const exists = prev.some((client) => client.id === updatedClient.id);
+            if (!exists) {
+              return [updatedClient, ...prev];
+            }
+
+            return prev.map((client) => (client.id === updatedClient.id ? updatedClient : client));
+          });
+        }
+      }
+
+      setCartItems([]);
+      setView('pos');
+      return;
+    }
+
+    // Fluxo padrão: pagamento à vista com comprovante fiscal
+    printReceipt(payments);
     setCartItems([]);
     setView('pos');
   };
@@ -372,19 +559,25 @@ export function CashierPage() {
   return (
     <div className="pdv-caixa-root flex flex-col h-full w-full overflow-hidden bg-[#f5f8fb]">
 
-      <header className="h-20 bg-white border-b border-slate-200 px-6 shrink-0 flex items-center justify-between">
+      <header className="min-h-[5.5rem] bg-white border-b border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500" />
-            <div>
-              <p className="text-3xl leading-none font-extrabold text-slate-800">PDV <span className="text-sky-600">Touch</span></p>
-              <p className="text-xs text-slate-500 tracking-wide">Sistema de Gestão</p>
+            <div className="flex flex-col justify-center">
+              <p className="text-3xl leading-tight font-extrabold text-slate-800">PDV <span className="text-sky-600">Touch</span></p>
+              <p className="mt-0.5 text-xs leading-tight text-slate-500 tracking-wide">Sistema de Gestão</p>
             </div>
           </div>
           <div className="h-10 w-px bg-slate-200" />
-          <div>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Atendimento</p>
-            <p className="text-4xl font-black text-sky-600 leading-none">1.267</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Comandas abertas</p>
+              <p className="text-4xl font-black text-sky-600 leading-none">{openComandasCount.toLocaleString('pt-BR')}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Comandas fechadas</p>
+              <p className="text-4xl font-black text-sky-600 leading-none">{closedComandasCount.toLocaleString('pt-BR')}</p>
+            </div>
           </div>
         </div>
 
@@ -415,10 +608,22 @@ export function CashierPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── LEFT 60%: busca + categorias + grid ────────────────────────────── */}
-      <main className="w-[60%] bg-slate-50/80 flex flex-col overflow-hidden border-r border-slate-200">
+      <main className={`${view === 'cashclose' ? 'w-full' : 'w-[60%]'} bg-slate-50/80 flex flex-col overflow-hidden ${view === 'cashclose' ? '' : 'border-r border-slate-200'}`}>
 
         {view === 'cashclose' ? (
-          <CashRegisterClose onBack={() => setView('pos')} onClose={() => setView('pos')} items={cartItems} />
+          <CashRegisterClose
+            initialTab={cashCloseInitialTab}
+            initialSection={cashCloseInitialSection}
+            onGoToProductSearch={openProductSearch}
+            onReprintReceipt={() => notifyFeaturePending('Reimprimir cupom')}
+            onSendFiscalFiles={() => notifyFeaturePending('Enviar arquivos fiscais')}
+            onConsultStock={() => notifyFeaturePending('Consultar estoque')}
+            onCancelLastSale={handleCancelLastSale}
+            onCancelCoupons={handleCancelCoupons}
+            onBack={() => setView('pos')}
+            onClose={() => setView('pos')}
+            items={cartItems}
+          />
         ) : view === 'payment' ? (
           <PaymentPanel total={subtotal} items={cartItems} onConfirm={handlePaymentConfirm} onBack={() => setView('pos')} />
         ) : (
@@ -451,17 +656,23 @@ export function CashierPage() {
       </main>
 
       {/* ── RIGHT 40%: carrinho + footer ───────────────────────────────────── */}
-      <aside className="w-[40%] bg-white flex flex-col overflow-hidden">
-        <CartPanel
-          items={cartItems}
-          comandaNumber={comandaNumber}
-          onIncrement={incrementItem}
-          onDecrement={decrementItem}
-          onRemove={removeItem}
-          onReceive={() => setView('payment')}
-          onCashClose={() => setView('cashclose')}
-        />
-      </aside>
+      {view !== 'cashclose' && (
+        <aside className="w-[40%] bg-white flex flex-col overflow-hidden">
+          <CartPanel
+            items={cartItems}
+            comandaNumber={comandaNumber}
+            onIncrement={incrementItem}
+            onDecrement={decrementItem}
+            onRemove={removeItem}
+            onReceive={() => setView('payment')}
+            onCashClose={() => {
+              setCashCloseInitialTab('MENU');
+              setCashCloseInitialSection('INICIO');
+              setView('cashclose');
+            }}
+          />
+        </aside>
+      )}
 
       </div>
 

@@ -1,12 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
+import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { type CashierCartItem } from './CartItem';
 import { type PaymentEntry, type PaymentMethod, PAYMENT_METHODS, formatBRL } from '../../types';
+
+export type PaymentConfirmPayload = {
+  payments: PaymentEntry[];
+  fiadoClientId?: string;
+};
 
 type PaymentPanelProps = {
   total: number;
   items: CashierCartItem[];
-  onConfirm: (payments: PaymentEntry[]) => void;
+  onConfirm: (payload: PaymentConfirmPayload) => Promise<void> | void;
   onBack: () => void;
 };
 
@@ -37,9 +43,18 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
 }
 
 export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelProps) {
+  const { clients } = useClientsQuery();
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
   const [inputRaw, setInputRaw] = useState('');
+  const [selectedFiadoClientId, setSelectedFiadoClientId] = useState('');
+  const [fiadoFeedback, setFiadoFeedback] = useState<string | null>(null);
+  const [isLaunchingFiado, setIsLaunchingFiado] = useState(false);
+
+  const activeClients = useMemo(
+    () => clients.filter((client) => client.active).sort((a, b) => a.fullName.localeCompare(b.fullName, 'pt-BR')),
+    [clients]
+  );
 
   const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
   const remaining = Math.max(0, total - totalPaid);
@@ -96,6 +111,27 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
 
   const handleRemoveEntry = (index: number) => {
     setEntries((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleLaunchFiado = async (clientId: string) => {
+    if (!clientId || isLaunchingFiado) {
+      return;
+    }
+
+    const fiadoLabel = PAYMENT_METHODS.find((m) => m.method === 'FIADO')?.label ?? 'Fiado';
+
+    setIsLaunchingFiado(true);
+    setFiadoFeedback(null);
+    try {
+      await onConfirm({
+        payments: [{ method: 'FIADO', label: fiadoLabel, amount: total }],
+        fiadoClientId: clientId
+      });
+    } catch {
+      setFiadoFeedback('Nao foi possivel lancar o fiado neste momento.');
+    } finally {
+      setIsLaunchingFiado(false);
+    }
   };
 
   const canConfirm = totalPaid >= total;
@@ -173,21 +209,62 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
           </div>
 
           {/* Numpad */}
-          <Numpad onKey={handleKey} />
+          {selectedMethod === 'FIADO' ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente do fiado</p>
+              {activeClients.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhum cliente ativo cadastrado para lancamento de fiado.</p>
+              ) : (
+                <select
+                  value={selectedFiadoClientId}
+                  onChange={(event) => {
+                    const clientId = event.target.value;
+                    setSelectedFiadoClientId(clientId);
+                    if (clientId) {
+                      void handleLaunchFiado(clientId);
+                    }
+                  }}
+                  className="w-full min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                  disabled={isLaunchingFiado}
+                >
+                  <option value="">Selecione um cliente</option>
+                  {activeClients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.fullName} {client.clientCode ? `- ID ${client.clientCode}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <p className="text-xs text-slate-500">
+                Ao selecionar o cliente, o valor sera lancado como fiado sem emissao fiscal. A definicao Fiscal ou Orcamento sera feita no pagamento futuro.
+              </p>
+
+              {fiadoFeedback && (
+                <p className="text-xs rounded-md border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+                  {fiadoFeedback}
+                </p>
+              )}
+            </div>
+          ) : (
+            <Numpad onKey={handleKey} />
+          )}
 
           {/* Add payment button */}
-          <button
-            type="button"
-            onClick={handleAddPayment}
-            className="
-              w-full h-12 rounded-xl
-              bg-blue-600 hover:bg-blue-700
-              text-white font-bold text-sm
-              transition-colors active:scale-95
-            "
-          >
-            + Adicionar pagamento
-          </button>
+          {selectedMethod !== 'FIADO' && (
+            <button
+              type="button"
+              onClick={handleAddPayment}
+              className="
+                w-full h-12 rounded-xl
+                bg-blue-600 hover:bg-blue-700
+                text-white font-bold text-sm
+                transition-colors active:scale-95
+              "
+            >
+              + Adicionar pagamento
+            </button>
+          )}
 
           {/* Applied payments */}
           {entries.length > 0 && (
@@ -262,7 +339,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
         <button
           type="button"
           disabled={!canConfirm}
-          onClick={() => onConfirm(entries)}
+          onClick={() => onConfirm({ payments: entries })}
           className="
             w-full h-14 rounded-xl flex items-center justify-center gap-2
             bg-emerald-500 hover:bg-emerald-600

@@ -83,9 +83,10 @@ export function CartPanel({
           onClick={onReceive}
           className="
             mt-2 w-full h-14 rounded-2xl
-            bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600
-            disabled:opacity-40 disabled:cursor-not-allowed
-            text-white text-xl font-bold
+            border border-sky-400
+            bg-gradient-to-r from-sky-50 to-cyan-100 hover:from-sky-100 hover:to-cyan-200
+            disabled:bg-slate-100 disabled:border-slate-300 disabled:text-slate-400 disabled:cursor-not-allowed
+            text-sky-800 text-xl font-bold
             transition-colors duration-150
             active:scale-95
           "

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, AlertCircle, TrendingUp, Delete } from 'lucide-react';
+import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { formatBRL } from '../../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -12,6 +13,45 @@ type BlindRow = {
 };
 
 type CloseStep = 'input' | 'result';
+type AdminTab = 'MENU' | 'FECHAMENTO' | 'ADMINISTRATIVO';
+type AdminSection = 'INICIO' | 'RECEBIMENTO_FIADO';
+type ClientPeriodFilter = 'ALL' | 'CURRENT_MONTH' | 'CUSTOM';
+
+const parsePtBrCurrency = (value: string) => {
+  const normalized = value.replace(/\./g, '').replace(',', '.').trim();
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const extractEntryAmount = (description: string) => {
+  const totalMatch = description.match(/total\s*r\$\s*([\d.,]+)/i);
+  if (totalMatch) {
+    return parsePtBrCurrency(totalMatch[1]);
+  }
+
+  const genericMatch = description.match(/r\$\s*([\d.,]+)/i);
+  if (genericMatch) {
+    return parsePtBrCurrency(genericMatch[1]);
+  }
+
+  return 0;
+};
+
+const parsePtBrDateTime = (value: string) => {
+  const matched = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (!matched) {
+    return null;
+  }
+
+  const day = Number.parseInt(matched[1], 10);
+  const month = Number.parseInt(matched[2], 10) - 1;
+  const year = Number.parseInt(matched[3], 10);
+  const hour = Number.parseInt(matched[4] ?? '0', 10);
+  const minute = Number.parseInt(matched[5] ?? '0', 10);
+
+  const parsedDate = new Date(year, month, day, hour, minute, 0, 0);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
 
 // ─── Pre-populated methods for the blind count ────────────────────────────────
 const CLOSE_METHODS: Omit<BlindRow, 'counted' | 'expected'>[] = [
@@ -133,6 +173,14 @@ function BarChart({ rows }: { rows: BlindRow[] }) {
 type CashRegisterCloseProps = {
   onBack: () => void;
   onClose: () => void;
+  onGoToProductSearch: () => void;
+  onReprintReceipt: () => void;
+  onSendFiscalFiles: () => void;
+  onConsultStock: () => void;
+  onCancelLastSale: () => void;
+  onCancelCoupons: () => void;
+  initialTab?: AdminTab;
+  initialSection?: AdminSection;
   items?: Array<{
     id: string;
     name: string;
@@ -147,12 +195,140 @@ type CashRegisterCloseProps = {
   }>;
 };
 
-export function CashRegisterClose({ onBack, onClose, items = [] }: CashRegisterCloseProps) {
+export function CashRegisterClose({
+  onBack,
+  onClose,
+  onGoToProductSearch,
+  onReprintReceipt,
+  onSendFiscalFiles,
+  onConsultStock,
+  onCancelLastSale,
+  onCancelCoupons,
+  initialTab = 'MENU',
+  initialSection = 'INICIO',
+  items = []
+}: CashRegisterCloseProps) {
+  const { clients } = useClientsQuery();
   const [step, setStep] = useState<CloseStep>('input');
+  const [adminTab, setAdminTab] = useState<AdminTab>(initialTab);
+  const [adminSection, setAdminSection] = useState<AdminSection>(initialSection);
+  const [clientQuery, setClientQuery] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [clientPeriodFilter, setClientPeriodFilter] = useState<ClientPeriodFilter>('ALL');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [rows, setRows] = useState<BlindRow[]>(
     CLOSE_METHODS.map((m) => ({ ...m, counted: '', expected: MOCK_EXPECTED[m.method] ?? 0 }))
   );
   const [activeRow, setActiveRow] = useState<string>('DINHEIRO');
+
+  const filteredClients = useMemo(() => {
+    const normalizedQuery = clientQuery.trim().toLowerCase();
+
+    return clients
+      .filter((client) => client.active)
+      .filter((client) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        const haystack = `${client.fullName} ${client.clientCode} ${client.cpf}`.toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'pt-BR'));
+  }, [clientQuery, clients]);
+
+  const selectedClient = useMemo(() => {
+    if (!selectedClientId) {
+      return null;
+    }
+
+    return filteredClients.find((client) => client.id === selectedClientId) ?? null;
+  }, [filteredClients, selectedClientId]);
+
+  const enterAdministrative = () => {
+    setAdminTab('ADMINISTRATIVO');
+    setAdminSection('INICIO');
+    setSelectedClientId('');
+  };
+
+  const enterRecebimentoFiado = () => {
+    setAdminTab('ADMINISTRATIVO');
+    setAdminSection('RECEBIMENTO_FIADO');
+    setSelectedClientId('');
+  };
+
+  const enterFechamento = () => {
+    setAdminTab('FECHAMENTO');
+    setStep('input');
+    setSelectedClientId('');
+  };
+
+  const selectedClientEntries = useMemo(() => {
+    return selectedClient?.consumptionHistory ?? [];
+  }, [selectedClient]);
+
+  const filteredClientEntries = useMemo(() => {
+    if (clientPeriodFilter === 'ALL') {
+      return selectedClientEntries;
+    }
+
+    const now = new Date();
+    if (clientPeriodFilter === 'CURRENT_MONTH') {
+      return selectedClientEntries.filter((entry) => {
+        const parsedDate = parsePtBrDateTime(entry.launchedAt);
+        if (!parsedDate) {
+          return false;
+        }
+
+        return parsedDate.getMonth() === now.getMonth() && parsedDate.getFullYear() === now.getFullYear();
+      });
+    }
+
+    const start = customStartDate ? new Date(`${customStartDate}T00:00:00`) : null;
+    const end = customEndDate ? new Date(`${customEndDate}T23:59:59`) : null;
+
+    return selectedClientEntries.filter((entry) => {
+      const parsedDate = parsePtBrDateTime(entry.launchedAt);
+      if (!parsedDate) {
+        return false;
+      }
+
+      if (start && parsedDate < start) {
+        return false;
+      }
+
+      if (end && parsedDate > end) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [clientPeriodFilter, customEndDate, customStartDate, selectedClientEntries]);
+
+  const totalClientHistory = useMemo(
+    () => selectedClientEntries.reduce((sum, entry) => sum + extractEntryAmount(entry.description), 0),
+    [selectedClientEntries]
+  );
+
+  const totalFilteredHistory = useMemo(
+    () => filteredClientEntries.reduce((sum, entry) => sum + extractEntryAmount(entry.description), 0),
+    [filteredClientEntries]
+  );
+
+  const exportPeriodLabel = useMemo(() => {
+    if (clientPeriodFilter === 'ALL') {
+      return 'Todo o historico';
+    }
+
+    if (clientPeriodFilter === 'CURRENT_MONTH') {
+      return 'Mes atual';
+    }
+
+    const from = customStartDate || '--';
+    const to = customEndDate || '--';
+    return `Intervalo ${from} a ${to}`;
+  }, [clientPeriodFilter, customEndDate, customStartDate]);
 
   // ── Numpad ────────────────────────────────────────────────────────────────
   const handleKey = (k: string) => {
@@ -169,22 +345,383 @@ export function CashRegisterClose({ onBack, onClose, items = [] }: CashRegisterC
 
   const parseCounted = (raw: string) => parseFloat(raw.replace(',', '.')) || 0;
 
+  const exportClientHistoryToPdf = (clientId: string, periodEntries: typeof filteredClientEntries, periodLabel: string) => {
+    const targetClient = clients.find((client) => client.id === clientId);
+    if (!targetClient) {
+      return;
+    }
+
+    const opened = window.open('', '_blank', 'width=820,height=900');
+    if (!opened) {
+      return;
+    }
+
+    const rowsHtml = periodEntries.length === 0
+      ? '<tr><td colspan="3" style="padding:12px;text-align:center;color:#64748b;">Nenhum lancamento de fiado no periodo selecionado.</td></tr>'
+      : periodEntries
+          .map((entry) => {
+            const escapedDescription = entry.description
+              .replaceAll('&', '&amp;')
+              .replaceAll('<', '&lt;')
+              .replaceAll('>', '&gt;');
+            const amount = extractEntryAmount(entry.description);
+            return `<tr><td style="padding:10px;border-bottom:1px solid #e2e8f0;">${entry.launchedAt}</td><td style="padding:10px;border-bottom:1px solid #e2e8f0;">${escapedDescription}</td><td style="padding:10px;border-bottom:1px solid #e2e8f0; text-align:right;">${amount > 0 ? formatBRL(amount) : '-'}</td></tr>`;
+          })
+          .join('');
+
+    const totalPeriod = periodEntries.reduce((sum, entry) => sum + extractEntryAmount(entry.description), 0);
+
+    opened.document.write(`
+      <html>
+        <head>
+          <title>Fatura de fiado - ${targetClient.fullName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+            h1 { margin: 0 0 6px; font-size: 22px; }
+            p { margin: 0 0 8px; color: #475569; }
+            .meta { margin: 14px 0 20px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            th { text-align: left; padding: 10px; background: #e2e8f0; color: #1e293b; border-bottom: 1px solid #cbd5e1; }
+            @media print { body { margin: 12px; } }
+          </style>
+        </head>
+        <body>
+          <h1>Extrato de Fiado</h1>
+          <p>Documento para envio ao cliente.</p>
+          <div class="meta">
+            <p><strong>Cliente:</strong> ${targetClient.fullName}</p>
+            <p><strong>ID:</strong> ${targetClient.clientCode || '--'}</p>
+            <p><strong>CPF:</strong> ${targetClient.cpf || '--'}</p>
+            <p><strong>Periodo:</strong> ${periodLabel}</p>
+            <p><strong>Data de emissao:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+            <p><strong>Total do periodo:</strong> ${formatBRL(totalPeriod)}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 28%;">Data</th>
+                <th>Descricao</th>
+                <th style="width: 18%; text-align:right;">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function () {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    opened.document.close();
+  };
+
   const totalCounted  = rows.reduce((s, r) => s + parseCounted(r.counted), 0);
   const totalExpected = rows.reduce((s, r) => s + r.expected, 0);
   const totalDiff     = totalCounted - totalExpected;
   const fiscalItems = items.map((item) => item);
+
+  if (adminTab === 'MENU') {
+    const menuTileBase = 'rounded-xl border border-slate-300 bg-white px-4 py-3 text-left transition-colors';
+
+    return (
+      <div className="flex flex-col h-full bg-slate-100">
+        <header className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onBack} className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600">
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h2 className="font-bold text-slate-800">Outras funções</h2>
+              <p className="text-xs text-slate-500">Menu operacional do caixa</p>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-4">
+          <div className="grid grid-cols-1 xl:grid-cols-[2.1fr_1fr_1fr] gap-4">
+            <section className="bg-slate-200/40 rounded-xl p-3 border border-slate-300/60">
+              <h3 className="text-base font-bold text-slate-700 mb-3">Caixa</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <button type="button" onClick={enterFechamento} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Fechamento de caixa (F11)</p>
+                  <p className="text-xs text-slate-500">Fechamento de caixa e conferência</p>
+                </button>
+                <button type="button" onClick={onGoToProductSearch} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Pesquisa de produtos (F7)</p>
+                  <p className="text-xs text-slate-500">Consultar catálogo rápido</p>
+                </button>
+                <button type="button" onClick={onReprintReceipt} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Reimprimir cupom</p>
+                  <p className="text-xs text-slate-500">Gerar nova via do comprovante</p>
+                </button>
+                <button type="button" onClick={onConsultStock} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Consultar estoque</p>
+                  <p className="text-xs text-slate-500">Consulta rápida de disponibilidade</p>
+                </button>
+                <button type="button" onClick={onCancelLastSale} className={`${menuTileBase} hover:bg-red-50 hover:border-red-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Cancelar última venda (F8)</p>
+                  <p className="text-xs text-slate-500">Desfaz a venda atual no caixa</p>
+                </button>
+                <button type="button" onClick={onCancelCoupons} className={`${menuTileBase} hover:bg-red-50 hover:border-red-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Cancelar cupons (Alt+C)</p>
+                  <p className="text-xs text-slate-500">Cancela o cupom fiscal em andamento</p>
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-slate-200/40 rounded-xl p-3 border border-slate-300/60">
+              <h3 className="text-base font-bold text-slate-700 mb-3">Cliente</h3>
+              <div className="grid grid-cols-1 gap-2">
+                <button type="button" onClick={enterAdministrative} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Administrativos</p>
+                  <p className="text-xs text-slate-500">Área administrativa geral</p>
+                </button>
+                <button type="button" onClick={enterRecebimentoFiado} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold">Recebimento de fiado (F4)</p>
+                  <p className="text-xs text-slate-500">Acessar clientes e histórico de fiado</p>
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-slate-200/40 rounded-xl p-3 border border-slate-300/60">
+              <h3 className="text-base font-bold text-slate-700 mb-3">Fiscal / Outros</h3>
+              <div className="grid grid-cols-1 gap-2">
+                <button type="button" onClick={onSendFiscalFiles} className={`${menuTileBase} hover:bg-sky-50 hover:border-sky-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Enviar arquivos fiscais</p>
+                  <p className="text-xs text-slate-500">Sincronizar arquivos fiscais pendentes</p>
+                </button>
+                <button type="button" className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-left text-slate-400 cursor-not-allowed" disabled>
+                  <p className="text-sm font-semibold">Relatórios gerenciais</p>
+                  <p className="text-xs">(em breve)</p>
+                </button>
+                <button type="button" onClick={onBack} className={`${menuTileBase} hover:bg-emerald-50 hover:border-emerald-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Voltar</p>
+                  <p className="text-xs text-slate-500">Retornar ao caixa</p>
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (adminTab === 'ADMINISTRATIVO') {
+    return (
+      <div className="flex flex-col h-full bg-slate-50">
+        <header className="flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onBack} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h2 className="font-bold text-slate-800">Área Administrativa</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAdminTab('MENU')}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100"
+            >
+              Menu
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminTab('ADMINISTRATIVO')}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-sky-300 bg-sky-50 text-sky-700"
+            >
+              Administrativos
+            </button>
+          </div>
+        </header>
+
+        {adminSection === 'INICIO' ? (
+          <div className="flex-1 grid place-items-center p-4">
+            <p className="text-sm text-slate-500">Selecione um módulo no menu principal.</p>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 grid grid-cols-[320px_1fr] gap-3 p-3 overflow-hidden">
+            <section className="bg-white border border-slate-200 rounded-xl p-3 overflow-y-auto">
+            <label htmlFor="admin-client-search" className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Buscar cliente
+            </label>
+            <input
+              id="admin-client-search"
+              value={clientQuery}
+              onChange={(event) => setClientQuery(event.target.value)}
+              placeholder="Nome, ID ou CPF"
+              className="mt-2 mb-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+
+            <div className="space-y-2">
+              {filteredClients.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhum cliente ativo encontrado.</p>
+              ) : (
+                filteredClients.map((client) => {
+                  const isActive = client.id === (selectedClient?.id ?? '');
+                  return (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => setSelectedClientId(client.id)}
+                      className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${isActive ? 'border-sky-300 bg-sky-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      <p className="text-sm font-semibold text-slate-800">{client.fullName}</p>
+                      <p className="text-xs text-slate-500">ID {client.clientCode || '--'} · CPF {client.cpf || '--'}</p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            </section>
+
+            <section className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col min-h-0">
+            {selectedClient ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">{selectedClient.fullName}</h3>
+                    <p className="text-xs text-slate-500">Recebimento de fiado e historico de lancamentos</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => exportClientHistoryToPdf(selectedClient.id, filteredClientEntries, exportPeriodLabel)}
+                    className="px-3 py-2 rounded-lg border border-sky-300 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100"
+                  >
+                    Exportar PDF
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (periodo)</p>
+                    <p className="text-2xl font-extrabold text-slate-800">{formatBRL(totalFilteredHistory)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{exportPeriodLabel}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (historico total)</p>
+                    <p className="text-2xl font-extrabold text-slate-800">{formatBRL(totalClientHistory)}</p>
+                    <p className="text-xs text-slate-500 mt-1">Todos os lancamentos do cliente</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-100 p-3 bg-white">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Filtro de periodo</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setClientPeriodFilter('ALL')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${clientPeriodFilter === 'ALL' ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      Todo historico
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientPeriodFilter('CURRENT_MONTH')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${clientPeriodFilter === 'CURRENT_MONTH' ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      Mes atual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientPeriodFilter('CUSTOM')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${clientPeriodFilter === 'CUSTOM' ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      Intervalo
+                    </button>
+                  </div>
+
+                  {clientPeriodFilter === 'CUSTOM' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <label className="text-xs text-slate-600">
+                        De
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(event) => setCustomStartDate(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs text-slate-600">
+                        Ate
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(event) => setCustomEndDate(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-100">
+                  {filteredClientEntries.length === 0 ? (
+                    <p className="p-4 text-sm text-slate-500">Nenhum historico de fiado para o periodo selecionado.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+                        <tr>
+                          <th className="text-left px-3 py-2">Data</th>
+                          <th className="text-left px-3 py-2">Descricao</th>
+                          <th className="text-right px-3 py-2">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredClientEntries.map((entry) => (
+                          <tr key={entry.id} className="border-t border-slate-100">
+                            <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{entry.launchedAt}</td>
+                            <td className="px-3 py-2 text-slate-700">{entry.description}</td>
+                            <td className="px-3 py-2 text-right text-slate-800 font-semibold">{extractEntryAmount(entry.description) > 0 ? formatBRL(extractEntryAmount(entry.description)) : '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Selecione um cliente para visualizar o historico.</p>
+            )}
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ── INPUT step ─────────────────────────────────────────────────────────────
   if (step === 'input') {
     return (
       <div className="flex flex-col h-full bg-slate-50">
         <header className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
-          <button type="button" onClick={onBack} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
+          <button type="button" onClick={() => setAdminTab('MENU')} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
             <ArrowLeft size={20} />
           </button>
-          <div>
+          <div className="flex-1">
             <h2 className="font-bold text-slate-800">Fechamento de Caixa</h2>
             <p className="text-xs text-slate-500">Digite os valores contados na gaveta</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAdminTab('MENU')}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-sky-300 bg-sky-50 text-sky-700"
+            >
+              Menu
+            </button>
+            <button
+              type="button"
+              onClick={enterAdministrative}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100"
+            >
+              Administrativos
+            </button>
           </div>
         </header>
 
@@ -260,7 +797,23 @@ export function CashRegisterClose({ onBack, onClose, items = [] }: CashRegisterC
         <button type="button" onClick={() => setStep('input')} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
           <ArrowLeft size={20} />
         </button>
-        <h2 className="font-bold text-slate-800">Resultado do Fechamento</h2>
+        <h2 className="font-bold text-slate-800 flex-1">Resultado do Fechamento</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminTab('MENU')}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-sky-300 bg-sky-50 text-sky-700"
+          >
+            Menu
+          </button>
+          <button
+            type="button"
+            onClick={enterAdministrative}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-100"
+          >
+            Administrativos
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 p-4 space-y-4 overflow-y-auto">

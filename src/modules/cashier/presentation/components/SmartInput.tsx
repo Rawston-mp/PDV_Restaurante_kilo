@@ -19,6 +19,7 @@ export function SmartInput({
     <div className="relative flex items-center w-full">
       <Search className="absolute left-4 text-slate-400 pointer-events-none" size={20} />
       <input
+        id="cashier-smart-input"
         ref={ref}
         type="text"
         value={value}
