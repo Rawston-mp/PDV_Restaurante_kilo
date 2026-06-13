@@ -36,6 +36,11 @@ export function ComandaScreen() {
   const [pesoManualDraft, setPesoManualDraft] = useState('');
   const [pesoManualError, setPesoManualError] = useState<string | null>(null);
   const pesquisaSanitizada = state.pesquisa.trim();
+  const statusOperacional = state.lockStationId
+    ? `${state.isComandaConectada ? 'Conectada' : 'Sem conexao'} | lock ${state.lockStationId}`
+    : state.isComandaConectada
+      ? 'Conectada'
+      : 'Sem conexao';
   const deveBloquearResultados = pesquisaSanitizada.length > 0 && pesquisaSanitizada.length < 3;
   const porQuiloCategoryId = state.categorias.find((categoria) => isPorQuiloCategoryName(categoria.nome))?.id;
   const categoriaDesabilitadaSemComanda = !state.comandaAtual?.id && porQuiloCategoryId ? [porQuiloCategoryId] : [];
@@ -145,7 +150,7 @@ export function ComandaScreen() {
       <div className="comanda-container">
         <div className="comanda-header-wrap">
           <ComandaHeader
-            status={state.isComandaConectada ? 'Conectada' : 'Sem conexao'}
+            status={statusOperacional}
             title="TELA DE COMANDA"
           />
           <div className="comanda-top-fields">

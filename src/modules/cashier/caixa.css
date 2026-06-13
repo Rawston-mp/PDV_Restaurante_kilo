@@ -7,21 +7,6 @@
   font-family: 'Inter', 'Roboto', system-ui, sans-serif;
 }
 
-/* Reset dos overrides globais do styles.css para os componentes do caixa */
-.pdv-caixa-root button {
-  all: unset;
-  box-sizing: border-box;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pdv-caixa-root input {
-  all: unset;
-  box-sizing: border-box;
-}
-
 .pdv-caixa-root * {
   box-sizing: border-box;
 }

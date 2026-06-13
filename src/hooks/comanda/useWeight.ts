@@ -1,9 +1,40 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-export function useWeight() {
+import { useWebSocket } from '@/hooks/useWebSocket';
+
+type PesoPayload = {
+  peso: number;
+  origem?: string;
+  timestamp?: string;
+};
+
+const isPesoPayload = (payload: unknown): payload is PesoPayload => {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+
+  const maybePeso = (payload as { peso?: unknown }).peso;
+  return typeof maybePeso === 'number' && Number.isFinite(maybePeso);
+};
+
+export function useWeight(enabled = true) {
   const [pesoSensor, setPesoSensor] = useState(0);
   const [pesoManual, setPesoManual] = useState<number | null>(null);
-  const [isComandaConectada] = useState(true);
+  const { isConnected, lastMessage } = useWebSocket<PesoPayload>({
+    eventName: 'atualizar_peso',
+    enabled,
+    validatePayload: isPesoPayload
+  });
+
+  useEffect(() => {
+    if (!lastMessage) {
+      return;
+    }
+
+    if (lastMessage.peso > 0) {
+      setPesoSensor(Number(lastMessage.peso.toFixed(3)));
+    }
+  }, [lastMessage]);
 
   const pesoAtual = useMemo(() => {
     if (pesoManual !== null && pesoManual > 0) {
@@ -16,7 +47,7 @@ export function useWeight() {
     pesoSensor,
     pesoManual,
     pesoAtual,
-    isComandaConectada,
+    isComandaConectada: isConnected,
     setPesoSensor,
     setPesoManual
   };

@@ -2,15 +2,23 @@ import { promises as fs } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-import type { ComandaStateSnapshot, ComandaStatus } from '../domain/comandaStateMachine';
+import type {
+  ComandaLockOwner,
+  ComandaLockStationId,
+  ComandaStateSnapshot,
+  ComandaStatus
+} from '../domain/comandaStateMachine';
 
 export type ComandaAuditEvent = {
-  action: 'OPEN_COMANDA' | 'TRANSITION';
+  action: 'OPEN_COMANDA' | 'TRANSITION' | 'LOCK_ACQUIRED' | 'LOCK_RENEWED' | 'LOCK_RELEASED' | 'LOCK_EXPIRED';
   numero: string;
   fromStatus?: ComandaStatus;
-  toStatus: ComandaStatus;
+  toStatus?: ComandaStatus;
   at: string;
   reason?: string;
+  lockOwner?: ComandaLockOwner;
+  lockStationId?: ComandaLockStationId;
+  lockExpiresAt?: string;
 };
 
 const currentDir = dirname(fileURLToPath(import.meta.url));

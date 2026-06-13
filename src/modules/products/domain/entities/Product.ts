@@ -1,8 +1,13 @@
 export type Product = {
   id: string;
   productCode: string;
+  barcode?: string;
+  imageUrl?: string;
   name: string;
+  description?: string;
   category: string;
+  isUnavailable?: boolean;
+  isHidden?: boolean;
   ncm?: string;
   cfop?: string;
   cstIcms?: string;

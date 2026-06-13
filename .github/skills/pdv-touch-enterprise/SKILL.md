@@ -17,10 +17,13 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 
 ## Estado Atual do Projeto (confirmado no codigo)
 - Frontend ativo com rota operacional de comanda: `/comanda`.
-- Backend ativo com estado global de comanda e websocket de peso:
+- Backend ativo com maquina de estados de comanda, lock operacional e websocket de peso:
 	- `GET /comandas/status`
 	- `POST /comandas/abrir`
 	- `POST /comandas/fechar`
+	- `POST /api/v1/comandas/:numero/lock/acquire`
+	- `POST /api/v1/comandas/:numero/lock/renew`
+	- `POST /api/v1/comandas/:numero/lock/release`
 	- evento `peso_sensor` -> `atualizar_peso`
 - Fluxo de comanda na UI:
 	- abertura operacional ao confirmar numero da comanda (Enter/foco em pesquisa)
@@ -31,6 +34,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 	- `Proxima Comanda` limpa numero e nao sugere proximo numero
 	- comanda anterior nao e encerrada automaticamente ao avancar
 - Catalogo vem do cadastro de produtos (sem catalogo hardcoded).
+- Caixa usa cadastro real de produtos com `descricao`, status `indisponivel` e status `oculto`.
 - RBAC e login por PIN estao ativos.
 
 ## Quando Usar
@@ -44,10 +48,13 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Comanda operacional por numero (sem leitura de codigo de barras).
 - Pesagem por sensor + fallback manual.
 - Itens por peso/unidade usando cadastro real de produtos.
+- Lock por comanda com aquisicao, renovacao (heartbeat) e liberacao.
+- Caixa com menu operacional no card do produto para:
+	- tornar indisponivel (visivel, mas bloqueado para adicionar)
+	- ocultar (retira do grid de venda)
 - Fechamento/caixa completo existe no modulo de pedidos (`/orders/new`), mas nao como etapa integrada do fluxo `/comanda` com estados formais do documento.
 
 ## Lacunas em Relacao ao Documento Base
-- Nao ha fluxo explicito de duas balancas independentes com lock de concorrencia por comanda (`EM_USO`).
 - Nao ha leitura nativa de codigo de barras da comanda nem fallback "digitar numero" na tela de balanca (hoje opera por numero digitado).
 - Nao ha maquina de estados completa da comanda conforme documento (`ABERTA`, `PESAGEM_EM_ANDAMENTO`, `PRONTA_PARA_CAIXA`, `ENCERRADA`, `FINALIZADA`, `ARQUIVADA`).
 - Nao ha endpoints REST versionados da especificacao (`/api/v1/comandas`, `/api/v1/pesagens`, `/api/v1/pagamentos`, `/api/v1/relatorios`).
@@ -95,8 +102,9 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 
 ## Backend de Comanda (Atual)
 - Endpoint de status, abrir e fechar comanda no processo do backend.
+- Endpoints de lock versionados para controle de concorrencia por comanda.
 - Emissao de peso websocket apenas com comanda ativa.
-- Estado de comanda no backend ainda e booleano global (nao por numero/comanda).
+- Estado de comanda com maquina de estados e trilha de auditoria append-only em arquivo.
 
 ## Arquivos-Chave
 - `src/components/Comanda/ComandaScreen.tsx`
@@ -171,10 +179,15 @@ npm run dev
 	- FINALIZADA -> ARQUIVADA
 - Persistencia backend-side do estado da comanda em arquivo (`backend/data/comandas-state.json`) com hidratacao no startup.
 - Trilha de auditoria append-only de eventos/transicoes (`backend/data/comandas-audit.jsonl`).
+- Lock de comanda no backend com erros de conflito/ownership e eventos de auditoria (`LOCK_ACQUIRED`, `LOCK_RENEWED`, `LOCK_RELEASED`).
+- Integracao da tela `/comanda` com acquire/renew/release do lock e exibicao de status operacional.
+- Caixa ligado ao cadastro real de produtos (sem mock), com nome, preco, descricao e ID no card/carrinho.
+- Upload local de foto no cadastro com preview e compressao client-side.
+- Controle operacional no caixa para marcar produto como indisponivel ou oculto, persistindo no cadastro.
 
 ## O que falta desenvolver
 - Persistir a maquina de estados em banco relacional (PostgreSQL) para substituir armazenamento em arquivo local.
-- Modelo de duas balancas com lock por comanda (EM_USO), timeout de lock e prevencao de concorrencia.
+- Evoluir lock operacional para politica final de timeout/expiracao alinhada por loja e por terminal.
 - Leitura de codigo de barras da comanda e fallback explicito de digitacao na tela da balanca.
 - Completar familia de endpoints da especificacao (`/api/v1/comandas`, `/api/v1/pesagens`, `/api/v1/pagamentos`, `/api/v1/relatorios`) com contratos finais.
 - Persistencia backend completa para comandas, pesagens, itens complementares e pagamentos (auditoria basica append-only ja ativa em arquivo).
@@ -198,7 +211,7 @@ npm run dev
 
 ## Recomendacoes prioritarias
 - Prioridade alta: persistir modelo de estado da comanda com transicoes auditaveis no backend.
-- Prioridade alta: implementar lock por comanda para duas balancas, com timeout de seguranca.
+- Prioridade alta: fechar politica final de timeout/expiracao para lock por comanda em duas balancas.
 - Prioridade alta: entregar identificacao por codigo de barras da comanda com fallback manual.
 - Prioridade media: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.
 - Prioridade media: fechar pacote minimo de testes E2E do fluxo comanda por kilo (automatico, manual, excecoes).

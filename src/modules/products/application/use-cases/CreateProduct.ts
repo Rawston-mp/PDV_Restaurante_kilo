@@ -11,8 +11,12 @@ export class CreateProduct {
     const product: Product = {
       id: input.id,
       productCode: input.productCode,
+      barcode: input.barcode,
+      imageUrl: input.imageUrl,
       name: input.name,
       category: input.category,
+      isUnavailable: input.isUnavailable ?? false,
+      isHidden: input.isHidden ?? false,
       ncm: input.ncm,
       cfop: input.cfop,
       cstIcms: input.cstIcms,

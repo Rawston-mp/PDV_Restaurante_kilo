@@ -25,21 +25,19 @@ export function CartPanel({
   const totalItems = items.reduce((acc, i) => acc + (i.unit === 'KG' ? 1 : i.quantity), 0);
 
   return (
-    <div className="flex flex-col h-full bg-white border-l border-slate-200">
+    <div className="flex flex-col h-full bg-white">
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+      <header className="flex items-center justify-between px-5 py-5 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={18} className="text-slate-500" />
-          <span className="text-sm font-semibold text-slate-700">
-            Atendimento {comandaNumber ? `#${comandaNumber}` : '— sem comanda'}
+          <ShoppingCart size={24} className="text-sky-600" />
+          <span className="text-2xl font-bold text-slate-800">
+            Carrinho
           </span>
         </div>
-        {items.length > 0 && (
-          <span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
-            {totalItems} {totalItems === 1 ? 'item' : 'itens'}
-          </span>
-        )}
+        <span className="text-xs font-semibold bg-sky-100 text-sky-700 px-3 py-1 rounded-full">
+          {totalItems} {totalItems === 1 ? 'item' : 'itens'}
+        </span>
       </header>
 
       {/* ── Cart List ──────────────────────────────────────────── */}
@@ -50,7 +48,7 @@ export function CartPanel({
             <p className="text-sm">Carrinho vazio</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100 px-1">
+          <ul>
             {items.map((item) => (
               <CartItem
                 key={item.id}
@@ -65,45 +63,42 @@ export function CartPanel({
       </div>
 
       {/* ── Footer ─────────────────────────────────────────────── */}
-      <footer className="border-t border-slate-200 px-4 pt-3 pb-4 space-y-2">
-        {/* Subtotal line */}
-        <div className="flex justify-between text-sm text-slate-500">
+      <footer className="border-t border-slate-200 px-5 pt-4 pb-5 space-y-2.5">
+        <div className="text-sm text-slate-500 mb-1">Atendimento #{comandaNumber}</div>
+        <div className="flex justify-between text-xl text-slate-500">
           <span>Subtotal</span>
           <span>{formatBRL(subtotal)}</span>
         </div>
 
-        {/* Big total */}
         <div className="flex justify-between items-baseline">
-          <span className="text-base font-semibold text-slate-700">Total</span>
-          <span className="text-3xl font-extrabold text-orange-500 tracking-tight">
+          <span className="text-4xl font-semibold text-slate-700">Total</span>
+          <span className="text-5xl font-black text-sky-600 tracking-tight">
             {formatBRL(subtotal)}
           </span>
         </div>
 
-        {/* Receive button */}
         <button
           type="button"
           disabled={items.length === 0}
           onClick={onReceive}
           className="
-            w-full h-14 rounded-xl
-            bg-emerald-500 hover:bg-emerald-600
+            mt-2 w-full h-14 rounded-2xl
+            bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600
             disabled:opacity-40 disabled:cursor-not-allowed
-            text-white text-lg font-bold
+            text-white text-xl font-bold
             transition-colors duration-150
             active:scale-95
           "
         >
-          Receber Pagamento
+          Receber
         </button>
 
-        {/* Cash close link */}
         <button
           type="button"
           onClick={onCashClose}
-          className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1 transition-colors"
+          className="w-full text-center text-sm text-slate-400 hover:text-slate-600 py-1 transition-colors"
         >
-          Fechar Caixa
+          Mais opções
         </button>
       </footer>
     </div>

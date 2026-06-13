@@ -8,6 +8,18 @@ export type ComandaStatus =
   | 'CANCELADA'
   | 'ARQUIVADA';
 
+export type ComandaLockOwner = 'COMANDA_A' | 'COMANDA_B';
+
+export type ComandaLockStationId = 'BALANCA_A' | 'BALANCA_B';
+
+export type ComandaLock = {
+  owner: ComandaLockOwner;
+  stationId: ComandaLockStationId;
+  acquiredAt: string;
+  heartbeatAt: string;
+  expiresAt: string;
+};
+
 type LegacyComandaStatus = 'PESAGEM_EM_ANDAMENTO' | 'ENCERRADA' | 'FINALIZADA';
 
 export type ComandaTransition = {
@@ -22,6 +34,7 @@ export type ComandaRecord = {
   status: ComandaStatus;
   createdAt: string;
   updatedAt: string;
+  lock: ComandaLock | null;
   transitions: ComandaTransition[];
 };
 
@@ -57,6 +70,26 @@ const canTransition = (from: ComandaStatus, to: ComandaStatus) => transitionMap[
 
 const nowIso = () => new Date().toISOString();
 
+const DEFAULT_LOCK_TTL_SECONDS = 120;
+
+const parseIsoTime = (value: string) => {
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+};
+
+const isLockExpired = (lock: ComandaLock, nowMs = Date.now()) => {
+  const expiresAt = parseIsoTime(lock.expiresAt);
+  return expiresAt === null || expiresAt <= nowMs;
+};
+
+const sanitizeTtl = (ttlSeconds?: number) => {
+  if (typeof ttlSeconds !== 'number' || !Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+    return DEFAULT_LOCK_TTL_SECONDS;
+  }
+
+  return Math.min(Math.floor(ttlSeconds), 900);
+};
+
 const legacyStatusMap: Record<LegacyComandaStatus, ComandaStatus> = {
   PESAGEM_EM_ANDAMENTO: 'EM_USO_BALANCA',
   ENCERRADA: 'FECHADA_VENDA',
@@ -69,9 +102,100 @@ const normalizeStatus = (status: ComandaStatus | LegacyComandaStatus): ComandaSt
 const isInactiveStatus = (status: ComandaStatus) =>
   status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'CANCELADA' || status === 'ARQUIVADA';
 
+const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
+  if (!lock) {
+    return null;
+  }
+
+  const lockOwner = lock.owner?.toUpperCase();
+  const stationId = lock.stationId?.toUpperCase();
+
+  if ((lockOwner !== 'COMANDA_A' && lockOwner !== 'COMANDA_B') || (stationId !== 'BALANCA_A' && stationId !== 'BALANCA_B')) {
+    return null;
+  }
+
+  const acquiredAt = lock.acquiredAt || nowIso();
+  const heartbeatAt = lock.heartbeatAt || acquiredAt;
+  const expiresAt = lock.expiresAt || heartbeatAt;
+
+  return {
+    owner: lockOwner,
+    stationId,
+    acquiredAt,
+    heartbeatAt,
+    expiresAt
+  } as ComandaLock;
+};
+
+const buildLock = (owner: ComandaLockOwner, stationId: ComandaLockStationId, ttlSeconds?: number): ComandaLock => {
+  const acquiredAt = nowIso();
+  const ttl = sanitizeTtl(ttlSeconds);
+  const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+
+  return {
+    owner,
+    stationId,
+    acquiredAt,
+    heartbeatAt: acquiredAt,
+    expiresAt
+  };
+};
+
+const refreshLock = (lock: ComandaLock, ttlSeconds?: number): ComandaLock => {
+  const heartbeatAt = nowIso();
+  const ttl = sanitizeTtl(ttlSeconds);
+  const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+
+  return {
+    ...lock,
+    heartbeatAt,
+    expiresAt
+  };
+};
+
+export class ComandaLockConflictError extends Error {
+  readonly lock: ComandaLock;
+
+  constructor(lock: ComandaLock) {
+    super('Comanda ja esta em uso por outra balanca.');
+    this.name = 'ComandaLockConflictError';
+    this.lock = lock;
+  }
+}
+
+export class ComandaLockOwnershipError extends Error {
+  constructor() {
+    super('Lock da comanda pertence a outra estacao.');
+    this.name = 'ComandaLockOwnershipError';
+  }
+}
+
+export class ComandaLockNotFoundError extends Error {
+  constructor() {
+    super('Comanda sem lock ativo.');
+    this.name = 'ComandaLockNotFoundError';
+  }
+}
+
 export class ComandaStateMachineService {
   private readonly comandas = new Map<string, ComandaRecord>();
   private activeComandaNumero: string | null = null;
+
+  private clearExpiredLock(record: ComandaRecord) {
+    if (!record.lock || !isLockExpired(record.lock)) {
+      return { record, expired: false };
+    }
+
+    const updated: ComandaRecord = {
+      ...record,
+      lock: null,
+      updatedAt: nowIso()
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return { record: updated, expired: true };
+  }
 
   loadSnapshot(snapshot: ComandaStateSnapshot) {
     this.comandas.clear();
@@ -79,6 +203,7 @@ export class ComandaStateMachineService {
       const normalizedComanda: ComandaRecord = {
         ...comanda,
         status: normalizeStatus(comanda.status),
+        lock: normalizeLock(comanda.lock ?? null),
         transitions: comanda.transitions.map((transition) => ({
           ...transition,
           from: normalizeStatus(transition.from),
@@ -135,6 +260,7 @@ export class ComandaStateMachineService {
       status: 'ABERTA',
       createdAt,
       updatedAt: createdAt,
+      lock: null,
       transitions: []
     };
 
@@ -145,7 +271,12 @@ export class ComandaStateMachineService {
   }
 
   get(numero: string) {
-    return this.comandas.get(numero.trim()) ?? null;
+    const existing = this.comandas.get(numero.trim()) ?? null;
+    if (!existing) {
+      return null;
+    }
+
+    return this.clearExpiredLock(existing).record;
   }
 
   getActive() {
@@ -171,19 +302,22 @@ export class ComandaStateMachineService {
       throw new Error('Comanda nao encontrada.');
     }
 
-    if (!canTransition(existing.status, to)) {
-      throw new Error(`Transicao invalida: ${existing.status} -> ${to}.`);
+    const { record } = this.clearExpiredLock(existing);
+
+    if (!canTransition(record.status, to)) {
+      throw new Error(`Transicao invalida: ${record.status} -> ${to}.`);
     }
 
     const at = nowIso();
     const updated: ComandaRecord = {
-      ...existing,
+      ...record,
       status: to,
       updatedAt: at,
+      lock: isInactiveStatus(to) ? null : record.lock,
       transitions: [
-        ...existing.transitions,
+        ...record.transitions,
         {
-          from: existing.status,
+          from: record.status,
           to,
           at,
           reason
@@ -221,6 +355,132 @@ export class ComandaStateMachineService {
 
   markPesagemEmAndamento(numero: string, reason = 'peso_recebido') {
     return this.markEmUsoBalanca(numero, reason);
+  }
+
+  acquireLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+      ttlSeconds?: number;
+    }
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    const { owner, stationId, ttlSeconds } = params;
+    const { record, expired } = this.clearExpiredLock(existing);
+
+    if (record.lock) {
+      if (record.lock.owner === owner && record.lock.stationId === stationId) {
+        const renewedLock = refreshLock(record.lock, ttlSeconds);
+        const renewedRecord: ComandaRecord = {
+          ...record,
+          lock: renewedLock,
+          updatedAt: renewedLock.heartbeatAt
+        };
+
+        this.comandas.set(renewedRecord.numero, renewedRecord);
+
+        return {
+          comanda: renewedRecord,
+          lock: renewedLock,
+          expiredPreviousLock: expired
+        };
+      }
+
+      throw new ComandaLockConflictError(record.lock);
+    }
+
+    const lock = buildLock(owner, stationId, ttlSeconds);
+    const updated: ComandaRecord = {
+      ...record,
+      lock,
+      updatedAt: lock.heartbeatAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return {
+      comanda: updated,
+      lock,
+      expiredPreviousLock: expired
+    };
+  }
+
+  renewLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+      ttlSeconds?: number;
+    }
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    const { owner, stationId, ttlSeconds } = params;
+    const { record } = this.clearExpiredLock(existing);
+
+    if (!record.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+
+    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+
+    const lock = refreshLock(record.lock, ttlSeconds);
+    const updated: ComandaRecord = {
+      ...record,
+      lock,
+      updatedAt: lock.heartbeatAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return {
+      comanda: updated,
+      lock
+    };
+  }
+
+  releaseLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+    }
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    const { owner, stationId } = params;
+    const { record } = this.clearExpiredLock(existing);
+
+    if (!record.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+
+    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+
+    const updated: ComandaRecord = {
+      ...record,
+      lock: null,
+      updatedAt: nowIso()
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return updated;
   }
 
   canEmitWeight() {

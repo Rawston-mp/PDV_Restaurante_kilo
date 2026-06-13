@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
@@ -162,6 +162,72 @@ const parseDecimalInput = (value: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const MAX_PRODUCT_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_PRODUCT_IMAGE_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_PRODUCT_IMAGE_DIMENSION = 1280;
+const PRODUCT_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const imageFileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error('Arquivo de imagem invalido.'));
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Falha ao ler arquivo de imagem.'));
+    };
+
+    reader.readAsDataURL(file);
+  });
+
+const loadImage = (source: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Falha ao processar imagem.'));
+    image.src = source;
+  });
+
+const compressImageToDataUrl = async (file: File): Promise<string> => {
+  const sourceDataUrl = await imageFileToDataUrl(file);
+  const image = await loadImage(sourceDataUrl);
+
+  const scale = Math.min(
+    1,
+    MAX_PRODUCT_IMAGE_DIMENSION / Math.max(image.width || 1, image.height || 1)
+  );
+
+  const outputWidth = Math.max(1, Math.round((image.width || 1) * scale));
+  const outputHeight = Math.max(1, Math.round((image.height || 1) * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Falha ao gerar miniatura da imagem.');
+  }
+
+  context.drawImage(image, 0, 0, outputWidth, outputHeight);
+
+  const quality = file.type === 'image/png' ? undefined : 0.82;
+  const compressedDataUrl = canvas.toDataURL(file.type, quality);
+
+  if (compressedDataUrl.length > MAX_PRODUCT_IMAGE_OUTPUT_BYTES * 2) {
+    throw new Error('Imagem final muito grande.');
+  }
+
+  return compressedDataUrl;
+};
+
 const isFilled = (value: string) => value.trim().length > 0;
 
 export function ProductsPage() {
@@ -169,13 +235,19 @@ export function ProductsPage() {
   const { createProduct, saving } = useCreateProduct();
   const { user } = useAuth();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
 
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [productCode, setProductCode] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [isUnavailable, setIsUnavailable] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>(readStoredProductCategories);
   const [category, setCategory] = useState(defaultProductCategories[0]);
   const [categoryManagerMode, setCategoryManagerMode] = useState<'ADD' | 'EDIT' | 'DELETE' | null>(null);
@@ -253,8 +325,16 @@ export function ProductsPage() {
     setEditingProductId(null);
     setFormError(null);
     setName('');
+    setDescription('');
     setProductCode(generateCodeForCurrentCatalog());
     setBarcode('');
+    setImageUrl('');
+    setImageUploadError(null);
+    setIsUnavailable(false);
+    setIsHidden(false);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
     setCategory(categoryOptions[0] ?? defaultProductCategories[0]);
     setNcm('');
     setNcmSearchQuery('');
@@ -497,7 +577,12 @@ export function ProductsPage() {
       const updatedProduct = {
         ...existingProduct,
         productCode: generatedCode,
+        barcode,
+        imageUrl: imageUrl.trim() || undefined,
         name,
+        description: description.trim() || undefined,
+        isUnavailable,
+        isHidden,
         category,
         ncm,
         cfop,
@@ -523,7 +608,12 @@ export function ProductsPage() {
     } else {
       const product = await createProduct({
         productCode: generatedCode,
+        barcode,
+        imageUrl: imageUrl.trim() || undefined,
         name,
+        description: description.trim() || undefined,
+        isUnavailable,
+        isHidden,
         category,
         ncm,
         cfop,
@@ -565,10 +655,15 @@ export function ProductsPage() {
     setShowCadastroSpan(true);
     setActiveTab('PRODUTO');
     setFormError(null);
+    setImageUploadError(null);
 
     setProductCode(product.productCode ?? parseLegacyProductCode(product.name) ?? generateCodeForCurrentCatalog());
     setName(getProductDisplayName(product));
-    setBarcode('');
+    setDescription(product.description ?? '');
+    setBarcode(product.barcode ?? '');
+    setImageUrl(product.imageUrl ?? '');
+    setIsUnavailable(Boolean(product.isUnavailable));
+    setIsHidden(Boolean(product.isHidden));
     setCategory(product.category);
     setNcm(product.ncm ?? '');
     setNcmSearchQuery(product.ncm ?? '');
@@ -613,6 +708,36 @@ export function ProductsPage() {
       setShowCadastroSpan(false);
       setEditingProductId(null);
       setFormError(null);
+    }
+  };
+
+  const onUploadProductImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!PRODUCT_IMAGE_MIME_TYPES.has(file.type)) {
+      setImageUploadError('Formato invalido. Use JPG, PNG ou WEBP.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
+      setImageUploadError('Imagem muito grande. Limite de 8MB no arquivo original.');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setImageUrl(dataUrl);
+      setImageUploadError(null);
+      setFormError(null);
+    } catch {
+      setImageUploadError('Nao foi possivel carregar ou comprimir a imagem selecionada.');
+    } finally {
+      event.target.value = '';
     }
   };
 
@@ -706,9 +831,55 @@ export function ProductsPage() {
                       required
                     />
                   </div>
+                  <div className="products-field-main">
+                    <label htmlFor="description">Descricao</label>
+                    <input
+                      id="description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="Descricao exibida no caixa"
+                    />
+                  </div>
                   <div>
                     <label htmlFor="barcode">Codigo de barra</label>
                     <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} autoComplete="off" />
+                  </div>
+                  <div>
+                    <label htmlFor="image-upload">Foto do produto</label>
+                    <input
+                      id="image-upload"
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => {
+                        void onUploadProductImage(event);
+                      }}
+                    />
+                    <small className="products-help-note">PNG, JPG ou WEBP ate 2MB.</small>
+
+                    {imageUploadError && <small className="products-form-warning">{imageUploadError}</small>}
+
+                    {imageUrl && (
+                      <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.5rem' }}>
+                        <img
+                          src={imageUrl}
+                          alt="Preview do produto"
+                          style={{ width: '100%', maxWidth: '220px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                        />
+                        <button
+                          type="button"
+                          className="button-muted"
+                          onClick={() => {
+                            setImageUrl('');
+                            setImageUploadError(null);
+                          }}
+                        >
+                          Remover foto
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="products-group-field">
                     <label htmlFor="category">Categorias</label>
@@ -907,6 +1078,24 @@ export function ProductsPage() {
                   />
                   Produto por peso
                 </label>
+
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={isUnavailable}
+                    onChange={(e) => setIsUnavailable(e.target.checked)}
+                  />
+                  Tornar indisponivel no caixa
+                </label>
+
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={isHidden}
+                    onChange={(e) => setIsHidden(e.target.checked)}
+                  />
+                  Ocultar do caixa e dos terminais de balanca
+                </label>
               </>
             ) : (
               <>
@@ -1049,6 +1238,7 @@ export function ProductsPage() {
                       <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
                       {getProductDisplayName(product)}
                     </strong>
+                    {product.description ? <span>{product.description}</span> : <span />}
                     <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
                       <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
                     </span>
@@ -1056,10 +1246,18 @@ export function ProductsPage() {
                   <div>
                     <strong>{currency.format(product.price)}</strong>
                     <span>estoque {product.stock}</span>
+                    <span>
+                      {product.isUnavailable ? 'indisponivel' : 'disponivel'} | {product.isHidden ? 'oculto' : 'visivel'}
+                    </span>
                     {canEditOrDelete && (
                       <span>
                         custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
                         {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
+                      </span>
+                    )}
+                    {canEditOrDelete && (
+                      <span>
+                        cod. barras {product.barcode ?? '-'} | NCM {product.ncm ?? '-'} | CFOP {product.cfop ?? '-'}
                       </span>
                     )}
                     {canEditOrDelete && (

@@ -4,8 +4,13 @@ import { productsContainer } from '@/modules/products/infrastructure/container/p
 
 type Input = {
   productCode: string;
+  barcode?: string;
+  imageUrl?: string;
   name: string;
+  description?: string;
   category: string;
+  isUnavailable?: boolean;
+  isHidden?: boolean;
   ncm: string;
   cfop: string;
   cstIcms: string;
