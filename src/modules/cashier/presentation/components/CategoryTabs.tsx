@@ -21,7 +21,7 @@ export function CategoryTabs({ categories, selected, onSelect }: CategoryTabsPro
               flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold
               border transition-all duration-150 whitespace-nowrap min-h-[44px]
               ${active
-                ? 'bg-gradient-to-r from-sky-500 to-cyan-500 border-cyan-500 text-white shadow-sm'
+                ? 'bg-gradient-to-r from-sky-50 to-cyan-100 border-sky-400 text-sky-800 shadow-sm'
                 : 'bg-white border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50'
               }
             `}

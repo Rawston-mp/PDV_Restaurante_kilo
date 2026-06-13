@@ -741,6 +741,20 @@ export function ProductsPage() {
     }
   };
 
+  const openCadastroForCategory = (nextCategory: string) => {
+    if (!canEditOrDelete) {
+      return;
+    }
+
+    if (!showCadastroSpan) {
+      resetCadastroForm();
+      setShowCadastroSpan(true);
+    }
+
+    setActiveTab('PRODUTO');
+    setCategory(nextCategory);
+  };
+
   return (
     <section className="products-page">
       <header className="products-header card">
@@ -781,6 +795,29 @@ export function ProductsPage() {
         </div>
         {syncMessage && <p className="sync-banner">{syncMessage}</p>}
       </article>
+
+      {canEditOrDelete && (
+        <article className="card products-cadastro-quickbar">
+          <p className="products-help-note">Categorias rapidas: clique para abrir o cadastro ja na categoria.</p>
+          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rapidas de cadastro">
+            {categoryOptions.map((option) => {
+              const isActiveCategory = isSameCategoryName(option, category);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActiveCategory}
+                  className={`products-category-chip ${isActiveCategory ? 'is-active' : ''}`}
+                  onClick={() => openCadastroForCategory(option)}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+        </article>
+      )}
 
       {canEditOrDelete && showCadastroSpan && (
         <article className="card products-cadastro-span">
@@ -884,6 +921,24 @@ export function ProductsPage() {
                   <div className="products-group-field">
                     <label htmlFor="category">Categorias</label>
                     <div className="products-group-row">
+                      <div className="products-category-quickbar" role="tablist" aria-label="Barra de categorias">
+                        {categoryOptions.map((option) => {
+                          const isActiveCategory = isSameCategoryName(option, category);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              role="tab"
+                              aria-selected={isActiveCategory}
+                              className={`products-category-chip ${isActiveCategory ? 'is-active' : ''}`}
+                              onClick={() => setCategory(option)}
+                            >
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <div className="products-group-input-row">
                         <select
                           id="category"
