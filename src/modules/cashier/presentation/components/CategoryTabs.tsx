@@ -7,7 +7,7 @@ type CategoryTabsProps = {
 export function CategoryTabs({ categories, selected, onSelect }: CategoryTabsProps) {
   return (
     <nav
-      className="flex gap-2 overflow-x-auto pb-1 scrollbar-none"
+      className="flex gap-2 overflow-x-auto pb-1"
       aria-label="Filtrar por categoria"
     >
       {categories.map((cat) => {
@@ -18,11 +18,11 @@ export function CategoryTabs({ categories, selected, onSelect }: CategoryTabsPro
             type="button"
             onClick={() => onSelect(cat)}
             className={`
-              flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium
-              border transition-all duration-150 whitespace-nowrap
+              flex-shrink-0 px-4 py-2 rounded-xl text-sm font-semibold
+              border transition-all duration-150 whitespace-nowrap min-h-[44px]
               ${active
-                ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm'
-                : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50'
+                ? 'bg-gradient-to-r from-sky-500 to-cyan-500 border-cyan-500 text-white shadow-sm'
+                : 'bg-white border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700 hover:bg-sky-50'
               }
             `}
           >

@@ -68,6 +68,7 @@ describe('ComandaStateMachineService', () => {
           status: 'PESAGEM_EM_ANDAMENTO' as never,
           createdAt: '2026-06-10T00:00:00.000Z',
           updatedAt: '2026-06-10T00:00:00.000Z',
+          lock: null,
           transitions: [
             {
               from: 'ABERTA',
@@ -84,5 +85,66 @@ describe('ComandaStateMachineService', () => {
     expect(service.get('104')?.status).toBe('EM_USO_BALANCA');
     expect(service.getActive()?.status).toBe('EM_USO_BALANCA');
     expect(service.get('104')?.transitions[0]?.to).toBe('EM_USO_BALANCA');
+  });
+
+  it('adquire lock para uma balanca e bloqueia lock concorrente', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('201');
+    const acquired = service.acquireLock('201', {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    });
+
+    expect(acquired.lock.owner).toBe('COMANDA_A');
+    expect(acquired.lock.stationId).toBe('BALANCA_A');
+
+    expect(() =>
+      service.acquireLock('201', {
+        owner: 'COMANDA_B',
+        stationId: 'BALANCA_B'
+      })
+    ).toThrow('Comanda ja esta em uso por outra balanca.');
+  });
+
+  it('renova e libera lock para o mesmo owner/estacao', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('202');
+    const acquired = service.acquireLock('202', {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    });
+
+    const renewed = service.renewLock('202', {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    });
+
+    expect(Date.parse(renewed.lock.expiresAt)).toBeGreaterThanOrEqual(Date.parse(acquired.lock.expiresAt));
+
+    const released = service.releaseLock('202', {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    });
+
+    expect(released.lock).toBeNull();
+  });
+
+  it('impede liberar lock por estacao diferente', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('203');
+    service.acquireLock('203', {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    });
+
+    expect(() =>
+      service.releaseLock('203', {
+        owner: 'COMANDA_B',
+        stationId: 'BALANCA_B'
+      })
+    ).toThrow('Lock da comanda pertence a outra estacao.');
   });
 });

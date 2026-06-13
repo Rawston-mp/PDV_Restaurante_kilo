@@ -1,7 +1,16 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { COMANDA_STATUSES, ComandaStateMachineService, type ComandaStatus } from './domain/comandaStateMachine';
+import {
+  COMANDA_STATUSES,
+  ComandaLockConflictError,
+  ComandaLockNotFoundError,
+  ComandaLockOwnershipError,
+  ComandaStateMachineService,
+  type ComandaLockOwner,
+  type ComandaLockStationId,
+  type ComandaStatus
+} from './domain/comandaStateMachine';
 import { ComandaFileStore } from './infrastructure/comandaFileStore';
 import { startScaleReader } from './services/scaleReader.service';
 
@@ -24,7 +33,45 @@ const io = new Server(httpServer, {
 const comandaService = new ComandaStateMachineService();
 const comandaStore = new ComandaFileStore();
 
+const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
+const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
+
 const parseNumero = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const parseLockOwner = (value: unknown): ComandaLockOwner | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return LOCK_OWNERS.includes(normalized as ComandaLockOwner) ? (normalized as ComandaLockOwner) : null;
+};
+
+const parseLockStationId = (value: unknown): ComandaLockStationId | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return LOCK_STATIONS.includes(normalized as ComandaLockStationId)
+    ? (normalized as ComandaLockStationId)
+    : null;
+};
+
+const parsePositiveNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+};
 
 const parseStatus = (value: unknown): ComandaStatus | null => {
   if (typeof value !== 'string') {
@@ -54,6 +101,57 @@ const appendTransitionAudit = async (
     at,
     reason
   });
+};
+
+const resolveLockError = (error: unknown) => {
+  if (error instanceof ComandaLockConflictError) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        message: error.message,
+        conflictLock: error.lock
+      }
+    };
+  }
+
+  if (error instanceof ComandaLockOwnershipError) {
+    return {
+      status: 403,
+      body: {
+        ok: false,
+        message: error.message
+      }
+    };
+  }
+
+  if (error instanceof ComandaLockNotFoundError) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        message: error.message
+      }
+    };
+  }
+
+  if (error instanceof Error && error.message === 'Comanda nao encontrada.') {
+    return {
+      status: 404,
+      body: {
+        ok: false,
+        message: error.message
+      }
+    };
+  }
+
+  return {
+    status: 400,
+    body: {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao processar lock da comanda.'
+    }
+  };
 };
 
 const initializeComandas = async () => {
@@ -221,6 +319,138 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
       ok: false,
       message: error instanceof Error ? error.message : 'Falha ao registrar pesagem.'
     });
+  }
+});
+
+app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
+  const owner = parseLockOwner(req.body?.owner);
+  const stationId = parseLockStationId(req.body?.stationId);
+
+  if (!owner || !stationId) {
+    res.status(400).json({
+      ok: false,
+      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+    });
+    return;
+  }
+
+  try {
+    const result = comandaService.acquireLock(req.params.numero, {
+      owner,
+      stationId,
+      ttlSeconds: parsePositiveNumber(req.body?.ttlSeconds)
+    });
+
+    if (result.expiredPreviousLock) {
+      void comandaStore.appendAudit({
+        action: 'LOCK_EXPIRED',
+        numero: result.comanda.numero,
+        at: result.comanda.updatedAt,
+        reason: parseNumero(req.body?.reason) || 'lock_expired_before_acquire'
+      });
+    }
+
+    void comandaStore.appendAudit({
+      action: 'LOCK_ACQUIRED',
+      numero: result.comanda.numero,
+      toStatus: result.comanda.status,
+      at: result.lock.heartbeatAt,
+      reason: parseNumero(req.body?.reason) || 'lock_acquire',
+      lockOwner: result.lock.owner,
+      lockStationId: result.lock.stationId,
+      lockExpiresAt: result.lock.expiresAt
+    });
+    void persistComandas();
+
+    res.status(200).json({
+      ok: true,
+      comanda: result.comanda,
+      lock: result.lock
+    });
+  } catch (error) {
+    const response = resolveLockError(error);
+    res.status(response.status).json(response.body);
+  }
+});
+
+app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
+  const owner = parseLockOwner(req.body?.owner);
+  const stationId = parseLockStationId(req.body?.stationId);
+
+  if (!owner || !stationId) {
+    res.status(400).json({
+      ok: false,
+      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+    });
+    return;
+  }
+
+  try {
+    const result = comandaService.renewLock(req.params.numero, {
+      owner,
+      stationId,
+      ttlSeconds: parsePositiveNumber(req.body?.ttlSeconds)
+    });
+
+    void comandaStore.appendAudit({
+      action: 'LOCK_RENEWED',
+      numero: result.comanda.numero,
+      toStatus: result.comanda.status,
+      at: result.lock.heartbeatAt,
+      reason: parseNumero(req.body?.reason) || 'lock_renew',
+      lockOwner: result.lock.owner,
+      lockStationId: result.lock.stationId,
+      lockExpiresAt: result.lock.expiresAt
+    });
+    void persistComandas();
+
+    res.status(200).json({
+      ok: true,
+      comanda: result.comanda,
+      lock: result.lock
+    });
+  } catch (error) {
+    const response = resolveLockError(error);
+    res.status(response.status).json(response.body);
+  }
+});
+
+app.post('/api/v1/comandas/:numero/lock/release', (req, res) => {
+  const owner = parseLockOwner(req.body?.owner);
+  const stationId = parseLockStationId(req.body?.stationId);
+
+  if (!owner || !stationId) {
+    res.status(400).json({
+      ok: false,
+      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+    });
+    return;
+  }
+
+  try {
+    const comanda = comandaService.releaseLock(req.params.numero, {
+      owner,
+      stationId
+    });
+
+    void comandaStore.appendAudit({
+      action: 'LOCK_RELEASED',
+      numero: comanda.numero,
+      toStatus: comanda.status,
+      at: comanda.updatedAt,
+      reason: parseNumero(req.body?.reason) || 'lock_release',
+      lockOwner: owner,
+      lockStationId: stationId
+    });
+    void persistComandas();
+
+    res.status(200).json({
+      ok: true,
+      comanda
+    });
+  } catch (error) {
+    const response = resolveLockError(error);
+    res.status(response.status).json(response.body);
   }
 });
 

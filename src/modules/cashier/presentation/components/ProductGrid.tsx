@@ -4,17 +4,19 @@ import { ProductCard, type CashierProduct } from './ProductCard';
 type ProductGridProps = {
   products: CashierProduct[];
   onAdd: (product: CashierProduct) => void;
+  onToggleUnavailable: (product: CashierProduct) => void;
+  onToggleHidden: (product: CashierProduct) => void;
   loading?: boolean;
 };
 
-export function ProductGrid({ products, onAdd, loading }: ProductGridProps) {
+export function ProductGrid({ products, onAdd, onToggleUnavailable, onToggleHidden, loading }: ProductGridProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 p-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
         {Array.from({ length: 15 }).map((_, i) => (
           <div
             key={i}
-            className="h-20 rounded-xl bg-slate-100 animate-pulse"
+            className="h-56 rounded-2xl bg-slate-100 animate-pulse"
           />
         ))}
       </div>
@@ -31,9 +33,15 @@ export function ProductGrid({ products, onAdd, loading }: ProductGridProps) {
   }
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 p-0 content-start">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-1 content-start">
       {products.map((product) => (
-        <ProductCard key={product.id} product={product} onAdd={onAdd} />
+        <ProductCard
+          key={product.id}
+          product={product}
+          onAdd={onAdd}
+          onToggleUnavailable={onToggleUnavailable}
+          onToggleHidden={onToggleHidden}
+        />
       ))}
     </div>
   );

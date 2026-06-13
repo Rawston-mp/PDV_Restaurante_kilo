@@ -27,6 +27,9 @@ export interface Comanda {
 export interface EstadoComanda {
   comandaAtual: Comanda | null;
   comandaNumber: string;
+  lockOwner: 'COMANDA_A' | 'COMANDA_B' | null;
+  lockStationId: 'BALANCA_A' | 'BALANCA_B' | null;
+  lockExpiresAt: string | null;
   campoAtivo: 'COMANDA' | 'PESQUISA';
   categorias: Categoria[];
   categoriaSelecionada: string;

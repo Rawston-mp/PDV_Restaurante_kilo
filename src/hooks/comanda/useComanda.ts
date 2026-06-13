@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Categoria, EstadoComanda, ItemComanda } from '@/types/comanda';
 import { useKeyboard } from '@/hooks/comanda/useKeyboard';
 import { useWeight } from '@/hooks/comanda/useWeight';
+import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
   buildComandaCategories,
   mergeCategoryOptions,
@@ -23,6 +24,89 @@ type ComandaSnapshot = {
   dataAbertura: Date;
 };
 
+type LockOwner = 'COMANDA_A' | 'COMANDA_B';
+type LockStationId = 'BALANCA_A' | 'BALANCA_B';
+
+type LockContext = {
+  owner: LockOwner;
+  stationId: LockStationId;
+};
+
+type LockData = {
+  owner: LockOwner;
+  stationId: LockStationId;
+  expiresAt: string;
+};
+
+type BackendError = {
+  status?: number;
+  message: string;
+  conflictLock?: {
+    owner?: string;
+    stationId?: string;
+    expiresAt?: string;
+  };
+};
+
+type AcquireLockResponse = {
+  ok: boolean;
+  lock?: LockData;
+};
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const LOCK_TTL_SECONDS = 120;
+
+const roleToLockContext = (role?: string | null): LockContext | null => {
+  if (role === 'COMANDA_A') {
+    return {
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A'
+    };
+  }
+
+  if (role === 'COMANDA_B') {
+    return {
+      owner: 'COMANDA_B',
+      stationId: 'BALANCA_B'
+    };
+  }
+
+  return null;
+};
+
+const formatLockConflictMessage = (error: BackendError) => {
+  const owner = error.conflictLock?.owner;
+  const station = error.conflictLock?.stationId;
+
+  if (owner || station) {
+    return `Comanda em uso por ${owner ?? 'outro operador'} (${station ?? 'outra estacao'}).`;
+  }
+
+  return error.message || 'Comanda em uso por outra balanca.';
+};
+
+const parseError = async (response: Response): Promise<BackendError> => {
+  const fallback: BackendError = {
+    status: response.status,
+    message: 'Falha ao comunicar com o backend de comandas.'
+  };
+
+  try {
+    const payload = (await response.json()) as {
+      message?: string;
+      conflictLock?: BackendError['conflictLock'];
+    };
+
+    return {
+      status: response.status,
+      message: payload.message ?? fallback.message,
+      conflictLock: payload.conflictLock
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 const normalizeSearchText = (value: string) =>
   value
     .normalize('NFD')
@@ -40,6 +124,7 @@ const isSelServiceProduct = (value: string) => {
 };
 
 export function useComanda(taxaImposto = 0.1) {
+  const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
   const [comandaAtivaId, setComandaAtivaId] = useState<string | null>(null);
   const [dataAberturaAtual, setDataAberturaAtual] = useState<Date | null>(null);
@@ -52,9 +137,12 @@ export function useComanda(taxaImposto = 0.1) {
   const [itens, setItens] = useState<ItemComanda[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [precoAtual, setPrecoAtual] = useState(0);
+  const [lockData, setLockData] = useState<LockData | null>(null);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
-  const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight();
+  const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
+  const activeComandaRef = useRef<string | null>(null);
+  const lockContext = useMemo(() => roleToLockContext(user?.role), [user?.role]);
 
   useEffect(() => {
     const loadCatalogo = async () => {
@@ -102,6 +190,150 @@ export function useComanda(taxaImposto = 0.1) {
   );
   const isComandaAberta = Boolean(comandaAtivaId);
 
+  useEffect(() => {
+    activeComandaRef.current = comandaAtivaId;
+  }, [comandaAtivaId]);
+
+  useEffect(() => {
+    if (!lockContext) {
+      setLockData(null);
+    }
+  }, [lockContext]);
+
+  const requestOpenComanda = async (numero: string) => {
+    const response = await fetch(`${API_BASE}/api/v1/comandas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ numero })
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+  };
+
+  const acquireLock = async (numero: string) => {
+    if (!lockContext) {
+      setLockData(null);
+      return null;
+    }
+
+    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/lock/acquire`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: lockContext.owner,
+        stationId: lockContext.stationId,
+        ttlSeconds: LOCK_TTL_SECONDS,
+        reason: 'ui_comanda_open'
+      })
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+
+    const payload = (await response.json()) as AcquireLockResponse;
+    if (!payload.lock) {
+      return null;
+    }
+
+    setLockData(payload.lock);
+    return payload.lock;
+  };
+
+  const renewLock = async (numero: string) => {
+    if (!lockContext) {
+      return;
+    }
+
+    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/lock/renew`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: lockContext.owner,
+        stationId: lockContext.stationId,
+        ttlSeconds: LOCK_TTL_SECONDS,
+        reason: 'ui_comanda_heartbeat'
+      })
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+
+    const payload = (await response.json()) as AcquireLockResponse;
+    if (payload.lock) {
+      setLockData(payload.lock);
+    }
+  };
+
+  const releaseLock = async (numero: string) => {
+    if (!lockContext) {
+      setLockData(null);
+      return;
+    }
+
+    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/lock/release`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        owner: lockContext.owner,
+        stationId: lockContext.stationId,
+        reason: 'ui_comanda_release'
+      })
+    });
+
+    if (!response.ok) {
+      const backendError = await parseError(response);
+      if (backendError.status === 409) {
+        setLockData(null);
+        return;
+      }
+
+      throw backendError;
+    }
+
+    setLockData(null);
+  };
+
+  useEffect(() => {
+    if (!comandaAtivaId || !lockContext) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void renewLock(comandaAtivaId).catch((backendError: BackendError) => {
+        setErro(backendError.message || 'Falha ao renovar lock da comanda.');
+      });
+    }, 15000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [comandaAtivaId, lockContext]);
+
+  useEffect(() => {
+    return () => {
+      const activeNumero = activeComandaRef.current;
+      if (!activeNumero || !lockContext) {
+        return;
+      }
+
+      void releaseLock(activeNumero).catch(() => {
+        // sem efeito visual no unmount
+      });
+    };
+  }, [lockContext]);
+
   const produtosFiltrados = useMemo(() => {
     const termo = pesquisa.trim().toLowerCase();
 
@@ -133,10 +365,32 @@ export function useComanda(taxaImposto = 0.1) {
     }));
   };
 
-  const abrirComanda = () => {
+  const abrirComanda = async () => {
     const nextId = comandaNumber.trim();
     if (!nextId) {
       setErro('Informe o numero da comanda e pressione Enter para abrir.');
+      return false;
+    }
+
+    const comandaAnterior = comandaAtivaId && comandaAtivaId !== nextId ? comandaAtivaId : null;
+
+    try {
+      await requestOpenComanda(nextId);
+      if (lockContext) {
+        await acquireLock(nextId);
+
+        if (comandaAnterior) {
+          await releaseLock(comandaAnterior);
+        }
+      }
+    } catch (backendError) {
+      const typedError = backendError as BackendError;
+      if (typedError.status === 409) {
+        setErro(formatLockConflictMessage(typedError));
+      } else {
+        setErro(typedError.message || 'Falha ao abrir comanda no backend.');
+      }
+
       return false;
     }
 
@@ -256,6 +510,8 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const finalizeComanda = () => {
+    const activeNumero = comandaAtivaId;
+
     salvarSnapshotComandaAtual();
 
     if (comandaAtivaId) {
@@ -277,6 +533,12 @@ export function useComanda(taxaImposto = 0.1) {
     setPesoManual(null);
     setCampoAtivo('COMANDA');
     toggleToNumerico();
+
+    if (activeNumero) {
+      void releaseLock(activeNumero).catch((backendError: BackendError) => {
+        setErro(backendError.message || 'Falha ao liberar lock da comanda encerrada.');
+      });
+    }
   };
 
   const focarComanda = () => {
@@ -285,12 +547,15 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const focarPesquisa = () => {
-    if (!abrirComanda()) {
-      return;
-    }
+    void (async () => {
+      const opened = await abrirComanda();
+      if (!opened) {
+        return;
+      }
 
-    setCampoAtivo('PESQUISA');
-    toggleToVirtual();
+      setCampoAtivo('PESQUISA');
+      toggleToVirtual();
+    })();
   };
 
   const selecionarCategoria = (nextCategoryId: string) => {
@@ -363,6 +628,9 @@ export function useComanda(taxaImposto = 0.1) {
         }
       : null,
     comandaNumber,
+    lockOwner: lockData?.owner ?? null,
+    lockStationId: lockData?.stationId ?? null,
+    lockExpiresAt: lockData?.expiresAt ?? null,
     campoAtivo,
     categorias,
     categoriaSelecionada,

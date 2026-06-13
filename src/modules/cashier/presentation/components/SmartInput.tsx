@@ -27,11 +27,11 @@ export function SmartInput({
         autoComplete="off"
         spellCheck={false}
         className="
-          w-full h-12 pl-11 pr-10 rounded-xl
+          w-full h-11 pl-11 pr-10 rounded-xl
           border border-slate-200 bg-white
-          text-slate-800 text-base
+          text-slate-800 text-sm
           shadow-sm outline-none
-          focus:border-blue-500 focus:ring-2 focus:ring-blue-100
+          focus:border-sky-500 focus:ring-2 focus:ring-sky-100
           transition-all duration-150
           placeholder:text-slate-400
         "

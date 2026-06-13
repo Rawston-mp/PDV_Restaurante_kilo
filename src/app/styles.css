@@ -94,8 +94,8 @@ body {
   box-shadow: var(--shadow);
 }
 
-/* Estilos globais de button/input — excluídos da área .pdv-caixa-root */
-:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']) {
+/* Estilos globais legados aplicam apenas nas telas dentro de .content */
+.content button:not([class*='bg-']):not([class*='rounded']) {
   border: none;
   padding: 0.66rem 1rem;
   border-radius: 10px;
@@ -106,29 +106,29 @@ body {
   transition: filter 0.2s ease, transform 0.1s ease;
 }
 
-:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']):hover {
+.content button:not([class*='bg-']):not([class*='rounded']):hover {
   filter: brightness(1.08);
 }
 
-:not(.pdv-caixa-root) button:not([class*='bg-']):not([class*='rounded']):active {
+.content button:not([class*='bg-']):not([class*='rounded']):active {
   transform: translateY(1px);
 }
 
-input {
+.content input {
   padding: 0.56rem 0.62rem;
   border-radius: 10px;
   border: 1px solid #cbd5e1;
   background: var(--surface-soft);
 }
 
-select {
+.content select {
   padding: 0.56rem 0.62rem;
   border-radius: 10px;
   border: 1px solid #cbd5e1;
   background: var(--surface-soft);
 }
 
-form {
+.content form {
   display: grid;
   gap: 0.75rem;
 }

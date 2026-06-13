@@ -8,6 +8,7 @@ export type Product = {
   price: number;
   category: string;
   unit: ProductUnit;
+  imageUrl?: string;
 };
 
 export type CartItem = {
@@ -55,26 +56,26 @@ export const PAYMENT_METHODS: { method: PaymentMethod; label: string; color: str
 ];
 
 export const MOCK_PRODUCTS: Product[] = [
-  { id: 'p01', name: 'Self Service', price: 59.90, category: 'Destaque', unit: 'KG' },
-  { id: 'p02', name: 'Self Service Kids', price: 39.90, category: 'Destaque', unit: 'KG' },
-  { id: 'p03', name: 'Coca-Cola 600ml', price: 7.50, category: 'Bebidas', unit: 'UN' },
-  { id: 'p04', name: 'Coca-Cola KS', price: 5.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p05', name: 'Água Sem Gás 500ml', price: 3.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p06', name: 'Água Com Gás 330ml', price: 4.50, category: 'Bebidas', unit: 'UN' },
-  { id: 'p07', name: 'Suco Natural', price: 9.90, category: 'Bebidas', unit: 'UN' },
-  { id: 'p08', name: 'Cerveja Brahma 600ml', price: 11.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p09', name: 'Cerveja Heineken 600ml', price: 14.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p10', name: 'Banana Prata', price: 6.99, category: 'Sobremesas', unit: 'KG' },
-  { id: 'p11', name: 'Balas Yogurte', price: 2.50, category: 'Destaque', unit: 'UN' },
-  { id: 'p12', name: 'Cheetos Mix Queijo', price: 5.50, category: 'Lanches', unit: 'UN' },
-  { id: 'p13', name: 'Bis Extra Oreo', price: 4.90, category: 'Sobremesas', unit: 'UN' },
-  { id: 'p14', name: 'Caipirão', price: 18.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p15', name: 'Costela Suína', price: 49.90, category: 'Porções', unit: 'KG' },
-  { id: 'p16', name: 'Doce de Leite', price: 8.00, category: 'Sobremesas', unit: 'UN' },
-  { id: 'p17', name: 'Porcao Fritas', price: 24.90, category: 'Porções', unit: 'UN' },
-  { id: 'p18', name: 'Doce do Conde', price: 6.00, category: 'Sobremesas', unit: 'UN' },
-  { id: 'p19', name: 'Ypiôca', price: 16.00, category: 'Bebidas', unit: 'UN' },
-  { id: 'p20', name: 'Diamante Negro', price: 3.50, category: 'Sobremesas', unit: 'UN' },
+  { id: 'p01', name: 'PF Completo', price: 25.90, category: 'Destaque', unit: 'UN', imageUrl: 'https://picsum.photos/seed/pf-completo/320/220' },
+  { id: 'p02', name: 'Self Service', price: 5.49, category: 'Self Service', unit: 'KG', imageUrl: 'https://picsum.photos/seed/self-service/320/220' },
+  { id: 'p03', name: 'Filé de Frango', price: 21.90, category: 'Destaque', unit: 'UN', imageUrl: 'https://picsum.photos/seed/file-frango/320/220' },
+  { id: 'p04', name: 'X-Burger', price: 18.90, category: 'Lanches', unit: 'UN', imageUrl: 'https://picsum.photos/seed/xburger/320/220' },
+  { id: 'p05', name: 'Coca-Cola Lata', price: 6.00, category: 'Bebidas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/coca/320/220' },
+  { id: 'p06', name: 'Suco de Laranja', price: 7.50, category: 'Bebidas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/suco-laranja/320/220' },
+  { id: 'p07', name: 'Bolo de Chocolate', price: 9.90, category: 'Sobremesas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/bolo-chocolate/320/220' },
+  { id: 'p08', name: 'Batata Frita', price: 14.90, category: 'Porções', unit: 'UN', imageUrl: 'https://picsum.photos/seed/batata-frita/320/220' },
+  { id: 'p09', name: 'Café Expresso', price: 8.00, category: 'Bebidas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/cafe-expresso/320/220' },
+  { id: 'p10', name: 'Pudim', price: 7.90, category: 'Sobremesas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/pudim/320/220' },
+  { id: 'p11', name: 'Milkshake', price: 12.50, category: 'Bebidas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/milkshake/320/220' },
+  { id: 'p12', name: 'Brigadeiro', price: 4.90, category: 'Sobremesas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/brigadeiro/320/220' },
+  { id: 'p13', name: 'Coxinha', price: 8.50, category: 'Lanches', unit: 'UN', imageUrl: 'https://picsum.photos/seed/coxinha/320/220' },
+  { id: 'p14', name: 'Pastel', price: 9.90, category: 'Lanches', unit: 'UN', imageUrl: 'https://picsum.photos/seed/pastel/320/220' },
+  { id: 'p15', name: 'Água Mineral', price: 4.00, category: 'Bebidas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/agua-mineral/320/220' },
+  { id: 'p16', name: 'Açaí 300ml', price: 13.00, category: 'Sobremesas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/acai/320/220' },
+  { id: 'p17', name: 'Wrap Frango', price: 16.50, category: 'Lanches', unit: 'UN', imageUrl: 'https://picsum.photos/seed/wrap-frango/320/220' },
+  { id: 'p18', name: 'Cheesecake', price: 11.90, category: 'Sobremesas', unit: 'UN', imageUrl: 'https://picsum.photos/seed/cheesecake/320/220' },
+  { id: 'p19', name: 'Empadão', price: 15.00, category: 'Lanches', unit: 'UN', imageUrl: 'https://picsum.photos/seed/empadao/320/220' },
+  { id: 'p20', name: 'Porção Mista', price: 39.90, category: 'Porções', unit: 'UN', imageUrl: 'https://picsum.photos/seed/porcao-mista/320/220' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

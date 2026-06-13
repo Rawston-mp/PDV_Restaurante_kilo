@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
+import { type CashierCartItem } from './CartItem';
 import { type PaymentEntry, type PaymentMethod, PAYMENT_METHODS, formatBRL } from '../../types';
 
 type PaymentPanelProps = {
   total: number;
+  items: CashierCartItem[];
   onConfirm: (payments: PaymentEntry[]) => void;
   onBack: () => void;
 };
@@ -34,7 +36,7 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
   );
 }
 
-export function PaymentPanel({ total, onConfirm, onBack }: PaymentPanelProps) {
+export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelProps) {
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
   const [inputRaw, setInputRaw] = useState('');
@@ -42,6 +44,21 @@ export function PaymentPanel({ total, onConfirm, onBack }: PaymentPanelProps) {
   const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
   const remaining = Math.max(0, total - totalPaid);
   const change = totalPaid > total ? totalPaid - total : 0;
+  const fiscalSummary = items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+    total: item.quantity * item.unitPrice,
+    productCode: item.productCode,
+    barcode: item.barcode,
+    ncm: item.ncm,
+    cfop: item.cfop,
+    taxSituationCode: item.taxSituationCode,
+    fiscalType: item.fiscalType
+  }));
+  const totalWeightItems = items.filter((item) => item.unit === 'KG').length;
+  const totalUnitQuantity = items.filter((item) => item.unit === 'UN').reduce((acc, item) => acc + item.quantity, 0);
 
   // Parse the raw string input (e.g. "5990" → 59.90)
   const parseAmount = (raw: string): number => {
@@ -126,6 +143,24 @@ export function PaymentPanel({ total, onConfirm, onBack }: PaymentPanelProps) {
               {label}
             </button>
           ))}
+
+          <div className="mx-2 mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo fiscal</p>
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex justify-between gap-3">
+                <span>Itens por peso</span>
+                <strong className="text-slate-800">{totalWeightItems}</strong>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Itens por unidade</span>
+                <strong className="text-slate-800">{totalUnitQuantity}</strong>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Subtotal fiscal</span>
+                <strong className="text-slate-800">{formatBRL(total)}</strong>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── Right: numpad + applied payments ──────────────────── */}
@@ -183,6 +218,40 @@ export function PaymentPanel({ total, onConfirm, onBack }: PaymentPanelProps) {
                   <span className="text-sm font-bold">{formatBRL(change)}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {fiscalSummary.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <p className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
+                Itens fiscais da venda
+              </p>
+              <ul className="divide-y divide-slate-100">
+                {fiscalSummary.map((item) => (
+                  <li key={item.id} className="px-3 py-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                        <p className="text-[11px] text-slate-500">
+                          ID {item.productCode ?? '--'} · NCM {item.ncm ?? '--'} · CFOP {item.cfop ?? '--'}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {item.fiscalType ?? 'Fiscal nao informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold text-slate-800">{formatBRL(item.total)}</p>
+                        <p className="text-[11px] text-slate-500">
+                          {item.quantity.toLocaleString('pt-BR', {
+                            minimumFractionDigits: item.unit === 'KG' ? 3 : 0,
+                            maximumFractionDigits: item.unit === 'KG' ? 3 : 0
+                          })} {item.unit === 'KG' ? 'kg' : 'un'}
+                        </p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
