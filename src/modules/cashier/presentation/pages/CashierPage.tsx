@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import '@/modules/cashier/caixa.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock3, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
@@ -21,6 +21,14 @@ import { CashRegisterClose } from '@/modules/cashier/presentation/components/Cas
 import { type PaymentEntry } from '@/modules/cashier/types';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
+import type { ItemComanda } from '@/types/comanda';
+import {
+  clearComandaCache,
+  listOpenComandaNumbers,
+  readComandaItems,
+  removeComandaCacheEntry,
+  upsertComandaItems
+} from '@/shared/infrastructure/storage/comandaCache';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CashierPage — tela de caixa unificada
@@ -45,8 +53,15 @@ type HeaderComandaRecord = {
   status: HeaderComandaStatus;
 };
 
+type ActiveComandaEntry = {
+  numero: string;
+  origem: 'BALANCA' | 'CAIXA';
+  status?: HeaderComandaStatus;
+};
+
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-const CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
+const NON_OPEN_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
+const COUNTABLE_CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA'];
 
 const normalizeSearchText = (value: string) =>
   value
@@ -77,6 +92,113 @@ const formatLaunchDateTime = (date: Date) =>
     minute: '2-digit'
   });
 
+const sortComandasByNumero = (items: ActiveComandaEntry[]) =>
+  [...items].sort((a, b) => {
+    const numeroA = Number(a.numero);
+    const numeroB = Number(b.numero);
+
+    const isNumeroAValido = Number.isFinite(numeroA);
+    const isNumeroBValido = Number.isFinite(numeroB);
+
+    if (isNumeroAValido && isNumeroBValido) {
+      return numeroA - numeroB;
+    }
+
+    return a.numero.localeCompare(b.numero, 'pt-BR');
+  });
+
+const readLocalOpenComandas = (): ActiveComandaEntry[] => {
+  return listOpenComandaNumbers().map((numero) => ({
+    numero,
+    origem: 'CAIXA' as const
+  }));
+};
+
+const mergeOpenComandas = (backendComandas: HeaderComandaRecord[]) => {
+  const entries = new Map<string, ActiveComandaEntry>();
+
+  for (const comanda of backendComandas) {
+    if (NON_OPEN_COMANDA_STATUSES.includes(comanda.status)) {
+      continue;
+    }
+
+    entries.set(comanda.numero, {
+      numero: comanda.numero,
+      origem: 'BALANCA',
+      status: comanda.status
+    });
+  }
+
+  for (const localComanda of readLocalOpenComandas()) {
+    if (!entries.has(localComanda.numero)) {
+      entries.set(localComanda.numero, localComanda);
+    }
+  }
+
+  return sortComandasByNumero([...entries.values()]);
+};
+
+const mapComandaItemsToCashierCart = (items: ItemComanda[], catalog: CashierProduct[]): CashierCartItem[] => {
+  return items.map((item) => {
+    const matchedProduct = catalog.find((product) => normalizeSearchText(product.name) === normalizeSearchText(item.nome));
+
+    return {
+      id: item.id,
+      name: item.nome,
+      description: matchedProduct?.description,
+      quantity: item.quantidade,
+      unitPrice: item.precoUnitario,
+      unit: item.porUnidade ? 'UN' : 'KG',
+      productCode: matchedProduct?.productCode,
+      barcode: matchedProduct?.barcode,
+      ncm: matchedProduct?.ncm,
+      cfop: matchedProduct?.cfop,
+      taxSituationCode: matchedProduct?.taxSituationCode,
+      fiscalType: matchedProduct?.fiscalType,
+      imageUrl: matchedProduct?.imageUrl
+    };
+  });
+};
+
+const persistCashierItemsToComanda = (numero: string, items: CashierCartItem[]) => {
+  if (!numero.trim()) {
+    return;
+  }
+
+  upsertComandaItems(
+    numero,
+    items.map((item) => ({
+      id: item.id,
+      nome: item.name,
+      precoUnitario: item.unitPrice,
+      quantidade: item.quantity,
+      categoriaId: 'CAIXA',
+      subtotal: Number((item.quantity * item.unitPrice).toFixed(2)),
+      porUnidade: item.unit === 'UN',
+      peso: item.unit === 'KG' ? item.quantity : undefined
+    }))
+  );
+};
+
+const extractComandaNumber = (raw: string) => {
+  const input = raw.trim();
+  if (!input) {
+    return null;
+  }
+
+  const explicitTagMatch = input.match(/^(?:comanda|cmd|mesa|balanca)\s*[:#-]?\s*(\d{1,12})$/i);
+  if (explicitTagMatch) {
+    return explicitTagMatch[1];
+  }
+
+  const digitsOnly = input.match(/^\d{1,12}$/);
+  if (digitsOnly) {
+    return digitsOnly[0];
+  }
+
+  return null;
+};
+
 export function CashierPage() {
   const { user, signOut } = useAuth();
   const { products, setProducts } = useProductsQuery();
@@ -86,10 +208,14 @@ export function CashierPage() {
   const [cashCloseInitialSection, setCashCloseInitialSection] = useState<CashCloseSection>('INICIO');
   const [query, setQuery]                   = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
-  const [comandaNumber]                     = useState('113942');
+  const [comandaNumber, setComandaNumber]   = useState('113942');
   const [cartItems, setCartItems]           = useState<CashierCartItem[]>([]);
   const [openComandasCount, setOpenComandasCount] = useState(0);
   const [closedComandasCount, setClosedComandasCount] = useState(0);
+  const [openComandas, setOpenComandas] = useState<ActiveComandaEntry[]>([]);
+  const [isOpenComandasPanelOpen, setIsOpenComandasPanelOpen] = useState(false);
+  const hasActiveComanda = Boolean(comandaNumber.trim()) && openComandas.some((entry) => entry.numero === comandaNumber.trim());
+  const activeComandaLabel = hasActiveComanda ? comandaNumber.trim() : 'Sem comanda';
 
   const focusProductSearchInput = () => {
     window.requestAnimationFrame(() => {
@@ -101,6 +227,126 @@ export function CashierPage() {
 
   const openProductSearch = () => {
     setView('pos');
+    focusProductSearchInput();
+  };
+
+  const cancelComanda = async (numero: string, confirmMessage?: string) => {
+    const trimmed = numero.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const confirmed = window.confirm(confirmMessage ?? `Deseja cancelar comanda #${trimmed}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(trimmed)}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'CANCELADA',
+          reason: 'cancelada_no_caixa'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao cancelar comanda no backend.');
+      }
+    } catch {
+      // Se backend indisponível, aplica cancelamento local para não travar operação
+    }
+
+    removeComandaCacheEntry(trimmed);
+    setCartItems((currentItems) => (comandaNumber.trim() === trimmed ? [] : currentItems));
+    setOpenComandas((prev) => {
+      const next = prev.filter((entry) => entry.numero !== trimmed);
+      setOpenComandasCount(next.length);
+      return next;
+    });
+
+    if (comandaNumber.trim() === trimmed) {
+      setComandaNumber('');
+      setQuery('');
+      focusProductSearchInput();
+    }
+  };
+
+  const handleShortcutCancelComanda = () => {
+    const activeNumber = comandaNumber.trim();
+    if (activeNumber) {
+      void cancelComanda(activeNumber, `Deseja cancelar a comanda ativa #${activeNumber}?`);
+      return;
+    }
+
+    if (openComandas.length === 0) {
+      window.alert('Nao ha comandas abertas para cancelar.');
+      return;
+    }
+
+    const available = openComandas.map((entry) => entry.numero).join(', ');
+    const suggested = comandaNumber.trim() || openComandas[0]?.numero || '';
+    const selected = window.prompt(
+      `Deseja cancelar qual comanda?\nDisponiveis: ${available}`,
+      suggested
+    );
+
+    if (!selected) {
+      return;
+    }
+
+    const parsed = extractComandaNumber(selected);
+    if (!parsed) {
+      window.alert('Numero de comanda invalido para cancelamento.');
+      return;
+    }
+
+    if (!openComandas.some((entry) => entry.numero === parsed)) {
+      window.alert(`Comanda #${parsed} nao esta na lista de comandas abertas.`);
+      return;
+    }
+
+    void cancelComanda(parsed);
+  };
+
+  const handleSmartInputSubmit = (rawValue: string) => {
+    const comandaFromInput = extractComandaNumber(rawValue);
+    if (!comandaFromInput) {
+      return;
+    }
+
+    setComandaNumber(comandaFromInput);
+    setCartItems(mapComandaItemsToCashierCart(readComandaItems(comandaFromInput), catalogProducts));
+    setOpenComandas((prev) => {
+      if (prev.some((entry) => entry.numero === comandaFromInput)) {
+        return prev;
+      }
+
+      const next = sortComandasByNumero([
+        ...prev,
+        {
+          numero: comandaFromInput,
+          origem: 'CAIXA'
+        }
+      ]);
+      setOpenComandasCount(next.length);
+
+      return next;
+    });
+    setQuery('');
+    focusProductSearchInput();
+  };
+
+  const refreshCurrentComanda = () => {
+    const currentNumber = comandaNumber.trim();
+    if (!currentNumber) {
+      return;
+    }
+
+    setCartItems(mapComandaItemsToCashierCart(readComandaItems(currentNumber), catalogProducts));
     focusProductSearchInput();
   };
 
@@ -116,6 +362,22 @@ export function CashierPage() {
   const handleCancelCoupons = () => {
     notifyFeaturePending('Cancelar cupons');
     setView('pos');
+  };
+
+  const handleClearComandaCache = () => {
+    const confirmed = window.confirm('Deseja limpar o cache local de comandas do caixa?');
+    if (!confirmed) {
+      return;
+    }
+
+    clearComandaCache();
+    setOpenComandas([]);
+    setOpenComandasCount(0);
+    setCartItems([]);
+    setComandaNumber('');
+    setQuery('');
+    setIsOpenComandasPanelOpen(false);
+    focusProductSearchInput();
   };
 
   const now = new Date();
@@ -153,28 +415,44 @@ export function CashierPage() {
     return ['Todos', ...[...categorySet].sort((a, b) => a.localeCompare(b, 'pt-BR'))];
   }, [catalogProducts]);
 
+  const refreshComandaIndicators = useCallback(async () => {
+    const response = await fetch(`${API_BASE}/api/v1/comandas`);
+    if (!response.ok) {
+      throw new Error('Falha ao consultar comandas no backend.');
+    }
+
+    const payload = (await response.json()) as { ok?: boolean; comandas?: HeaderComandaRecord[] };
+    if (!Array.isArray(payload.comandas)) {
+      return;
+    }
+
+    const mergedOpenComandas = mergeOpenComandas(payload.comandas);
+    const totalOpen = mergedOpenComandas.length;
+    const totalClosed = payload.comandas.filter((comanda) => COUNTABLE_CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
+
+    for (const closedComanda of payload.comandas.filter((comanda) => NON_OPEN_COMANDA_STATUSES.includes(comanda.status))) {
+      removeComandaCacheEntry(closedComanda.numero);
+    }
+
+    setOpenComandas(mergedOpenComandas);
+    setOpenComandasCount(totalOpen);
+    setClosedComandasCount(totalClosed);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     const loadComandaIndicators = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/v1/comandas`);
-        if (!response.ok) {
+        await refreshComandaIndicators();
+        if (cancelled) {
           return;
         }
-
-        const payload = (await response.json()) as { ok?: boolean; comandas?: HeaderComandaRecord[] };
-        if (cancelled || !Array.isArray(payload.comandas)) {
-          return;
-        }
-
-        const totalOpen = payload.comandas.filter((comanda) => !CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
-        const totalClosed = payload.comandas.filter((comanda) => CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
-        setOpenComandasCount(totalOpen);
-        setClosedComandasCount(totalClosed);
       } catch {
         if (!cancelled) {
-          setOpenComandasCount(0);
+          const localOpenComandas = readLocalOpenComandas();
+          setOpenComandas(localOpenComandas);
+          setOpenComandasCount(localOpenComandas.length);
           setClosedComandasCount(0);
         }
       }
@@ -189,7 +467,47 @@ export function CashierPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [refreshComandaIndicators]);
+
+  const handleCashClose = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/comandas`);
+      if (response.ok) {
+        const payload = (await response.json()) as { ok?: boolean; comandas?: HeaderComandaRecord[] };
+        if (Array.isArray(payload.comandas)) {
+          const closedComandas = payload.comandas.filter((comanda) => COUNTABLE_CLOSED_COMANDA_STATUSES.includes(comanda.status));
+
+          await Promise.all(
+            closedComandas.map(async (comanda) => {
+              try {
+                await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(comanda.numero)}/status`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    status: 'ARQUIVADA',
+                    reason: 'fechamento_caixa'
+                  })
+                });
+              } catch {
+                // segue para próximo registro sem interromper operação
+              }
+
+              removeComandaCacheEntry(comanda.numero);
+            })
+          );
+        }
+      }
+    } catch {
+      // mantém fechamento local mesmo sem backend
+    }
+
+    await refreshComandaIndicators().catch(() => {
+      setClosedComandasCount(0);
+    });
+    setView('pos');
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -218,7 +536,7 @@ export function CashierPage() {
 
       if (event.key === 'F8') {
         event.preventDefault();
-        handleCancelLastSale();
+        handleShortcutCancelComanda();
         return;
       }
 
@@ -257,6 +575,25 @@ export function CashierPage() {
       return matchesCat && matchesQuery;
     });
   }, [activeCategory, query, catalogProducts]);
+
+  useEffect(() => {
+    persistCashierItemsToComanda(comandaNumber, cartItems);
+  }, [cartItems, comandaNumber]);
+
+  useEffect(() => {
+    const current = comandaNumber.trim();
+    if (!current) {
+      return;
+    }
+
+    const isStillOpen = openComandas.some((entry) => entry.numero === current);
+    if (isStillOpen) {
+      return;
+    }
+
+    setComandaNumber('');
+    setCartItems([]);
+  }, [comandaNumber, openComandas]);
 
   const updateProductStatus = async (productId: string, patch: Partial<Pick<Product, 'isUnavailable' | 'isHidden'>>) => {
     const currentProduct = products.find((product) => product.id === productId);
@@ -570,9 +907,57 @@ export function CashierPage() {
           </div>
           <div className="h-10 w-px bg-slate-200" />
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Comandas abertas</p>
-              <p className="text-4xl font-black text-sky-600 leading-none">{openComandasCount.toLocaleString('pt-BR')}</p>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsOpenComandasPanelOpen((prev) => !prev)}
+                className="text-left"
+              >
+                <p className="text-xs uppercase tracking-wide text-slate-500">Comandas abertas</p>
+                <p className="text-4xl font-black text-sky-600 leading-none">{openComandasCount.toLocaleString('pt-BR')}</p>
+              </button>
+
+              {isOpenComandasPanelOpen && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Comandas abertas no sistema</p>
+
+                  {openComandas.length === 0 ? (
+                    <p className="mt-3 text-sm text-slate-500">Nenhuma comanda aberta no momento.</p>
+                  ) : (
+                    <ul className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                      {openComandas.map((entry) => (
+                        <li key={`${entry.origem}-${entry.numero}`}>
+                          <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSmartInputSubmit(entry.numero);
+                                setIsOpenComandasPanelOpen(false);
+                              }}
+                              className="flex flex-1 items-center justify-between text-left hover:text-sky-700"
+                            >
+                              <span className="text-sm font-semibold text-slate-700">#{entry.numero}</span>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                {entry.origem === 'BALANCA' ? 'Balança' : 'Caixa'}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void cancelComanda(entry.numero);
+                              }}
+                              className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-500">Comandas fechadas</p>
@@ -582,6 +967,10 @@ export function CashierPage() {
         </div>
 
         <div className="flex items-center gap-6 text-slate-600">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">Comanda ativa</p>
+            <p className="text-base font-bold leading-tight text-sky-700">{hasActiveComanda ? `#${activeComandaLabel}` : activeComandaLabel}</p>
+          </div>
           <div className="flex items-center gap-2">
             <UserRound size={20} className="text-sky-600" />
             <div>
@@ -620,8 +1009,11 @@ export function CashierPage() {
             onConsultStock={() => notifyFeaturePending('Consultar estoque')}
             onCancelLastSale={handleCancelLastSale}
             onCancelCoupons={handleCancelCoupons}
+            onClearComandaCache={handleClearComandaCache}
             onBack={() => setView('pos')}
-            onClose={() => setView('pos')}
+            onClose={() => {
+              void handleCashClose();
+            }}
             items={cartItems}
           />
         ) : view === 'payment' ? (
@@ -630,7 +1022,13 @@ export function CashierPage() {
           <>
             {/* ── SmartInput ─────────────────────────────────────── */}
             <div className="px-5 pt-5 pb-3 shrink-0">
-              <SmartInput value={query} onChange={setQuery} />
+              <SmartInput
+                value={query}
+                onChange={setQuery}
+                onSubmit={handleSmartInputSubmit}
+                keepFocused
+                placeholder="Digite ou leia a comanda (numero/codigo) e pressione Enter"
+              />
             </div>
 
             {/* ── CategoryTabs ───────────────────────────────────── */}
@@ -664,6 +1062,7 @@ export function CashierPage() {
             onIncrement={incrementItem}
             onDecrement={decrementItem}
             onRemove={removeItem}
+            onRefreshComanda={refreshCurrentComanda}
             onReceive={() => setView('payment')}
             onCashClose={() => {
               setCashCloseInitialTab('MENU');

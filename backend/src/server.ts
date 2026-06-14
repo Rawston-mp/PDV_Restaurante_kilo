@@ -22,6 +22,18 @@ type PesoSensorPayload = {
 };
 
 const app = express();
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+
+  next();
+});
 app.use(express.json());
 
 const httpServer = createServer(app);
@@ -524,6 +536,9 @@ if (serialPath) {
     // eslint-disable-next-line no-console
     console.error('Falha ao iniciar leitura do sensor:', error);
   }
+} else {
+  // eslint-disable-next-line no-console
+  console.warn('Leitor de balanca desativado: defina SERIAL_PORT_PATH para habilitar leitura serial.');
 }
 
 const PORT = Number(process.env.PORT ?? 3001);

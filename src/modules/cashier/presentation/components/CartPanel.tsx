@@ -8,6 +8,7 @@ type CartPanelProps = {
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
+  onRefreshComanda: () => void;
   onReceive: () => void;
   onCashClose: () => void;
 };
@@ -18,6 +19,7 @@ export function CartPanel({
   onIncrement,
   onDecrement,
   onRemove,
+  onRefreshComanda,
   onReceive,
   onCashClose,
 }: CartPanelProps) {
@@ -76,6 +78,19 @@ export function CartPanel({
             {formatBRL(subtotal)}
           </span>
         </div>
+
+        <button
+          type="button"
+          onClick={onRefreshComanda}
+          className="
+            w-full h-11 rounded-xl
+            border border-slate-300 bg-slate-50 hover:bg-slate-100
+            text-slate-700 text-sm font-semibold
+            transition-colors duration-150
+          "
+        >
+          Atualizar comanda
+        </button>
 
         <button
           type="button"

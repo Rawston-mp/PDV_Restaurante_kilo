@@ -179,6 +179,7 @@ type CashRegisterCloseProps = {
   onConsultStock: () => void;
   onCancelLastSale: () => void;
   onCancelCoupons: () => void;
+  onClearComandaCache: () => void;
   initialTab?: AdminTab;
   initialSection?: AdminSection;
   items?: Array<{
@@ -204,6 +205,7 @@ export function CashRegisterClose({
   onConsultStock,
   onCancelLastSale,
   onCancelCoupons,
+  onClearComandaCache,
   initialTab = 'MENU',
   initialSection = 'INICIO',
   items = []
@@ -469,6 +471,10 @@ export function CashRegisterClose({
                 <button type="button" onClick={onCancelCoupons} className={`${menuTileBase} hover:bg-red-50 hover:border-red-300`}>
                   <p className="text-sm font-semibold text-slate-800">Cancelar cupons (Alt+C)</p>
                   <p className="text-xs text-slate-500">Cancela o cupom fiscal em andamento</p>
+                </button>
+                <button type="button" onClick={onClearComandaCache} className={`${menuTileBase} hover:bg-amber-50 hover:border-amber-300`}>
+                  <p className="text-sm font-semibold text-slate-800">Limpar cache de comandas</p>
+                  <p className="text-xs text-slate-500">Remove snapshots locais de comandas no caixa</p>
                 </button>
               </div>
             </section>
