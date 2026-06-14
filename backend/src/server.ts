@@ -11,7 +11,8 @@ import {
   type ComandaLockStationId,
   type ComandaStatus
 } from './domain/comandaStateMachine';
-import { ComandaFileStore } from './infrastructure/comandaFileStore';
+import type { ComandaStore } from './infrastructure/comandaStore';
+import { createComandaStore } from './infrastructure/comandaStore';
 import { startScaleReader } from './services/scaleReader.service';
 
 type PesoSensorPayload = {
@@ -31,7 +32,7 @@ const io = new Server(httpServer, {
 });
 
 const comandaService = new ComandaStateMachineService();
-const comandaStore = new ComandaFileStore();
+let comandaStore: ComandaStore;
 
 const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
 const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
@@ -155,6 +156,14 @@ const resolveLockError = (error: unknown) => {
 };
 
 const initializeComandas = async () => {
+  if (!comandaStore) {
+    const result = await createComandaStore();
+    comandaStore = result.store;
+
+    // eslint-disable-next-line no-console
+    console.log(`Persistencia de comanda: ${result.usingPostgres ? 'PostgreSQL' : 'arquivo local'}`);
+  }
+
   const snapshot = await comandaStore.loadState();
   if (!snapshot) {
     return;
