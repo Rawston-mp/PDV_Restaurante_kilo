@@ -152,6 +152,7 @@ export function ComandaScreen() {
           <ComandaHeader
             status={statusOperacional}
             title="TELA DE COMANDA"
+            isOfflineMode={state.isOfflineMode}
           />
           <div className="comanda-top-fields">
             <div className="comanda-field-group">
@@ -163,6 +164,12 @@ export function ComandaScreen() {
                 value={state.comandaNumber}
                 onFocus={actions.focarComanda}
                 onChange={(event) => actions.setComandaNumber(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    actions.focarPesquisa();
+                  }
+                }}
                 placeholder="Ex.: 125"
                 className="comanda-number-input"
               />
@@ -176,6 +183,12 @@ export function ComandaScreen() {
                 value={state.pesquisa}
                 onFocus={actions.focarPesquisa}
                 onChange={(event) => actions.setPesquisa(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    actions.handleKeyPress('Enter');
+                  }
+                }}
                 placeholder="Digite para filtrar produtos"
                 className="comanda-search-input"
               />

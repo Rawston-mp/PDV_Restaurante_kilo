@@ -141,6 +141,49 @@ Build de producao:
 npm run build
 ```
 
+## PostgreSQL Local (Backend)
+
+O backend de comandas agora tenta usar PostgreSQL local por padrao e cria as tabelas automaticamente no startup.
+
+Tabelas criadas:
+- `pdv_comanda_state`
+- `pdv_comanda_audit`
+
+Variaveis de ambiente suportadas:
+- `PDV_USE_POSTGRES`: `true|false` (padrao: `true`)
+- `DATABASE_URL`: string de conexao completa (opcional)
+- `PGHOST` (padrao: `127.0.0.1`)
+- `PGPORT` (padrao: `5432`)
+- `PGDATABASE` (padrao: `postgres`)
+- `PGUSER` (padrao: `postgres`)
+- `PGPASSWORD` (sem padrao)
+- `PGSSL`: `true|false` (padrao: `false`)
+
+Exemplo PowerShell (Windows):
+
+```powershell
+$env:PGHOST="127.0.0.1"
+$env:PGPORT="5432"
+$env:PGDATABASE="postgres"
+$env:PGUSER="postgres"
+$env:PGPASSWORD="sua_senha"
+$env:PDV_USE_POSTGRES="true"
+```
+
+Iniciar backend (criacao automatica das tabelas no startup):
+
+```bash
+npm run backend:start
+```
+
+Modo desenvolvimento com reload:
+
+```bash
+npm run backend:dev
+```
+
+Se a conexao ao PostgreSQL falhar, o backend faz fallback automatico para persistencia em arquivo local.
+
 ## Trade-offs da Solucao
 
 Pros:

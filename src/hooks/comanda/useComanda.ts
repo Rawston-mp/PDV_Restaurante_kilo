@@ -85,6 +85,20 @@ const formatLockConflictMessage = (error: BackendError) => {
   return error.message || 'Comanda em uso por outra balanca.';
 };
 
+const isConnectivityError = (error: unknown) => {
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const rawMessage = String((error as { message?: unknown }).message ?? '');
+    const normalizedMessage = rawMessage.toLowerCase();
+    return normalizedMessage.includes('failed to fetch') || normalizedMessage.includes('networkerror');
+  }
+
+  return false;
+};
+
 const parseError = async (response: Response): Promise<BackendError> => {
   const fallback: BackendError = {
     status: response.status,
@@ -138,6 +152,7 @@ export function useComanda(taxaImposto = 0.1) {
   const [erro, setErro] = useState<string | null>(null);
   const [precoAtual, setPrecoAtual] = useState(0);
   const [lockData, setLockData] = useState<LockData | null>(null);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
   const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
@@ -372,10 +387,17 @@ export function useComanda(taxaImposto = 0.1) {
       return false;
     }
 
+    if (comandaAtivaId === nextId) {
+      setErro(null);
+      return true;
+    }
+
     const comandaAnterior = comandaAtivaId && comandaAtivaId !== nextId ? comandaAtivaId : null;
+    let openedOffline = false;
 
     try {
       await requestOpenComanda(nextId);
+      setIsOfflineMode(false);
       if (lockContext) {
         await acquireLock(nextId);
 
@@ -384,14 +406,21 @@ export function useComanda(taxaImposto = 0.1) {
         }
       }
     } catch (backendError) {
-      const typedError = backendError as BackendError;
-      if (typedError.status === 409) {
-        setErro(formatLockConflictMessage(typedError));
+      if (isConnectivityError(backendError)) {
+        openedOffline = true;
+        setLockData(null);
+        setIsOfflineMode(true);
       } else {
-        setErro(typedError.message || 'Falha ao abrir comanda no backend.');
-      }
+        const typedError = backendError as BackendError;
+        if (typedError.status === 409) {
+          setErro(formatLockConflictMessage(typedError));
+          return false;
+        }
 
-      return false;
+        openedOffline = true;
+        setLockData(null);
+        setIsOfflineMode(true);
+      }
     }
 
     const snapshotAtual = comandaAtivaId
@@ -434,7 +463,7 @@ export function useComanda(taxaImposto = 0.1) {
     }
 
     setComandaAtivaId(nextId);
-    setErro(null);
+    setErro(openedOffline ? 'Backend indisponivel. Comanda aberta em modo local.' : null);
 
     return true;
   };
@@ -531,6 +560,7 @@ export function useComanda(taxaImposto = 0.1) {
     setPesquisa('');
     setErro(null);
     setPesoManual(null);
+    setIsOfflineMode(false);
     setCampoAtivo('COMANDA');
     toggleToNumerico();
 
@@ -548,6 +578,12 @@ export function useComanda(taxaImposto = 0.1) {
 
   const focarPesquisa = () => {
     void (async () => {
+      if (isComandaAberta && comandaAtivaId === comandaNumber.trim()) {
+        setCampoAtivo('PESQUISA');
+        toggleToVirtual();
+        return;
+      }
+
       const opened = await abrirComanda();
       if (!opened) {
         return;
@@ -628,6 +664,7 @@ export function useComanda(taxaImposto = 0.1) {
         }
       : null,
     comandaNumber,
+    isOfflineMode,
     lockOwner: lockData?.owner ?? null,
     lockStationId: lockData?.stationId ?? null,
     lockExpiresAt: lockData?.expiresAt ?? null,

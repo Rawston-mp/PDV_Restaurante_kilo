@@ -27,6 +27,7 @@ export interface Comanda {
 export interface EstadoComanda {
   comandaAtual: Comanda | null;
   comandaNumber: string;
+  isOfflineMode: boolean;
   lockOwner: 'COMANDA_A' | 'COMANDA_B' | null;
   lockStationId: 'BALANCA_A' | 'BALANCA_B' | null;
   lockExpiresAt: string | null;
