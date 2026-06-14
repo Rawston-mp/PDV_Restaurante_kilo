@@ -52,8 +52,8 @@ const roleNames: Record<Role, string> = {
   GERENTE: 'Gerente',
   CAIXA: 'Caixa',
   ATENDENTE: 'Atendente',
-  COMANDA_A: 'Comanda A',
-  COMANDA_B: 'Comanda B'
+  COMANDA_A: 'Balança A',
+  COMANDA_B: 'Balança B'
 };
 
 const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];

@@ -1,6 +1,6 @@
 ---
 name: pdv-touch-enterprise
-description: "Use when: atualizar ou consultar o fluxo operacional do PDV Touch, especialmente tela de comanda, perfis COMANDA_A/COMANDA_B, PIN, teclado numerico/virtual, sensor de peso, rotas /comanda e backend /comandas/*."
+description: "Use when: atualizar ou consultar o fluxo operacional do PDV Touch, especialmente tela de comanda, perfis COMANDA_A/COMANDA_B (UI exibida como Balança A/B), PIN, teclado numerico/virtual, sensor de peso, caixa e backend de comandas."
 ---
 
 # PDV Touch Enterprise Skill
@@ -36,6 +36,25 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Catalogo vem do cadastro de produtos (sem catalogo hardcoded).
 - Caixa usa cadastro real de produtos com `descricao`, status `indisponivel` e status `oculto`.
 - RBAC e login por PIN estao ativos.
+
+## Atualizacoes Recentes (2026-06)
+- UI de autenticacao exibe `Balança A` e `Balança B` (mantendo roles internas `COMANDA_A` e `COMANDA_B`).
+- Tela do caixa com foco operacional no campo de leitura/digitacao de comanda:
+	- campo principal com foco continuo para leitor/teclado
+	- Enter abre atendimento por numero de comanda
+	- indicador visual de `Comanda ativa`
+- Integracao balanca -> caixa e caixa -> balanca via cache local compartilhado de itens de comanda:
+	- chave central: `pdv.comandas.itens.v1`
+	- utilitario dedicado: `src/shared/infrastructure/storage/comandaCache.ts`
+- No caixa, card `Comandas abertas` abre lista de comandas abertas (origem balanca + caixa), com selecao direta da comanda.
+- Em `Comandas abertas`, cada comanda possui acao `Cancelar` com confirmacao.
+- Atalho `F8` no caixa:
+	- se houver comanda ativa, pergunta `Deseja cancelar a comanda ativa #X?`
+	- se nao houver ativa, permite escolher numero entre abertas.
+- Em `Mais opcoes`, foi adicionada a acao `Limpar cache de comandas` com confirmacao.
+- No `Fechar caixa` (fim de expediente), comandas fechadas/canceladas sao arquivadas no backend e removidas do cache local.
+- Regra de consistencia no header do caixa:
+	- se nao houver comandas abertas, `Comanda ativa` e limpa e exibida como `Sem comanda`.
 
 ## Quando Usar
 - Quando precisar entender o fluxo principal da tela `/comanda`.
@@ -112,6 +131,10 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - `src/hooks/comanda/useWeight.ts`
 - `src/components/Comanda/WeightDisplay.tsx`
 - `src/components/Comanda/CategoryGrid.tsx`
+- `src/modules/cashier/presentation/pages/CashierPage.tsx`
+- `src/modules/cashier/presentation/components/CashRegisterClose.tsx`
+- `src/modules/cashier/presentation/components/SmartInput.tsx`
+- `src/shared/infrastructure/storage/comandaCache.ts`
 - `backend/src/server.ts`
 - `backend/src/services/scaleReader.service.ts`
 

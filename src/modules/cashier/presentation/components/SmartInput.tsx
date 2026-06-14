@@ -4,16 +4,23 @@ import { Search, X } from 'lucide-react';
 type SmartInputProps = {
   value: string;
   onChange: (value: string) => void;
+  onSubmit?: (value: string) => void;
+  keepFocused?: boolean;
   placeholder?: string;
 };
 
 export function SmartInput({
   value,
   onChange,
+  onSubmit,
+  keepFocused = false,
   placeholder = 'Buscar produto por nome, código ou categoria…',
 }: SmartInputProps) {
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
 
   return (
     <div className="relative flex items-center w-full">
@@ -24,6 +31,23 @@ export function SmartInput({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || !onSubmit) {
+            return;
+          }
+
+          event.preventDefault();
+          onSubmit(value);
+        }}
+        onBlur={() => {
+          if (!keepFocused) {
+            return;
+          }
+
+          window.setTimeout(() => {
+            ref.current?.focus();
+          }, 0);
+        }}
         placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}

@@ -10,6 +10,7 @@ import {
   readStoredProductCategories
 } from '@/modules/products/domain/services/productCategories';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
+import { readComandaCache, writeComandaCache } from '@/shared/infrastructure/storage/comandaCache';
 
 type ProdutoCatalogo = {
   id: string;
@@ -55,6 +56,36 @@ type AcquireLockResponse = {
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const LOCK_TTL_SECONDS = 120;
+
+type PersistedComandaSnapshot = {
+  itens: ItemComanda[];
+  updatedAt: string;
+};
+
+const loadPersistedComandas = (): Record<string, ComandaSnapshot> => {
+  const parsed = readComandaCache() as Record<string, PersistedComandaSnapshot>;
+  return Object.entries(parsed).reduce<Record<string, ComandaSnapshot>>((acc, [numero, snapshot]) => {
+    acc[numero] = {
+      itens: snapshot.itens,
+      dataAbertura: snapshot.updatedAt ? new Date(snapshot.updatedAt) : new Date()
+    };
+
+    return acc;
+  }, {});
+};
+
+const persistComandas = (comandas: Record<string, ComandaSnapshot>) => {
+  const payload = Object.entries(comandas).reduce<Record<string, PersistedComandaSnapshot>>((acc, [numero, snapshot]) => {
+    acc[numero] = {
+      itens: snapshot.itens,
+      updatedAt: snapshot.dataAbertura.toISOString()
+    };
+
+    return acc;
+  }, {});
+
+  writeComandaCache(payload);
+};
 
 const roleToLockContext = (role?: string | null): LockContext | null => {
   if (role === 'COMANDA_A') {
@@ -142,7 +173,7 @@ export function useComanda(taxaImposto = 0.1) {
   const [comandaNumber, setComandaNumber] = useState('');
   const [comandaAtivaId, setComandaAtivaId] = useState<string | null>(null);
   const [dataAberturaAtual, setDataAberturaAtual] = useState<Date | null>(null);
-  const [comandasAbertas, setComandasAbertas] = useState<Record<string, ComandaSnapshot>>({});
+  const [comandasAbertas, setComandasAbertas] = useState<Record<string, ComandaSnapshot>>(() => loadPersistedComandas());
   const [campoAtivo, setCampoAtivo] = useState<'COMANDA' | 'PESQUISA'>('COMANDA');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
@@ -214,6 +245,24 @@ export function useComanda(taxaImposto = 0.1) {
       setLockData(null);
     }
   }, [lockContext]);
+
+  useEffect(() => {
+    persistComandas(comandasAbertas);
+  }, [comandasAbertas]);
+
+  useEffect(() => {
+    if (!comandaAtivaId) {
+      return;
+    }
+
+    setComandasAbertas((prev) => ({
+      ...prev,
+      [comandaAtivaId]: {
+        itens,
+        dataAbertura: dataAberturaAtual ?? prev[comandaAtivaId]?.dataAbertura ?? new Date()
+      }
+    }));
+  }, [comandaAtivaId, dataAberturaAtual, itens]);
 
   const requestOpenComanda = async (numero: string) => {
     const response = await fetch(`${API_BASE}/api/v1/comandas`, {
