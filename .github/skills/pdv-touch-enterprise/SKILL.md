@@ -1,6 +1,6 @@
 ---
 name: pdv-touch-enterprise
-description: "Use when: atualizar ou consultar o fluxo operacional do PDV Touch, especialmente tela de comanda, perfis COMANDA_A/COMANDA_B (UI exibida como Balança A/B), PIN, teclado numerico/virtual, sensor de peso, caixa e backend de comandas."
+description: "Use when: atualizar ou consultar o fluxo operacional do PDV Touch, especialmente tela de comanda, perfis COMANDA_A/COMANDA_B (UI exibida como Balança A/B), PIN, teclado numerico/virtual, sensor de peso, caixa, cadastro de produtos, cards de produto, fluxo de pagamento e backend de comandas."
 ---
 
 # PDV Touch Enterprise Skill
@@ -34,7 +34,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 	- `Proxima Comanda` limpa numero e nao sugere proximo numero
 	- comanda anterior nao e encerrada automaticamente ao avancar
 - Catalogo vem do cadastro de produtos (sem catalogo hardcoded).
-- Caixa usa cadastro real de produtos com `descricao`, status `indisponivel` e status `oculto`.
+- Caixa usa cadastro real de produtos com `descricao`, foto, status `indisponivel` e status `oculto`.
 - RBAC e login por PIN estao ativos.
 
 ## Atualizacoes Recentes (2026-06)
@@ -53,6 +53,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 	- se nao houver ativa, permite escolher numero entre abertas.
 - Em `Mais opcoes`, foi adicionada a acao `Limpar cache de comandas` com confirmacao.
 - No `Fechar caixa` (fim de expediente), comandas fechadas/canceladas sao arquivadas no backend e removidas do cache local.
+- Cadastro/edicao de produtos recebeu layout com mais respiro: foto e categorias em paineis separados, preview de imagem contido e grid com espacamento maior.
 - Regra de consistencia no header do caixa:
 	- se nao houver comandas abertas, `Comanda ativa` e limpa e exibida como `Sem comanda`.
 
@@ -62,12 +63,14 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Quando houver ajustes em teclado virtual, teclado numerico ou foco entre campos.
 - Quando houver mudancas em leitura de peso, peso manual ou backend de comandas.
 - Quando for revisar regras de acesso, PIN ou checklist de validacao operacional.
+- Quando for alterar cadastro/edicao de produtos, cards do caixa, status indisponivel/oculto ou exibicao de foto/descricao.
 
 ## Escopo Implementado (Resumo)
 - Comanda operacional por numero (sem leitura de codigo de barras).
 - Pesagem por sensor + fallback manual.
 - Itens por peso/unidade usando cadastro real de produtos.
 - Lock por comanda com aquisicao, renovacao (heartbeat) e liberacao.
+- Cadastro de produtos com upload local de foto, preview contido, categoria gerenciavel e layout separado para foto/categorias.
 - Caixa com menu operacional no card do produto para:
 	- tornar indisponivel (visivel, mas bloqueado para adicionar)
 	- ocultar (retira do grid de venda)
@@ -134,6 +137,8 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - `src/modules/cashier/presentation/pages/CashierPage.tsx`
 - `src/modules/cashier/presentation/components/CashRegisterClose.tsx`
 - `src/modules/cashier/presentation/components/SmartInput.tsx`
+- `src/modules/products/presentation/pages/ProductsPage.tsx`
+- `src/app/styles.css`
 - `src/shared/infrastructure/storage/comandaCache.ts`
 - `backend/src/server.ts`
 - `backend/src/services/scaleReader.service.ts`
@@ -154,6 +159,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Para novas alteracoes operacionais, documentar sempre impacto em rota, perfil, teclado e validacao.
 - Se mudar PIN, role ou evento websocket, atualizar esta skill junto.
 - Se alterar fluxo de comanda, revisar testes e build antes de concluir.
+- Se alterar cadastro de produtos ou cards do caixa, validar espacamento, overflow, imagem, menu operacional e build.
 - Nao assumir que backend atual suporta estados completos de comanda sem implementar camada de dominio/persistencia.
 
 ## Checklist de Validacao
@@ -164,7 +170,9 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 5. Validar Enter no peso manual para aplicar/lancar item.
 6. Validar `Proxima Comanda` limpando numero e sem sugestao automatica.
 7. Validar que avancar comanda nao fecha automaticamente a anterior.
-8. Rodar build e, quando aplicavel, testes automatizados.
+8. Validar cadastro/edicao de produto com foto, categorias, descricao e status indisponivel/oculto.
+9. Validar cards do caixa com produto disponivel, indisponivel, oculto, com foto e sem foto.
+10. Rodar build e, quando aplicavel, testes automatizados.
 
 ## Pendencias para Analise mais Precisa
 - Politica oficial de timeout e autoencerramento de comanda (ativos e limites).
@@ -207,6 +215,8 @@ npm run dev
 - Caixa ligado ao cadastro real de produtos (sem mock), com nome, preco, descricao e ID no card/carrinho.
 - Upload local de foto no cadastro com preview e compressao client-side.
 - Controle operacional no caixa para marcar produto como indisponivel ou oculto, persistindo no cadastro.
+- Cards do caixa ajustados para tamanho menor e consistente, com menu operacional compacto e labels alinhados ao produto.
+- Cadastro/edicao de produtos ajustado com mais espacamento entre cards, painel de foto proprio e painel de categorias separado.
 
 ## O que falta desenvolver
 - Persistir a maquina de estados em banco relacional (PostgreSQL) para substituir armazenamento em arquivo local.
@@ -224,6 +234,7 @@ npm run dev
 - Cobrir novos cenarios em testes automatizados da tela de comanda (categoria bloqueada, Enter no manual, proxima comanda sem sugestao).
 - Separar claramente fluxo de comanda operacional e fluxo de caixa para evitar ambiguidades de encerramento.
 - Fortalecer observabilidade operacional (eventos de transicao de estado, falhas de peso/sincronizacao).
+- Criar teste visual ou componente isolado para cards de produto e cadastro, reduzindo regressao de espacamento/overflow.
 
 ## Pendencias ou duvidas abertas
 - Politica final de numeracao de comanda (01-200 ciclico) e regra de reutilizacao por turno/dia.
