@@ -63,15 +63,6 @@ const CLOSE_METHODS: Omit<BlindRow, 'counted' | 'expected'>[] = [
   { method: 'TICKET',    label: 'Ticket' },
 ];
 
-// ─── Mock expected values (would come from backend in real use) ───────────────
-const MOCK_EXPECTED: Record<string, number> = {
-  DINHEIRO: 6110.40,
-  DEBITO:    890.00,
-  CREDITO:  1540.00,
-  PIX:       725.80,
-  FIADO:     130.39,
-  TICKET:      0.00,
-};
 
 // ─── Simple numpad for cash close ─────────────────────────────────────────────
 function MiniNumpad({ onKey }: { onKey: (k: string) => void }) {
@@ -180,6 +171,7 @@ type CashRegisterCloseProps = {
   onCancelLastSale: () => void;
   onCancelCoupons: () => void;
   onClearComandaCache: () => void;
+  loadExpectedTotals?: () => Promise<Record<string, number>> | Record<string, number>;
   initialTab?: AdminTab;
   initialSection?: AdminSection;
   items?: Array<{
@@ -206,6 +198,7 @@ export function CashRegisterClose({
   onCancelLastSale,
   onCancelCoupons,
   onClearComandaCache,
+  loadExpectedTotals,
   initialTab = 'MENU',
   initialSection = 'INICIO',
   items = []
@@ -220,9 +213,11 @@ export function CashRegisterClose({
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [rows, setRows] = useState<BlindRow[]>(
-    CLOSE_METHODS.map((m) => ({ ...m, counted: '', expected: MOCK_EXPECTED[m.method] ?? 0 }))
+    CLOSE_METHODS.map((m) => ({ ...m, counted: '', expected: 0 }))
   );
   const [activeRow, setActiveRow] = useState<string>('DINHEIRO');
+  const [isLoadingExpected, setIsLoadingExpected] = useState(false);
+  const [expectedError, setExpectedError] = useState<string | null>(null);
 
   const filteredClients = useMemo(() => {
     const normalizedQuery = clientQuery.trim().toLowerCase();
@@ -346,6 +341,26 @@ export function CashRegisterClose({
   };
 
   const parseCounted = (raw: string) => parseFloat(raw.replace(',', '.')) || 0;
+
+  const handleConfirmBlindClose = async () => {
+    setIsLoadingExpected(true);
+    setExpectedError(null);
+
+    try {
+      const expectedTotals = loadExpectedTotals ? await loadExpectedTotals() : {};
+      setRows((currentRows) =>
+        currentRows.map((row) => ({
+          ...row,
+          expected: expectedTotals[row.method] ?? 0
+        }))
+      );
+      setStep('result');
+    } catch {
+      setExpectedError('Nao foi possivel carregar os valores esperados do caixa. Confira a conexao e tente novamente.');
+    } finally {
+      setIsLoadingExpected(false);
+    }
+  };
 
   const exportClientHistoryToPdf = (clientId: string, periodEntries: typeof filteredClientEntries, periodLabel: string) => {
     const targetClient = clients.find((client) => client.id === clientId);
@@ -770,16 +785,22 @@ export function CashRegisterClose({
             </div>
             <MiniNumpad onKey={handleKey} />
             <p className="text-center text-xs text-slate-400">Total contado: {formatBRL(totalCounted)}</p>
+            {expectedError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {expectedError}
+              </p>
+            )}
           </div>
         </div>
 
         <div className="p-4 bg-white border-t border-slate-200">
           <button
             type="button"
-            onClick={() => setStep('result')}
-            className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-base transition-colors active:scale-95"
+            onClick={() => void handleConfirmBlindClose()}
+            disabled={isLoadingExpected}
+            className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base transition-colors active:scale-95"
           >
-            Confirmar Fechamento
+            {isLoadingExpected ? 'Carregando conferência...' : 'Confirmar Fechamento'}
           </button>
         </div>
       </div>

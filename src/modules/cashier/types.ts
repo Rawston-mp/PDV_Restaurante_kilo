@@ -26,10 +26,12 @@ export type PaymentMethod =
   | 'DESCONTO';
 
 export type PaymentEntry = {
-  method: PaymentMethod;
+  method: Exclude<PaymentMethod, 'DESCONTO'>;
   label: string;
   amount: number;
 };
+
+export type PaymentDocumentMode = 'NFCE' | 'ORCAMENTO';
 
 export type CaixaView = 'pos' | 'payment' | 'cashclose';
 

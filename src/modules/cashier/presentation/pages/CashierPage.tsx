@@ -18,7 +18,7 @@ import { ProductGrid } from '@/modules/cashier/presentation/components/ProductGr
 import { CartPanel } from '@/modules/cashier/presentation/components/CartPanel';
 import { PaymentPanel, type PaymentConfirmPayload } from '@/modules/cashier/presentation/components/PaymentPanel';
 import { CashRegisterClose } from '@/modules/cashier/presentation/components/CashRegisterClose';
-import { type PaymentEntry } from '@/modules/cashier/types';
+import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/types';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import type { ItemComanda } from '@/types/comanda';
@@ -59,9 +59,33 @@ type ActiveComandaEntry = {
   status?: HeaderComandaStatus;
 };
 
+type CashierNotice = {
+  tone: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+};
+
+type PendingCashierAction =
+  | {
+      kind: 'CANCEL_COMANDA';
+      numero: string;
+      title: string;
+      description: string;
+    }
+  | {
+      kind: 'CLEAR_COMANDA_CACHE';
+      title: string;
+      description: string;
+    };
+
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const NON_OPEN_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
 const COUNTABLE_CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA'];
+const NOTICE_TONE_CLASSES: Record<CashierNotice['tone'], string> = {
+  info: 'border-sky-200 bg-sky-50 text-sky-800',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  warning: 'border-orange-200 bg-orange-50 text-orange-800',
+  error: 'border-red-200 bg-red-50 text-red-800'
+};
 
 const normalizeSearchText = (value: string) =>
   value
@@ -214,8 +238,15 @@ export function CashierPage() {
   const [closedComandasCount, setClosedComandasCount] = useState(0);
   const [openComandas, setOpenComandas] = useState<ActiveComandaEntry[]>([]);
   const [isOpenComandasPanelOpen, setIsOpenComandasPanelOpen] = useState(false);
+  const [notice, setNotice] = useState<CashierNotice | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingCashierAction | null>(null);
+  const [isCancelSelectionMode, setIsCancelSelectionMode] = useState(false);
   const hasActiveComanda = Boolean(comandaNumber.trim()) && openComandas.some((entry) => entry.numero === comandaNumber.trim());
   const activeComandaLabel = hasActiveComanda ? comandaNumber.trim() : 'Sem comanda';
+
+  const showNotice = (message: string, tone: CashierNotice['tone'] = 'info') => {
+    setNotice({ message, tone });
+  };
 
   const focusProductSearchInput = () => {
     window.requestAnimationFrame(() => {
@@ -230,17 +261,13 @@ export function CashierPage() {
     focusProductSearchInput();
   };
 
-  const cancelComanda = async (numero: string, confirmMessage?: string) => {
+  const cancelComanda = async (numero: string) => {
     const trimmed = numero.trim();
     if (!trimmed) {
       return;
     }
 
-    const confirmed = window.confirm(confirmMessage ?? `Deseja cancelar comanda #${trimmed}?`);
-    if (!confirmed) {
-      return;
-    }
-
+    let backendCancelled = true;
     try {
       const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(trimmed)}/status`, {
         method: 'PUT',
@@ -257,7 +284,7 @@ export function CashierPage() {
         throw new Error('Falha ao cancelar comanda no backend.');
       }
     } catch {
-      // Se backend indisponível, aplica cancelamento local para não travar operação
+      backendCancelled = false;
     }
 
     removeComandaCacheEntry(trimmed);
@@ -273,45 +300,75 @@ export function CashierPage() {
       setQuery('');
       focusProductSearchInput();
     }
+
+    setIsCancelSelectionMode(false);
+    setIsOpenComandasPanelOpen(false);
+    showNotice(
+      backendCancelled
+        ? `Comanda #${trimmed} cancelada.`
+        : `Comanda #${trimmed} cancelada localmente. Confirme a sincronizacao quando o backend voltar.`,
+      backendCancelled ? 'success' : 'warning'
+    );
+  };
+
+  const requestCancelComanda = (numero: string) => {
+    const trimmed = numero.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    setPendingAction({
+      kind: 'CANCEL_COMANDA',
+      numero: trimmed,
+      title: `Cancelar comanda #${trimmed}`,
+      description: 'Essa acao remove a comanda da operacao do caixa e registra o cancelamento quando o backend estiver disponivel.'
+    });
+  };
+
+  const clearComandaCacheNow = () => {
+    clearComandaCache();
+    setOpenComandas([]);
+    setOpenComandasCount(0);
+    setCartItems([]);
+    setComandaNumber('');
+    setQuery('');
+    setIsOpenComandasPanelOpen(false);
+    setIsCancelSelectionMode(false);
+    focusProductSearchInput();
+    showNotice('Cache local de comandas limpo.', 'success');
+  };
+
+  const confirmPendingAction = () => {
+    const action = pendingAction;
+    if (!action) {
+      return;
+    }
+
+    setPendingAction(null);
+    if (action.kind === 'CANCEL_COMANDA') {
+      void cancelComanda(action.numero);
+      return;
+    }
+
+    clearComandaCacheNow();
   };
 
   const handleShortcutCancelComanda = () => {
     const activeNumber = comandaNumber.trim();
     if (activeNumber) {
-      void cancelComanda(activeNumber, `Deseja cancelar a comanda ativa #${activeNumber}?`);
+      requestCancelComanda(activeNumber);
       return;
     }
 
     if (openComandas.length === 0) {
-      window.alert('Nao ha comandas abertas para cancelar.');
+      showNotice('Nao ha comandas abertas para cancelar.', 'warning');
       return;
     }
 
-    const available = openComandas.map((entry) => entry.numero).join(', ');
-    const suggested = comandaNumber.trim() || openComandas[0]?.numero || '';
-    const selected = window.prompt(
-      `Deseja cancelar qual comanda?\nDisponiveis: ${available}`,
-      suggested
-    );
-
-    if (!selected) {
-      return;
-    }
-
-    const parsed = extractComandaNumber(selected);
-    if (!parsed) {
-      window.alert('Numero de comanda invalido para cancelamento.');
-      return;
-    }
-
-    if (!openComandas.some((entry) => entry.numero === parsed)) {
-      window.alert(`Comanda #${parsed} nao esta na lista de comandas abertas.`);
-      return;
-    }
-
-    void cancelComanda(parsed);
+    setIsCancelSelectionMode(true);
+    setIsOpenComandasPanelOpen(true);
+    showNotice('Selecione uma comanda aberta na lista e confirme o cancelamento.', 'info');
   };
-
   const handleSmartInputSubmit = (rawValue: string) => {
     const comandaFromInput = extractComandaNumber(rawValue);
     if (!comandaFromInput) {
@@ -351,7 +408,7 @@ export function CashierPage() {
   };
 
   const notifyFeaturePending = (featureLabel: string) => {
-    window.alert(`${featureLabel} em breve.`);
+    showNotice(`${featureLabel} em breve.`, 'info');
   };
 
   const handleCancelLastSale = () => {
@@ -365,19 +422,11 @@ export function CashierPage() {
   };
 
   const handleClearComandaCache = () => {
-    const confirmed = window.confirm('Deseja limpar o cache local de comandas do caixa?');
-    if (!confirmed) {
-      return;
-    }
-
-    clearComandaCache();
-    setOpenComandas([]);
-    setOpenComandasCount(0);
-    setCartItems([]);
-    setComandaNumber('');
-    setQuery('');
-    setIsOpenComandasPanelOpen(false);
-    focusProductSearchInput();
+    setPendingAction({
+      kind: 'CLEAR_COMANDA_CACHE',
+      title: 'Limpar cache local de comandas',
+      description: 'Essa acao remove os snapshots locais do caixa. Use apenas quando a fila local estiver inconsistente.'
+    });
   };
 
   const now = new Date();
@@ -469,6 +518,29 @@ export function CashierPage() {
     };
   }, [refreshComandaIndicators]);
 
+  const loadCashCloseExpectedTotals = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/caixa/expected-totals`);
+      if (response.ok) {
+        const payload = (await response.json()) as { expectedTotals?: Record<string, number> };
+        if (payload.expectedTotals) {
+          return payload.expectedTotals;
+        }
+      }
+    } catch {
+      // Endpoint ainda nao existe no MVP; fechamento cego continua sem mockar valores.
+    }
+
+    return {
+      DINHEIRO: 0,
+      DEBITO: 0,
+      CREDITO: 0,
+      PIX: 0,
+      FIADO: 0,
+      TICKET: 0
+    };
+  };
+
   const handleCashClose = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/v1/comandas`);
@@ -550,7 +622,7 @@ export function CashierPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  });
 
   // ── Filtered products ──────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => {
@@ -622,15 +694,16 @@ export function CashierPage() {
 
   const subtotal = cartItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
-  const printReceipt = (payments: PaymentEntry[]) => {
+  const printReceipt = (payments: PaymentEntry[], discountAmount = 0, documentMode: PaymentDocumentMode = 'NFCE') => {
     const opened = window.open('', '_blank', 'width=420,height=720');
     if (!opened) {
       return;
     }
 
     const now = new Date();
+    const payableTotal = Math.max(0, subtotal - discountAmount);
     const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-    const change = Math.max(0, totalPaid - subtotal);
+    const change = Math.max(0, totalPaid - payableTotal);
     const receiptItems = cartItems.map((item) => ({
       ...item,
       total: item.quantity * item.unitPrice
@@ -639,7 +712,7 @@ export function CashierPage() {
     opened.document.write(`
       <html>
         <head>
-          <title>Comprovante de venda</title>
+          <title>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento nao fiscal'}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -715,7 +788,7 @@ export function CashierPage() {
           <div class="receipt">
             <div class="header">
               <h1>PDV Touch</h1>
-              <p>Comprovante de venda</p>
+              <p>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento nao fiscal'}</p>
               <p>${escapeHtml(now.toLocaleString('pt-BR'))}</p>
             </div>
 
@@ -767,7 +840,9 @@ export function CashierPage() {
                   `
                 )
                 .join('')}
-              <div class="row totals"><span>Total</span><strong>${escapeHtml(subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
+              <div class="row totals"><span>Subtotal</span><strong>${escapeHtml(subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
+              ${discountAmount > 0 ? `<div class="row totals"><span>Desconto</span><strong>-${escapeHtml(discountAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>` : ''}
+              <div class="row totals"><span>Total</span><strong>${escapeHtml(payableTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
               <div class="row totals"><span>Pago</span><strong>${escapeHtml(totalPaid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
               <div class="row totals"><span>Troco</span><strong>${escapeHtml(change.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
             </div>
@@ -842,8 +917,107 @@ export function CashierPage() {
     setCartItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const handlePaymentConfirm = async ({ payments, fiadoClientId }: PaymentConfirmPayload) => {
+  const ensureComandaExistsInBackend = async (numero: string) => {
+    const lookupResponse = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}`);
+    if (lookupResponse.ok) {
+      return;
+    }
+
+    if (lookupResponse.status !== 404) {
+      throw new Error('Falha ao consultar comanda no backend.');
+    }
+
+    const createResponse = await fetch(`${API_BASE}/api/v1/comandas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ numero })
+    });
+
+    if (!createResponse.ok) {
+      throw new Error('Falha ao criar comanda no backend antes do fechamento.');
+    }
+  };
+
+  const updateComandaStatus = async (numero: string, status: HeaderComandaStatus, reason: string) => {
+    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status, reason })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { message?: string } | null;
+      throw new Error(payload?.message ?? `Falha ao mudar comanda para ${status}.`);
+    }
+  };
+
+  const closeComandaAtCashier = async (documentMode: PaymentDocumentMode) => {
+    const numero = comandaNumber.trim();
+    if (!numero) {
+      showNotice('Informe ou selecione uma comanda antes de fechar o pagamento.', 'error');
+      return false;
+    }
+
+    try {
+      await ensureComandaExistsInBackend(numero);
+    } catch {
+      showNotice('Nao foi possivel preparar a comanda no backend. O pagamento nao foi finalizado.', 'error');
+      return false;
+    }
+
+    const targetStatus: HeaderComandaStatus = documentMode === 'ORCAMENTO' ? 'FECHADA_ORCAMENTO' : 'FECHADA_VENDA';
+    const statusFlow: HeaderComandaStatus[] = ['PRONTA_PARA_CAIXA', 'EM_FECHAMENTO', targetStatus];
+    let finalClosed = false;
+
+    for (const status of statusFlow) {
+      try {
+        await updateComandaStatus(numero, status, documentMode === 'ORCAMENTO' ? 'fechamento_orcamento_caixa' : 'fechamento_venda_caixa');
+        if (status === targetStatus) {
+          finalClosed = true;
+        }
+      } catch {
+        if (status === targetStatus) {
+          finalClosed = false;
+        }
+      }
+    }
+
+    if (!finalClosed) {
+      showNotice('Nao foi possivel fechar a comanda no backend. A venda permanece na tela para nova tentativa.', 'error');
+      return false;
+    }
+
+    removeComandaCacheEntry(numero);
+    setOpenComandas((prev) => {
+      const next = prev.filter((entry) => entry.numero !== numero);
+      setOpenComandasCount(next.length);
+      return next;
+    });
+    setClosedComandasCount((current) => current + 1);
+    await refreshComandaIndicators().catch(() => undefined);
+    showNotice(
+      documentMode === 'ORCAMENTO'
+        ? `Comanda #${numero} fechada como orçamento nao fiscal.`
+        : `Comanda #${numero} fechada como venda NFC-e.`,
+      'success'
+    );
+    return true;
+  };
+
+  const handlePaymentConfirm = async ({ payments, fiadoClientId, discountAmount, documentMode }: PaymentConfirmPayload) => {
+    const currentComandaNumber = comandaNumber.trim();
+    const payableTotal = Math.max(0, subtotal - discountAmount);
     const isFiadoFlow = Boolean(fiadoClientId) || payments.some((payment) => payment.method === 'FIADO');
+    const finalDocumentMode: PaymentDocumentMode = isFiadoFlow ? 'ORCAMENTO' : documentMode;
+
+    const closed = await closeComandaAtCashier(finalDocumentMode);
+    if (!closed) {
+      return;
+    }
 
     if (isFiadoFlow) {
       const clientId = fiadoClientId;
@@ -853,7 +1027,8 @@ export function CashierPage() {
 
         if (targetClient) {
           const launchedAt = formatLaunchDateTime(new Date());
-          const entryDescription = `Fiado atendimento ${comandaNumber} - Total R$ ${subtotal.toFixed(2)} - Sem valor fiscal (definir Fiscal ou Orcamento no pagamento)`;
+          const discountNote = discountAmount > 0 ? ` - Desconto R$ ${discountAmount.toFixed(2)}` : '';
+          const entryDescription = `Fiado atendimento ${currentComandaNumber} - Total R$ ${payableTotal.toFixed(2)}${discountNote} - Orcamento nao fiscal`;
 
           const updatedClient = {
             ...targetClient,
@@ -882,16 +1057,20 @@ export function CashierPage() {
       }
 
       setCartItems([]);
+      setComandaNumber('');
+      setQuery('');
       setView('pos');
+      focusProductSearchInput();
       return;
     }
 
-    // Fluxo padrão: pagamento à vista com comprovante fiscal
-    printReceipt(payments);
+    printReceipt(payments, discountAmount, documentMode);
     setCartItems([]);
+    setComandaNumber('');
+    setQuery('');
     setView('pos');
+    focusProductSearchInput();
   };
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="pdv-caixa-root flex flex-col h-full w-full overflow-hidden bg-[#f5f8fb]">
@@ -919,7 +1098,7 @@ export function CashierPage() {
 
               {isOpenComandasPanelOpen && (
                 <div className="absolute left-0 top-full z-20 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Comandas abertas no sistema</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{isCancelSelectionMode ? 'Selecione a comanda para cancelar' : 'Comandas abertas no sistema'}</p>
 
                   {openComandas.length === 0 ? (
                     <p className="mt-3 text-sm text-slate-500">Nenhuma comanda aberta no momento.</p>
@@ -945,9 +1124,10 @@ export function CashierPage() {
                             <button
                               type="button"
                               onClick={() => {
-                                void cancelComanda(entry.numero);
+                                requestCancelComanda(entry.numero);
+                                setIsCancelSelectionMode(false);
                               }}
-                              className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100"
+                              className="min-h-[44px] rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
                             >
                               Cancelar
                             </button>
@@ -994,6 +1174,48 @@ export function CashierPage() {
         </div>
       </header>
 
+      {(notice || pendingAction) && (
+        <section className="shrink-0 border-b border-slate-200 bg-white px-5 py-2 space-y-2">
+          {notice && (
+            <div className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${NOTICE_TONE_CLASSES[notice.tone]}`}>
+              <span>{notice.message}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                className="min-h-[44px] rounded-lg px-3 text-xs font-bold hover:bg-white/60"
+              >
+                Fechar
+              </button>
+            </div>
+          )}
+
+          {pendingAction && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+              <div>
+                <p className="font-bold">{pendingAction.title}</p>
+                <p className="text-xs text-orange-800">{pendingAction.description}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingAction(null)}
+                  className="min-h-[44px] rounded-lg border border-orange-200 bg-white px-3 text-xs font-bold text-orange-700 hover:bg-orange-100"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPendingAction}
+                  className="min-h-[44px] rounded-lg bg-red-600 px-3 text-xs font-bold text-white hover:bg-red-700"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── LEFT 60%: busca + categorias + grid ────────────────────────────── */}
@@ -1010,6 +1232,7 @@ export function CashierPage() {
             onCancelLastSale={handleCancelLastSale}
             onCancelCoupons={handleCancelCoupons}
             onClearComandaCache={handleClearComandaCache}
+            loadExpectedTotals={loadCashCloseExpectedTotals}
             onBack={() => setView('pos')}
             onClose={() => {
               void handleCashClose();

@@ -1,4 +1,4 @@
-import { EllipsisVertical, EyeOff, PackageX, PlusCircle } from 'lucide-react';
+import { EllipsisVertical, EyeOff, PackageX } from 'lucide-react';
 import { useState } from 'react';
 import { formatBRL } from '../../types';
 
@@ -33,18 +33,7 @@ export function ProductCard({ product, onAdd, onToggleUnavailable, onToggleHidde
   const isDisabled = Boolean(product.isUnavailable);
 
   return (
-    <div
-      className={`
-        group relative flex flex-col
-        w-full rounded-2xl
-        border border-slate-200 bg-white
-        text-left
-        hover:border-sky-300 hover:shadow-md
-        transition-all duration-150
-        overflow-hidden
-        ${isDisabled ? 'opacity-70' : 'cursor-pointer active:scale-95'}
-      `}
-    >
+    <div className="group relative h-[188px] w-full overflow-visible">
       <button
         type="button"
         onClick={() => {
@@ -54,96 +43,105 @@ export function ProductCard({ product, onAdd, onToggleUnavailable, onToggleHidde
         }}
         aria-label={`Adicionar ${product.name}`}
         disabled={isDisabled}
-        className="text-left"
+        className={`
+          flex h-full w-full flex-col overflow-hidden rounded-xl
+          border border-slate-200 bg-white text-left
+          transition-all duration-150
+          hover:border-sky-300 hover:shadow-md
+          ${isDisabled ? 'opacity-70' : 'cursor-pointer active:scale-95'}
+        `}
       >
-        <div className="relative h-32 bg-slate-100">
+        <div className="relative h-[74px] shrink-0 border-b border-slate-100 bg-slate-50">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
               alt={product.name}
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-1"
             />
           ) : (
-            <div className="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200" />
+            <div className="h-full w-full bg-gradient-to-br from-slate-50 to-slate-100" />
           )}
+
           {isKg && (
-            <span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/90 text-amber-700 uppercase tracking-wide border border-amber-200">
+            <span className="absolute left-2 bottom-2 rounded-full border border-amber-200 bg-white/95 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
               KG
             </span>
           )}
+
           {product.isUnavailable && (
-            <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-rose-600/95 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
-              <PackageX size={11} /> Indisponivel
+            <span className="absolute left-2 top-2 inline-flex max-w-[104px] items-center gap-1 rounded-full bg-rose-600/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+              <PackageX size={10} />
+              <span className="truncate">Indisponível</span>
             </span>
           )}
+
           {product.isHidden && (
-            <span className="absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-slate-900/85 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
-              <EyeOff size={11} /> Oculto
+            <span className="absolute left-2 bottom-2 inline-flex max-w-[90px] items-center gap-1 rounded-full bg-slate-900/85 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+              <EyeOff size={10} />
+              <span className="truncate">Oculto</span>
             </span>
           )}
         </div>
 
-        <div className="p-3.5">
-          <strong className="text-lg font-semibold text-slate-800 leading-tight line-clamp-1">
+        <div className="flex min-h-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
+          <strong className="line-clamp-2 min-h-[34px] text-[13px] font-bold leading-[17px] text-slate-800">
             {product.name}
           </strong>
+
           {product.description ? (
-            <p className="mt-1 text-xs text-slate-500 line-clamp-2">{product.description}</p>
+            <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-slate-500">
+              {product.description}
+            </p>
           ) : null}
-          <p className="mt-1 text-[11px] text-slate-500 line-clamp-1">
+
+          <p className="mt-0.5 text-[10px] leading-tight text-slate-500">
             ID {product.productCode ?? '--'}
           </p>
-          <span className="mt-1 block text-2xl font-bold text-sky-600">
+
+          <span className="mt-auto block text-[19px] font-extrabold leading-none text-sky-600">
             {formatBRL(product.price)}
-            {isKg && <span className="text-xs font-medium text-slate-400 ml-1">/kg</span>}
+            {isKg && <span className="ml-1 text-[10px] font-medium text-slate-400">/kg</span>}
           </span>
         </div>
       </button>
 
-      <div className="absolute right-2 top-2 z-20 flex items-start gap-2">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenuOpen((prev) => !prev);
-            }}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50"
-            aria-label={`Abrir ações de ${product.name}`}
-          >
-            <EllipsisVertical size={16} />
-          </button>
+      <div className="absolute right-2 top-2 z-40" onClick={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-500 shadow-sm hover:bg-white"
+          aria-label={`Abrir ações de ${product.name}`}
+        >
+          <EllipsisVertical size={16} />
+        </button>
 
-          {menuOpen && (
-            <div className="absolute right-0 top-10 z-30 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleUnavailable(product);
-                  setMenuOpen(false);
-                }}
-              >
-                <PackageX size={16} className="text-rose-500" />
-                {product.isUnavailable ? 'Tornar disponivel' : 'Tornar indisponivel'}
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleHidden(product);
-                  setMenuOpen(false);
-                }}
-              >
-                <EyeOff size={16} className="text-slate-500" />
-                {product.isHidden ? 'Mostrar no caixa' : 'Ocultar no caixa'}
-              </button>
-            </div>
-          )}
-        </div>
+        {menuOpen && (
+          <div className="absolute right-0 top-9 z-50 w-[132px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+            <button
+              type="button"
+              className="flex min-h-[42px] w-full items-center gap-1.5 px-2.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                onToggleUnavailable(product);
+                setMenuOpen(false);
+              }}
+            >
+              <PackageX size={14} className="shrink-0 text-rose-500" />
+              <span className="truncate">{product.isUnavailable ? 'Disponível' : 'Indisponível'}</span>
+            </button>
+            <button
+              type="button"
+              className="flex min-h-[42px] w-full items-center gap-1.5 border-t border-slate-100 px-2.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                onToggleHidden(product);
+                setMenuOpen(false);
+              }}
+            >
+              <EyeOff size={14} className="shrink-0 text-slate-500" />
+              <span className="truncate">{product.isHidden ? 'Mostrar' : 'Ocultar'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
