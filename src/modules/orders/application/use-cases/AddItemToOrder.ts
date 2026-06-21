@@ -9,7 +9,7 @@ export class AddItemToOrder {
     const order = await this.orderRepository.findById(input.orderId);
 
     if (!order) {
-      throw new Error('Pedido nao encontrado');
+      throw new Error('Pedido não encontrado');
     }
 
     const items = [...order.items, input.item];

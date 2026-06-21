@@ -49,7 +49,7 @@ export function ComandaHeader({
 
         {pendingSyncCount > 0 && (
           <span className="comanda-sync-pending">
-            {pendingSyncCount} {pendingSyncCount === 1 ? 'alteracao pendente' : 'alteracoes pendentes'}
+            {pendingSyncCount} {pendingSyncCount === 1 ? 'alteração pendente' : 'alterações pendentes'}
           </span>
         )}
 

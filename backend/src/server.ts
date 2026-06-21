@@ -140,7 +140,7 @@ const parseComandaPesagemInput = (body: unknown): ComandaPesagemInput | null => 
 };
 
 const resolveComandaMutationError = (error: unknown, fallbackMessage: string) => {
-  if (error instanceof Error && error.message === 'Comanda nao encontrada.') {
+  if (error instanceof Error && error.message === 'Comanda não encontrada.') {
     return {
       status: 404,
       body: {
@@ -212,7 +212,7 @@ const resolveLockError = (error: unknown) => {
     };
   }
 
-  if (error instanceof Error && error.message === 'Comanda nao encontrada.') {
+  if (error instanceof Error && error.message === 'Comanda não encontrada.') {
     return {
       status: 404,
       body: {
@@ -237,7 +237,7 @@ const initializeComandas = async () => {
     comandaStore = result.store;
 
     // eslint-disable-next-line no-console
-    console.log(`Persistencia de comanda: ${result.usingPostgres ? 'PostgreSQL' : 'arquivo local'}`);
+    console.log(`Persistência de comanda: ${result.usingPostgres ? 'PostgreSQL' : 'arquivo local'}`);
   }
 
   const snapshot = await comandaStore.loadState();
@@ -295,7 +295,7 @@ app.post('/comandas/fechar', (_req, res) => {
 app.post('/api/v1/comandas', (req, res) => {
   const numero = parseNumero(req.body?.numero);
   if (!numero) {
-    res.status(400).json({ ok: false, message: 'Campo numero e obrigatorio.' });
+    res.status(400).json({ ok: false, message: 'O campo número é obrigatório.' });
     return;
   }
 
@@ -324,7 +324,7 @@ app.post('/api/v1/comandas', (req, res) => {
 app.get('/api/v1/comandas/:numero', (req, res) => {
   const comanda = comandaService.get(req.params.numero);
   if (!comanda) {
-    res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+    res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
   }
 
@@ -334,7 +334,7 @@ app.get('/api/v1/comandas/:numero', (req, res) => {
 app.get('/api/v1/comandas/:numero/items', (req, res) => {
   const comanda = comandaService.get(req.params.numero);
   if (!comanda) {
-    res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+    res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
   }
 
@@ -404,7 +404,7 @@ app.post('/api/v1/comandas/:numero/items', (req, res) => {
 app.get('/api/v1/comandas/:numero/pesagens', (req, res) => {
   const comanda = comandaService.get(req.params.numero);
   if (!comanda) {
-    res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+    res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
   }
 
@@ -424,14 +424,14 @@ app.get('/api/v1/comandas', (_req, res) => {
 app.put('/api/v1/comandas/:numero/status', (req, res) => {
   const nextStatus = parseStatus(req.body?.status);
   if (!nextStatus) {
-    res.status(400).json({ ok: false, message: 'Status invalido.' });
+    res.status(400).json({ ok: false, message: 'Status inválido.' });
     return;
   }
 
   try {
     const before = comandaService.get(req.params.numero);
     if (!before) {
-      res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+      res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
       return;
     }
 
@@ -463,7 +463,7 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
   try {
     const before = comandaService.get(req.params.numero);
     if (!before) {
-      res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+      res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
       return;
     }
 
@@ -532,7 +532,7 @@ app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
   if (!owner || !stationId) {
     res.status(400).json({
       ok: false,
-      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+      message: 'Os campos owner e stationId são obrigatórios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
     });
     return;
   }
@@ -583,7 +583,7 @@ app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
   if (!owner || !stationId) {
     res.status(400).json({
       ok: false,
-      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+      message: 'Os campos owner e stationId são obrigatórios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
     });
     return;
   }
@@ -625,7 +625,7 @@ app.post('/api/v1/comandas/:numero/lock/release', (req, res) => {
   if (!owner || !stationId) {
     res.status(400).json({
       ok: false,
-      message: 'Campos owner e stationId sao obrigatorios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
+      message: 'Os campos owner e stationId são obrigatórios (COMANDA_A|COMANDA_B, BALANCA_A|BALANCA_B).'
     });
     return;
   }
@@ -720,7 +720,7 @@ if (serialPath) {
   }
 } else {
   // eslint-disable-next-line no-console
-  console.warn('Leitor de balanca desativado: defina SERIAL_PORT_PATH para habilitar leitura serial.');
+  console.warn('Leitor de balança desativado: defina SERIAL_PORT_PATH para habilitar a leitura serial.');
 }
 
 const PORT = Number(process.env.PORT ?? 3001);

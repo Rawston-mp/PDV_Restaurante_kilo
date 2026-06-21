@@ -52,6 +52,6 @@ describe('Orders use cases integration', () => {
           byWeight: false
         }
       })
-    ).rejects.toThrow('Pedido nao encontrado');
+    ).rejects.toThrow('Pedido não encontrado');
   });
 });

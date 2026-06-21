@@ -100,7 +100,7 @@ export function NewOrderPage() {
     }
 
     if (isFinalizingOrder && paymentType === 'FIADO' && !selectedClientId) {
-      setFiadoFeedback('Selecione um cliente para lancar o fiado antes de finalizar.');
+      setFiadoFeedback('Selecione um cliente para lançar o fiado antes de finalizar.');
       return;
     }
 
@@ -117,7 +117,7 @@ export function NewOrderPage() {
       const targetClient = clients.find((client) => client.id === selectedClientId);
 
       if (!targetClient) {
-        setFiadoFeedback('Cliente selecionado nao encontrado para lancar fiado.');
+        setFiadoFeedback('O cliente selecionado não foi encontrado para lançar o fiado.');
       } else {
         const launchedAt = formatLaunchDateTime(new Date());
         const entryDescription = `Fiado pedido ${currentOrder.id} - Mesa ${currentOrder.table} - Total R$ ${currentOrder.total.toFixed(2)}`;
@@ -145,7 +145,7 @@ export function NewOrderPage() {
       setFiadoFeedback(
         targetConvenio
           ? `Convênio associado ao fechamento: ${targetConvenio.name}.`
-          : 'Convênio selecionado nao encontrado.'
+          : 'O convênio selecionado não foi encontrado.'
       );
     } else {
       setFiadoFeedback(null);
@@ -171,7 +171,7 @@ export function NewOrderPage() {
       </form>
 
       <div>
-        <p>Comanda ativa: {comandaAtiva ? 'sim' : 'nao'}</p>
+        <p>Comanda ativa: {comandaAtiva ? 'sim' : 'não'}</p>
         <button type="button" onClick={() => void abrirComanda()} disabled={loading || comandaAtiva}>
           Abrir comanda
         </button>
@@ -201,7 +201,7 @@ export function NewOrderPage() {
 
           {paymentType === 'FIADO' && (
             <>
-              <label htmlFor="fiado-client">Cliente para lancar fiado</label>
+              <label htmlFor="fiado-client">Cliente para lançar fiado</label>
               <select
                 id="fiado-client"
                 value={selectedClientId}
@@ -217,7 +217,7 @@ export function NewOrderPage() {
                   ))}
               </select>
               {clients.filter((client) => client.active).length === 0 && (
-                <p>Nenhum cliente ativo cadastrado para lancamento de fiado.</p>
+                <p>Nenhum cliente ativo cadastrado para lançamento de fiado.</p>
               )}
             </>
           )}
@@ -260,7 +260,7 @@ export function NewOrderPage() {
               required
             />
 
-            <label htmlFor="item-price">Preco unitario</label>
+            <label htmlFor="item-price">Preço unitário</label>
             <input
               id="item-price"
               type="number"
@@ -320,14 +320,14 @@ export function NewOrderPage() {
                     void loadHistory();
                   }}
                 >
-                  Atualizar historico local
+                  Atualizar histórico local
                 </button>
               </>
             )}
 
             {recentHistory.length > 0 && (
               <p>
-                Historico local: {recentHistory.map((value) => `${value.toFixed(3)}kg`).join(' | ')}
+                Histórico local: {recentHistory.map((value) => `${value.toFixed(3)} kg`).join(' | ')}
               </p>
             )}
 
@@ -341,7 +341,7 @@ export function NewOrderPage() {
             onClick={onAdvanceStatus}
             disabled={!can('orders:advance-status') || Boolean(fiscalBlockReason)}
           >
-            Avancar status do pedido
+            Avançar status do pedido
           </button>
         </>
       )}

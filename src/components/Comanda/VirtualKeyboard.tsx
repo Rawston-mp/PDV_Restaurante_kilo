@@ -30,7 +30,7 @@ export function VirtualKeyboard({ onKeyPress }: VirtualKeyboardProps) {
           </button>
           <button type="button" className="is-space" onClick={() => onKeyPress(' ')}>
             <Space size={18} />
-            Espaco
+            Espaço
           </button>
           <button type="button" className="is-backspace" onClick={() => onKeyPress('Backspace')}>
             <Delete size={18} />

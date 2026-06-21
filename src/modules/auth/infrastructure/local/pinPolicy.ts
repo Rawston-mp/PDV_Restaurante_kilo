@@ -118,14 +118,14 @@ export const changeRolePin = (input: PinChangeInput): PinOperationResult => {
   if (pins[input.role] !== input.currentPin) {
     return {
       success: false,
-      message: 'PIN atual invalido para o perfil selecionado.'
+      message: 'PIN atual inválido para o perfil selecionado.'
     };
   }
 
   if (!isPinStrongEnough(input.nextPin)) {
     return {
       success: false,
-      message: 'Novo PIN deve ter 4 a 8 digitos e nao pode repetir o mesmo numero.'
+      message: 'O novo PIN deve ter de 4 a 8 dígitos e não pode repetir o mesmo número.'
     };
   }
 
@@ -145,7 +145,7 @@ export const changeRolePin = (input: PinChangeInput): PinOperationResult => {
 
   return {
     success: true,
-    message: `PIN ${input.kind === 'LOGIN' ? 'de login' : 'sensivel'} atualizado com sucesso.`
+    message: `PIN ${input.kind === 'LOGIN' ? 'de login' : 'sensível'} atualizado com sucesso.`
   };
 };
 

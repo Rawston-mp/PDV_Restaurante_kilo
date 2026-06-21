@@ -12,7 +12,7 @@ export function RequirePermission({ permission, children }: RequirePermissionPro
   const { user, can } = useAuth();
 
   if (!user || !can(permission)) {
-    return <div className="card">Acesso negado para a permissao solicitada.</div>;
+    return <div className="card">Acesso negado para a permissão solicitada.</div>;
   }
 
   return <>{children}</>;

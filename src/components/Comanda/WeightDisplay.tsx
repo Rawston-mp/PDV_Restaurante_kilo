@@ -99,7 +99,7 @@ export function WeightDisplay({
               ? 'Abra uma comanda para iniciar a pesagem.'
               : isConnected
                 ? 'Sensor pronto. Clique para informar manualmente.'
-                : 'Sensor sem conexao. Use o peso manual se necessario.'}
+                : 'Sensor sem conexão. Use o peso manual se necessário.'}
           </small>
           {manualValue !== null && (
             <button type="button" className="button-muted" onClick={onClearManual}>Voltar ao sensor</button>

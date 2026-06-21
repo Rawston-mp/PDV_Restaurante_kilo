@@ -118,7 +118,7 @@ const formatLockConflictMessage = (error: BackendError) => {
     return `Comanda em uso por ${owner ?? 'outro operador'} (${station ?? 'outra estacao'}).`;
   }
 
-  return error.message || 'Comanda em uso por outra balanca.';
+  return error.message || 'Comanda em uso por outra balança.';
 };
 
 const isConnectivityError = (error: unknown) => {
@@ -378,7 +378,7 @@ export function useComanda(taxaImposto = 0) {
       setPendingSyncCount(0);
       setIsOfflineMode(false);
       setErro(null);
-      setFeedback('Sincronizacao concluida.');
+      setFeedback('Sincronização concluída.');
     } catch {
       setIsOfflineMode(true);
       setPendingSyncCount((current) => Math.max(1, current));
@@ -541,7 +541,7 @@ export function useComanda(taxaImposto = 0) {
   const abrirComanda = async () => {
     const nextId = comandaNumber.trim();
     if (!nextId) {
-      setErro('Informe o numero da comanda e pressione Enter para abrir.');
+      setErro('Informe o número da comanda e pressione Enter para abrir.');
       return false;
     }
 
@@ -643,7 +643,7 @@ export function useComanda(taxaImposto = 0) {
 
   const adicionarProduto = (produto: ProdutoCatalogo) => {
     if (!isComandaAberta) {
-      setErro('Abra a comanda (Enter no numero) antes de adicionar itens.');
+      setErro('Abra a comanda (Enter no número) antes de adicionar itens.');
       return;
     }
 

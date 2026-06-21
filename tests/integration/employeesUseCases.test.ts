@@ -4,27 +4,27 @@ import { CreateEmployee } from '@/modules/employees/application/use-cases/Create
 import { InMemoryEmployeeRepository } from '@/modules/employees/infrastructure/repositories/InMemoryEmployeeRepository';
 
 describe('Employees use cases', () => {
-  it('cria funcionario com dados basicos e endereco', async () => {
+  it('cria funcionário com dados básicos e endereço', async () => {
     const repository = new InMemoryEmployeeRepository();
     const createEmployee = new CreateEmployee(repository);
 
     const employee = await createEmployee.execute({
       id: 'emp-1',
       employeeCode: '001',
-      fullName: 'Funcionario Teste',
+      fullName: 'Funcionário Teste',
       cpf: '123.456.789-09',
       role: 'ATENDENTE',
       birthDate: '1995-04-17',
       gender: 'MASCULINO',
       admissionDate: '2026-01-15',
       dismissalDate: '',
-      notes: 'Funcionario de teste para validacao.',
+      notes: 'Funcionário de teste para validação.',
       cep: '01001-000',
       address: 'Rua A',
       number: '10',
       neighborhood: 'Centro',
       state: 'SP',
-      city: 'Sao Paulo',
+      city: 'São Paulo',
       complement: 'Sala 3',
       phone: '(11) 3000-1111',
       mobile: '(11) 99999-1111',
@@ -36,7 +36,7 @@ describe('Employees use cases', () => {
 
     expect(loaded).not.toBeNull();
     expect(loaded?.employeeCode).toBe('001');
-    expect(loaded?.fullName).toBe('Funcionario Teste');
+    expect(loaded?.fullName).toBe('Funcionário Teste');
     expect(loaded?.role).toBe('ATENDENTE');
     expect(loaded?.birthDate).toBe('1995-04-17');
     expect(loaded?.gender).toBe('MASCULINO');
@@ -45,21 +45,21 @@ describe('Employees use cases', () => {
     expect(loaded?.active).toBe(true);
   });
 
-  it('atualiza e remove funcionario no repositorio', async () => {
+  it('atualiza e remove funcionário no repositório', async () => {
     const repository = new InMemoryEmployeeRepository();
     const now = new Date();
 
     await repository.save({
       id: 'emp-2',
       employeeCode: '002',
-      fullName: 'Funcionario B',
+      fullName: 'Funcionário B',
       cpf: '222.333.444-55',
       role: 'CAIXA',
       birthDate: '1992-09-12',
       gender: 'FEMININO',
       admissionDate: '2025-08-01',
       dismissalDate: '',
-      notes: 'Sem observacoes.',
+      notes: 'Sem observações.',
       cep: '13000-000',
       address: 'Avenida B',
       number: '200',
@@ -78,7 +78,7 @@ describe('Employees use cases', () => {
 
     const existing = await repository.findById('emp-2');
     if (!existing) {
-      throw new Error('Funcionario esperado nao encontrado.');
+      throw new Error('Funcionário esperado não encontrado.');
     }
 
     await repository.save({

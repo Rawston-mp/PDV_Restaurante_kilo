@@ -14,7 +14,7 @@ export class CreateStockEntry {
     const product = await this.productRepository.findById(input.productId);
 
     if (!product) {
-      throw new Error('Produto nao encontrado');
+      throw new Error('Produto não encontrado');
     }
 
     const now = new Date();

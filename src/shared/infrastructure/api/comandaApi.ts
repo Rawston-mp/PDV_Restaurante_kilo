@@ -34,7 +34,7 @@ const parseBackendMessage = async (response: Response, fallback: string) => {
 const ensureValidNumero = (numero: string) => {
   const trimmed = numero.trim();
   if (!trimmed) {
-    throw new Error('Numero da comanda e obrigatorio.');
+    throw new Error('O número da comanda é obrigatório.');
   }
 
   return trimmed;

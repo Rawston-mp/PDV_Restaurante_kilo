@@ -56,8 +56,8 @@ const parsePtBrDateTime = (value: string) => {
 // ─── Pre-populated methods for the blind count ────────────────────────────────
 const CLOSE_METHODS: Omit<BlindRow, 'counted' | 'expected'>[] = [
   { method: 'DINHEIRO',  label: 'Dinheiro' },
-  { method: 'DEBITO',    label: 'Cartão Débito' },
-  { method: 'CREDITO',   label: 'Cartão Crédito' },
+  { method: 'DEBITO',    label: 'Cartão de débito' },
+  { method: 'CREDITO',   label: 'Cartão de crédito' },
   { method: 'PIX',       label: 'PIX' },
   { method: 'FIADO',     label: 'Fiado' },
   { method: 'TICKET',    label: 'Ticket' },
@@ -315,7 +315,7 @@ export function CashRegisterClose({
 
   const exportPeriodLabel = useMemo(() => {
     if (clientPeriodFilter === 'ALL') {
-      return 'Todo o historico';
+      return 'Todo o histórico';
     }
 
     if (clientPeriodFilter === 'CURRENT_MONTH') {
@@ -356,7 +356,7 @@ export function CashRegisterClose({
       );
       setStep('result');
     } catch {
-      setExpectedError('Nao foi possivel carregar os valores esperados do caixa. Confira a conexao e tente novamente.');
+      setExpectedError('Não foi possível carregar os valores esperados do caixa. Confira a conexão e tente novamente.');
     } finally {
       setIsLoadingExpected(false);
     }
@@ -374,7 +374,7 @@ export function CashRegisterClose({
     }
 
     const rowsHtml = periodEntries.length === 0
-      ? '<tr><td colspan="3" style="padding:12px;text-align:center;color:#64748b;">Nenhum lancamento de fiado no periodo selecionado.</td></tr>'
+      ? '<tr><td colspan="3" style="padding:12px;text-align:center;color:#64748b;">Nenhum lançamento de fiado no período selecionado.</td></tr>'
       : periodEntries
           .map((entry) => {
             const escapedDescription = entry.description
@@ -409,15 +409,15 @@ export function CashRegisterClose({
             <p><strong>Cliente:</strong> ${targetClient.fullName}</p>
             <p><strong>ID:</strong> ${targetClient.clientCode || '--'}</p>
             <p><strong>CPF:</strong> ${targetClient.cpf || '--'}</p>
-            <p><strong>Periodo:</strong> ${periodLabel}</p>
-            <p><strong>Data de emissao:</strong> ${new Date().toLocaleString('pt-BR')}</p>
-            <p><strong>Total do periodo:</strong> ${formatBRL(totalPeriod)}</p>
+            <p><strong>Período:</strong> ${periodLabel}</p>
+            <p><strong>Data de emissão:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+            <p><strong>Total do período:</strong> ${formatBRL(totalPeriod)}</p>
           </div>
           <table>
             <thead>
               <tr>
                 <th style="width: 28%;">Data</th>
-                <th>Descricao</th>
+                <th>Descrição</th>
                 <th style="width: 18%; text-align:right;">Valor</th>
               </tr>
             </thead>
@@ -607,7 +607,7 @@ export function CashRegisterClose({
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">{selectedClient.fullName}</h3>
-                    <p className="text-xs text-slate-500">Recebimento de fiado e historico de lancamentos</p>
+                    <p className="text-xs text-slate-500">Recebimento de fiado e histórico de lançamentos</p>
                   </div>
                   <button
                     type="button"
@@ -620,26 +620,26 @@ export function CashRegisterClose({
 
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (periodo)</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (período)</p>
                     <p className="text-2xl font-extrabold text-slate-800">{formatBRL(totalFilteredHistory)}</p>
                     <p className="text-xs text-slate-500 mt-1">{exportPeriodLabel}</p>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-3 bg-slate-50">
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (historico total)</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo fiado (histórico total)</p>
                     <p className="text-2xl font-extrabold text-slate-800">{formatBRL(totalClientHistory)}</p>
-                    <p className="text-xs text-slate-500 mt-1">Todos os lancamentos do cliente</p>
+                    <p className="text-xs text-slate-500 mt-1">Todos os lançamentos do cliente</p>
                   </div>
                 </div>
 
                 <div className="mt-3 rounded-lg border border-slate-100 p-3 bg-white">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Filtro de periodo</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Filtro de período</p>
                   <div className="flex flex-wrap gap-2 mb-3">
                     <button
                       type="button"
                       onClick={() => setClientPeriodFilter('ALL')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${clientPeriodFilter === 'ALL' ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
                     >
-                      Todo historico
+                      Todo o histórico
                     </button>
                     <button
                       type="button"
@@ -669,7 +669,7 @@ export function CashRegisterClose({
                         />
                       </label>
                       <label className="text-xs text-slate-600">
-                        Ate
+                        Até
                         <input
                           type="date"
                           value={customEndDate}
@@ -683,13 +683,13 @@ export function CashRegisterClose({
 
                 <div className="mt-3 flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-100">
                   {filteredClientEntries.length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">Nenhum historico de fiado para o periodo selecionado.</p>
+                    <p className="p-4 text-sm text-slate-500">Nenhum histórico de fiado para o período selecionado.</p>
                   ) : (
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
                         <tr>
                           <th className="text-left px-3 py-2">Data</th>
-                          <th className="text-left px-3 py-2">Descricao</th>
+                          <th className="text-left px-3 py-2">Descrição</th>
                           <th className="text-right px-3 py-2">Valor</th>
                         </tr>
                       </thead>
@@ -707,7 +707,7 @@ export function CashRegisterClose({
                 </div>
               </>
             ) : (
-              <p className="text-sm text-slate-500">Selecione um cliente para visualizar o historico.</p>
+              <p className="text-sm text-slate-500">Selecione um cliente para visualizar o histórico.</p>
             )}
             </section>
           </div>
@@ -882,7 +882,7 @@ export function CashRegisterClose({
                       ID {item.productCode ?? '--'} · NCM {item.ncm ?? '--'} · CFOP {item.cfop ?? '--'}
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      {item.fiscalType ?? 'Fiscal nao informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
+                      {item.fiscalType ?? 'Fiscal não informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
                     </p>
                   </div>
                   <p className="text-xs font-semibold text-slate-700 shrink-0">

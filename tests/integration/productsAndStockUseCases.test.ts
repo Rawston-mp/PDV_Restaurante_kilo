@@ -40,12 +40,12 @@ describe('Products + Stock use cases integration', () => {
     expect(updated.stock).toBe(46);
   });
 
-  it('falha quando produto nao existe', async () => {
+  it('falha quando o produto não existe', async () => {
     const repository = new InMemoryProductRepository();
     const adjustStock = new AdjustStock(repository);
 
     await expect(adjustStock.execute({ productId: 'x', delta: -2 })).rejects.toThrow(
-      'Produto nao encontrado'
+      'Produto não encontrado'
     );
   });
 });

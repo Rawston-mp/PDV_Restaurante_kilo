@@ -150,7 +150,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
         fiadoClientId: clientId
       });
     } catch {
-      setFiadoFeedback('Nao foi possivel lancar o fiado neste momento.');
+      setFiadoFeedback('Não foi possível lançar o fiado neste momento.');
     } finally {
       setIsLaunchingFiado(false);
     }
@@ -259,7 +259,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
             <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente do fiado</p>
               {activeClients.length === 0 ? (
-                <p className="text-sm text-slate-500">Nenhum cliente ativo cadastrado para lancamento de fiado.</p>
+                <p className="text-sm text-slate-500">Nenhum cliente ativo cadastrado para lançamento de fiado.</p>
               ) : (
                 <select
                   value={selectedFiadoClientId}
@@ -283,7 +283,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
               )}
 
               <p className="text-xs text-slate-500">
-                Fiado fecha a comanda como orçamento nao fiscal e mantém a cobrança para acerto futuro.
+                Fiado fecha a comanda como orçamento não fiscal e mantém a cobrança para acerto futuro.
               </p>
 
               {fiadoFeedback && (
@@ -375,7 +375,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
                           ID {item.productCode ?? '--'} · NCM {item.ncm ?? '--'} · CFOP {item.cfop ?? '--'}
                         </p>
                         <p className="text-[11px] text-slate-500">
-                          {item.fiscalType ?? 'Fiscal nao informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
+                          {item.fiscalType ?? 'Fiscal não informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
                         </p>
                       </div>
                       <div className="text-right shrink-0">

@@ -19,7 +19,7 @@ export function ItemsList({ items, onDelete, onAdjust, canDelete = true }: Items
   return (
     <section className="comanda-panel comanda-items-panel">
       <div className="comanda-items-header">
-        <p className="panel-label">Itens lancados</p>
+        <p className="panel-label">Itens lançados</p>
         <span>{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
       </div>
       {items.length === 0 ? (

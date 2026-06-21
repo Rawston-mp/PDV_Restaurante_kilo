@@ -16,7 +16,7 @@ export function TotalDisplay({ subtotal, impostos, total }: TotalDisplayProps) {
       <div className="total-panel-breakdown">
         <p><span>Subtotal</span><strong>{formatCurrency(subtotal)}</strong></p>
         {impostos > 0 && (
-          <p><span>Acrescimos</span><strong>{formatCurrency(impostos)}</strong></p>
+          <p><span>Acréscimos</span><strong>{formatCurrency(impostos)}</strong></p>
         )}
       </div>
       <p className="is-total">

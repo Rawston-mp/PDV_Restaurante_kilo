@@ -4,7 +4,7 @@ import { CreateConvenio } from '@/modules/convenios/application/use-cases/Create
 import { InMemoryConvenioRepository } from '@/modules/convenios/infrastructure/repositories/InMemoryConvenioRepository';
 
 describe('Convenios use cases', () => {
-  it('cria convenio com dados basicos', async () => {
+  it('cria convênio com dados básicos', async () => {
     const repository = new InMemoryConvenioRepository();
     const createConvenio = new CreateConvenio(repository);
 
@@ -49,7 +49,7 @@ describe('Convenios use cases', () => {
 
     const existing = await repository.findById('conv-2');
     if (!existing) {
-      throw new Error('Convenio esperado nao encontrado.');
+      throw new Error('Convênio esperado não encontrado.');
     }
 
     await repository.save({

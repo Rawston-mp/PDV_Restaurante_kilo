@@ -33,7 +33,7 @@ describe('orderRules', () => {
     expect(total).toBe(31.46);
   });
 
-  it('falha quando item por peso nao informa peso', () => {
+  it('falha quando o item por peso não informa o peso', () => {
     expect(() =>
       calculateOrderItemTotal({
         id: 'i3',

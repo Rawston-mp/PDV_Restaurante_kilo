@@ -212,7 +212,7 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
 
 const ensureMutableItemsStatus = (status: ComandaStatus) => {
   if (isInactiveStatus(status) || status === 'EM_FECHAMENTO') {
-    throw new Error(`Comanda em status ${status} nao aceita alteracao de itens.`);
+    throw new Error(`Comanda em status ${status} não aceita alteração de itens.`);
   }
 };
 
@@ -303,7 +303,7 @@ export class ComandaLockConflictError extends Error {
   readonly lock: ComandaLock;
 
   constructor(lock: ComandaLock) {
-    super('Comanda ja esta em uso por outra balanca.');
+    super('Comanda já está em uso por outra balança.');
     this.name = 'ComandaLockConflictError';
     this.lock = lock;
   }
@@ -381,21 +381,21 @@ export class ComandaStateMachineService {
   open(numero: string) {
     const normalized = numero.trim();
     if (!normalized) {
-      throw new Error('Numero da comanda e obrigatorio.');
+      throw new Error('O número da comanda é obrigatório.');
     }
 
     const existing = this.comandas.get(normalized);
     if (existing) {
       if (existing.status === 'ARQUIVADA') {
-        throw new Error('Comanda arquivada nao pode ser reaberta.');
+        throw new Error('A comanda arquivada não pode ser reaberta.');
       }
 
       if (existing.status === 'FECHADA_ORCAMENTO' || existing.status === 'FECHADA_VENDA') {
-        throw new Error('Comanda fechada nao pode receber novos itens.');
+        throw new Error('A comanda fechada não pode receber novos itens.');
       }
 
       if (existing.status === 'CANCELADA') {
-        throw new Error('Comanda cancelada nao pode ser reaberta sem autorizacao.');
+        throw new Error('A comanda cancelada não pode ser reaberta sem autorização.');
       }
 
       this.activeComandaNumero = normalized;
@@ -449,13 +449,13 @@ export class ComandaStateMachineService {
     const normalized = numero.trim();
     const existing = this.comandas.get(normalized);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     const { record } = this.clearExpiredLock(existing);
 
     if (!canTransition(record.status, to)) {
-      throw new Error(`Transicao invalida: ${record.status} -> ${to}.`);
+      throw new Error(`Transição inválida: ${record.status} -> ${to}.`);
     }
 
     const at = nowIso();
@@ -489,7 +489,7 @@ export class ComandaStateMachineService {
   markEmUsoBalanca(numero: string, reason = 'peso_recebido') {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     if (existing.status === 'ABERTA') {
@@ -500,7 +500,7 @@ export class ComandaStateMachineService {
       return existing;
     }
 
-    throw new Error(`Comanda em status ${existing.status} nao aceita pesagem.`);
+    throw new Error(`Comanda em status ${existing.status} não aceita pesagem.`);
   }
 
   markPesagemEmAndamento(numero: string, reason = 'peso_recebido') {
@@ -510,7 +510,7 @@ export class ComandaStateMachineService {
   setItems(numero: string, items: ComandaItemRecord[], _reason = 'items_sync') {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     ensureMutableItemsStatus(existing.status);
@@ -536,14 +536,14 @@ export class ComandaStateMachineService {
   addItem(numero: string, item: ComandaItemRecord, reason = 'item_added') {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     ensureMutableItemsStatus(existing.status);
 
     const normalizedItems = normalizeComandaItems([item]);
     if (normalizedItems.length === 0) {
-      throw new Error('Item da comanda invalido.');
+      throw new Error('Item da comanda inválido.');
     }
 
     return this.setItems(numero, [normalizedItems[0], ...existing.items], reason);
@@ -592,7 +592,7 @@ export class ComandaStateMachineService {
   ) {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     const { owner, stationId, ttlSeconds } = params;
@@ -645,7 +645,7 @@ export class ComandaStateMachineService {
   ) {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     const { owner, stationId, ttlSeconds } = params;
@@ -683,7 +683,7 @@ export class ComandaStateMachineService {
   ) {
     const existing = this.get(numero);
     if (!existing) {
-      throw new Error('Comanda nao encontrada.');
+      throw new Error('Comanda não encontrada.');
     }
 
     const { owner, stationId } = params;

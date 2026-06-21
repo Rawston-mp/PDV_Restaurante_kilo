@@ -749,7 +749,7 @@ export function CadastroPage() {
         const data = (await response.json()) as ViaCepResponse;
 
         if (data.erro) {
-          setSupplierCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          setSupplierCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
@@ -760,10 +760,10 @@ export function CadastroPage() {
 
         const suggestedCity = data.localidade ?? supplierCity;
         const suggestedUf = data.uf ?? supplierState;
-        setSupplierCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+        setSupplierCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
-          setSupplierCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+          setSupplierCepSuggestionMessage('Não foi possível consultar o CEP agora.');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -804,7 +804,7 @@ export function CadastroPage() {
         const data = (await response.json()) as ViaCepResponse;
 
         if (data.erro) {
-          setEmployeeCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          setEmployeeCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
@@ -815,10 +815,10 @@ export function CadastroPage() {
 
         const suggestedCity = data.localidade ?? employeeCity;
         const suggestedUf = data.uf ?? employeeState;
-        setEmployeeCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+        setEmployeeCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
-          setEmployeeCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+          setEmployeeCepSuggestionMessage('Não foi possível consultar o CEP agora.');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -859,7 +859,7 @@ export function CadastroPage() {
         const data = (await response.json()) as ViaCepResponse;
 
         if (data.erro) {
-          setClientCepSuggestionMessage('CEP nao encontrado para sugestao de endereco.');
+          setClientCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
@@ -870,10 +870,10 @@ export function CadastroPage() {
 
         const suggestedCity = data.localidade ?? clientCity;
         const suggestedUf = data.uf ?? clientState;
-        setClientCepSuggestionMessage(`Sugestao aplicada: ${suggestedCity}/${suggestedUf}.`);
+        setClientCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
-          setClientCepSuggestionMessage('Nao foi possivel consultar o CEP agora.');
+          setClientCepSuggestionMessage('Não foi possível consultar o CEP agora.');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -1128,7 +1128,7 @@ export function CadastroPage() {
       const xmlDocument = new DOMParser().parseFromString(xmlText, 'application/xml');
 
       if (xmlDocument.querySelector('parsererror')) {
-        throw new Error('Arquivo XML invalido.');
+        throw new Error('Arquivo XML inválido.');
       }
 
       const importedIssueDate = findFirstXmlText(xmlDocument, 'dhEmi') || findFirstXmlText(xmlDocument, 'dEmi');
@@ -1218,7 +1218,7 @@ export function CadastroPage() {
       setStockEntryCode((prevCode) => prevCode.trim() || generateStockEntryCodeForCurrentCatalog());
       setStockEntryFormError(null);
     } catch (error) {
-      setStockEntryFormError(error instanceof Error ? error.message : 'Nao foi possivel importar o XML.');
+      setStockEntryFormError(error instanceof Error ? error.message : 'Não foi possível importar o XML.');
     }
   };
 
@@ -1466,7 +1466,7 @@ export function CadastroPage() {
       const existingConvenio = convenios.find((convenio) => convenio.id === editingConvenioId);
 
       if (!existingConvenio) {
-        setConvenioFormError('Convenio selecionado para edicao nao foi encontrado.');
+        setConvenioFormError('O convênio selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -1531,7 +1531,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o convenio "${target.name}"?`);
+    const confirmed = window.confirm(`Deseja excluir o convênio "${target.name}"?`);
     if (!confirmed) {
       return;
     }
@@ -1578,7 +1578,7 @@ export function CadastroPage() {
       const existingCardManager = cardManagers.find((manager) => manager.id === editingCardManagerId);
 
       if (!existingCardManager) {
-        setCardManagerFormError('Administradora selecionada para edicao nao foi encontrada.');
+        setCardManagerFormError('A administradora selecionada para edição não foi encontrada.');
         return;
       }
 
@@ -1649,7 +1649,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar a administradora "${target.name}"?`);
+    const confirmed = window.confirm(`Deseja excluir a administradora "${target.name}"?`);
     if (!confirmed) {
       return;
     }
@@ -1667,13 +1667,13 @@ export function CadastroPage() {
     event.preventDefault();
 
     if (!isFilled(financeDescription)) {
-      setFinanceFormError('Preencha a descricao antes de salvar.');
+      setFinanceFormError('Preencha a descrição antes de salvar.');
       return;
     }
 
     const amountValue = Number(financeAmount.replace(/\./g, '').replace(',', '.'));
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
-      setFinanceFormError('Informe um valor valido para o lancamento.');
+      setFinanceFormError('Informe um valor válido para o lançamento.');
       return;
     }
 
@@ -1686,7 +1686,7 @@ export function CadastroPage() {
       const existingEntry = financeEntries.find((entry) => entry.id === editingFinanceEntryId);
 
       if (!existingEntry) {
-        setFinanceFormError('Lancamento selecionado para edicao nao foi encontrado.');
+        setFinanceFormError('O lançamento selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -1769,7 +1769,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o lancamento "${target.description}"?`);
+    const confirmed = window.confirm(`Deseja excluir o lançamento "${target.description}"?`);
     if (!confirmed) {
       return;
     }
@@ -1801,7 +1801,7 @@ export function CadastroPage() {
   const onDuplicateFromCurrentFinanceTab = () => {
     const sourceEntry = activeFinanceRows[activeFinanceRows.length - 1];
     if (!sourceEntry) {
-      window.alert('Nao ha lancamentos nesta aba para duplicar. Cadastre ao menos 1 lançamento primeiro.');
+      window.alert('Não há lançamentos nesta aba para duplicar. Cadastre ao menos um lançamento primeiro.');
       return;
     }
 
@@ -1825,7 +1825,7 @@ export function CadastroPage() {
     }
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(duplicateFinanceIssueDate)) {
-      setDuplicateFinanceError('Informe a data de emissao no formato AAAA-MM-DD.');
+      setDuplicateFinanceError('Informe a data de emissão no formato AAAA-MM-DD.');
       return;
     }
 
@@ -1849,7 +1849,7 @@ export function CadastroPage() {
     const issueDateBase = parseIsoDateInput(duplicateFinanceIssueDate);
     const dueDateBase = parseIsoDateInput(duplicateFinanceDueDate);
     if (!issueDateBase || !dueDateBase) {
-      setDuplicateFinanceError('As datas informadas sao invalidas.');
+      setDuplicateFinanceError('As datas informadas são inválidas.');
       return;
     }
 
@@ -1989,7 +1989,7 @@ export function CadastroPage() {
       const selectedProduct = products.find((candidate) => candidate.id === item.productId);
 
       if (!selectedProduct) {
-        setStockEntryFormError(`Produto da linha ${index + 1} nao foi encontrado.`);
+        setStockEntryFormError(`O produto da linha ${index + 1} não foi encontrado.`);
         return;
       }
 
@@ -1999,7 +1999,7 @@ export function CadastroPage() {
       }
 
       if (!isFilled(stockEntrySupplierName) || !isFilled(stockEntryInvoiceNumber)) {
-        setStockEntryFormError('Preencha fornecedor e numero da nota antes de salvar.');
+        setStockEntryFormError('Preencha o fornecedor e o número da nota antes de salvar.');
         return;
       }
 
@@ -2026,7 +2026,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar a entrada de mercadoria "${target.invoiceNumber}"?`);
+    const confirmed = window.confirm(`Deseja excluir a entrada de mercadoria "${target.invoiceNumber}"?`);
     if (!confirmed) {
       return;
     }
@@ -2049,7 +2049,7 @@ export function CadastroPage() {
     event.preventDefault();
 
     if (!isFilled(cpfCnpj) || !isFilled(legalName) || !isFilled(supplierCity)) {
-      setSupplierFormError('Preencha CPF/CNPJ, Razao social e Cidade antes de salvar.');
+      setSupplierFormError('Preencha CPF/CNPJ, razão social e cidade antes de salvar.');
       return;
     }
 
@@ -2062,7 +2062,7 @@ export function CadastroPage() {
       const existingSupplier = suppliers.find((supplier) => supplier.id === editingSupplierId);
 
       if (!existingSupplier) {
-        setSupplierFormError('Fornecedor selecionado para edicao nao foi encontrado.');
+        setSupplierFormError('O fornecedor selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -2134,7 +2134,7 @@ export function CadastroPage() {
       const existingEmployee = employees.find((employee) => employee.id === editingEmployeeId);
 
       if (!existingEmployee) {
-        setEmployeeFormError('Funcionario selecionado para edicao nao foi encontrado.');
+        setEmployeeFormError('O funcionário selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -2214,7 +2214,7 @@ export function CadastroPage() {
       const existingClient = clients.find((client) => client.id === editingClientId);
 
       if (!existingClient) {
-        setClientFormError('Cliente selecionado para edicao nao foi encontrado.');
+        setClientFormError('O cliente selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -2371,7 +2371,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o fornecedor "${target.legalName}"?`);
+    const confirmed = window.confirm(`Deseja excluir o fornecedor "${target.legalName}"?`);
     if (!confirmed) {
       return;
     }
@@ -2391,7 +2391,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o funcionario "${target.fullName}"?`);
+    const confirmed = window.confirm(`Deseja excluir o funcionário "${target.fullName}"?`);
     if (!confirmed) {
       return;
     }
@@ -2411,7 +2411,7 @@ export function CadastroPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o cliente "${target.fullName}"?`);
+    const confirmed = window.confirm(`Deseja excluir o cliente "${target.fullName}"?`);
     if (!confirmed) {
       return;
     }
@@ -2445,7 +2445,7 @@ export function CadastroPage() {
         <div>
           <p className="products-eyebrow">Cadastros e relacionamento</p>
           <h2>Cadastros</h2>
-          <p className="products-subtitle">Gestao de fornecedores e funcionarios para operacao administrativa.</p>
+          <p className="products-subtitle">Gestão de fornecedores e funcionários para operação administrativa.</p>
         </div>
         <div className="products-kpi">
           <strong>{currentCount}</strong>
@@ -2453,7 +2453,7 @@ export function CadastroPage() {
             {activeTab === 'FORNECEDORES'
               ? 'fornecedores'
               : activeTab === 'FUNCIONARIOS'
-                ? 'funcionarios'
+                ? 'funcionários'
                 : activeTab === 'CLIENTES'
                   ? 'clientes'
                   : activeTab === 'CONVENIOS'
@@ -2491,7 +2491,7 @@ export function CadastroPage() {
               setShowCadastroSpan(false);
             }}
           >
-            Funcionarios
+            Funcionários
           </button>
           <button
             type="button"
@@ -2607,16 +2607,16 @@ export function CadastroPage() {
       {activeTab === 'FORNECEDORES' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3>Cadastro rapido | Fornecedores</h3>
+            <h3>Cadastro rápido | Fornecedores</h3>
           </header>
 
           <form onSubmit={onSubmitSupplier} className="suppliers-form">
             <section className="suppliers-section">
-              <h4>Dados basicos</h4>
+              <h4>Dados básicos</h4>
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="supplier-code">ID fornecedor (automatico)</label>
+                  <label htmlFor="supplier-code">ID do fornecedor (automático)</label>
                   <input id="supplier-code" value={supplierCode} readOnly />
                 </div>
                 <div>
@@ -2629,7 +2629,7 @@ export function CadastroPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="state-registration">Inscricao estadual</label>
+                  <label htmlFor="state-registration">Inscrição estadual</label>
                   <input
                     id="state-registration"
                     value={stateRegistration}
@@ -2640,7 +2640,7 @@ export function CadastroPage() {
 
               <div className="suppliers-row-2-wide">
                 <div>
-                  <label htmlFor="legal-name">Nome completo/Razao social</label>
+                  <label htmlFor="legal-name">Nome completo/Razão social</label>
                   <input id="legal-name" value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
                 </div>
                 <div>
@@ -2651,7 +2651,7 @@ export function CadastroPage() {
             </section>
 
             <section className="suppliers-section">
-              <h4>Endereco</h4>
+              <h4>Endereço</h4>
 
               <div className="suppliers-row-address-top">
                 <div>
@@ -2663,7 +2663,7 @@ export function CadastroPage() {
                   <input id="address" value={supplierAddress} onChange={(e) => setSupplierAddress(e.target.value)} />
                 </div>
                 <div>
-                  <label htmlFor="number">Numero</label>
+                  <label htmlFor="number">Número</label>
                   <input id="number" value={supplierNumber} onChange={(e) => setSupplierNumber(e.target.value)} />
                 </div>
                 <div>
@@ -2675,7 +2675,7 @@ export function CadastroPage() {
               {(isSupplierCepLookupLoading || supplierCepSuggestionMessage) && (
                 <p className="suppliers-cep-feedback">
                   {isSupplierCepLookupLoading
-                    ? 'Buscando sugestao de endereco pelo CEP...'
+                    ? 'Buscando sugestão de endereço pelo CEP...'
                     : supplierCepSuggestionMessage}
                 </p>
               )}
@@ -2727,7 +2727,7 @@ export function CadastroPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={savingSupplier}>
-                {savingSupplier ? 'Salvando...' : editingSupplierId ? 'Salvar edicao' : 'Salvar dados'}
+                {savingSupplier ? 'Salvando...' : editingSupplierId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -2749,16 +2749,16 @@ export function CadastroPage() {
       {activeTab === 'FUNCIONARIOS' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3>Cadastro rapido | Funcionarios</h3>
+            <h3>Cadastro rápido | Funcionários</h3>
           </header>
 
           <form onSubmit={onSubmitEmployee} className="suppliers-form">
             <section className="suppliers-section">
-              <h4>Dados basicos</h4>
+              <h4>Dados básicos</h4>
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="employee-code">ID funcionario (automatico)</label>
+                  <label htmlFor="employee-code">ID do funcionário (automático)</label>
                   <input id="employee-code" value={employeeCode} readOnly />
                 </div>
                 <div>
@@ -2797,8 +2797,8 @@ export function CadastroPage() {
                   />
                 </div>
                 <div className="employee-status-field">
-                  <label>Status do funcionario</label>
-                  <div className="employee-status-toggle" role="group" aria-label="Status do funcionario">
+                  <label>Status do funcionário</label>
+                  <div className="employee-status-toggle" role="group" aria-label="Status do funcionário">
                     <button
                       type="button"
                       className={employeeActive ? 'is-active' : ''}
@@ -2869,19 +2869,19 @@ export function CadastroPage() {
               </div>
 
               <div className="suppliers-notes-field">
-                <label htmlFor="employee-notes">Observacoes</label>
+                <label htmlFor="employee-notes">Observações</label>
                 <textarea
                   id="employee-notes"
                   value={employeeNotes}
                   onChange={(e) => setEmployeeNotes(e.target.value)}
                   rows={3}
-                  placeholder="Informacoes adicionais sobre o funcionario"
+                  placeholder="Informações adicionais sobre o funcionário"
                 />
               </div>
             </section>
 
             <section className="suppliers-section">
-              <h4>Endereco</h4>
+              <h4>Endereço</h4>
 
               <div className="suppliers-row-address-top">
                 <div>
@@ -2901,7 +2901,7 @@ export function CadastroPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="employee-number">Numero</label>
+                  <label htmlFor="employee-number">Número</label>
                   <input
                     id="employee-number"
                     value={employeeNumber}
@@ -2921,7 +2921,7 @@ export function CadastroPage() {
               {(isEmployeeCepLookupLoading || employeeCepSuggestionMessage) && (
                 <p className="suppliers-cep-feedback">
                   {isEmployeeCepLookupLoading
-                    ? 'Buscando sugestao de endereco pelo CEP...'
+                    ? 'Buscando sugestão de endereço pelo CEP...'
                     : employeeCepSuggestionMessage}
                 </p>
               )}
@@ -2995,7 +2995,7 @@ export function CadastroPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={savingEmployee}>
-                {savingEmployee ? 'Salvando...' : editingEmployeeId ? 'Salvar edicao' : 'Salvar dados'}
+                {savingEmployee ? 'Salvando...' : editingEmployeeId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -3017,16 +3017,16 @@ export function CadastroPage() {
       {activeTab === 'CLIENTES' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3>Cadastro rapido | Clientes</h3>
+            <h3>Cadastro rápido | Clientes</h3>
           </header>
 
           <form onSubmit={onSubmitClient} className="suppliers-form">
             <section className="suppliers-section">
-              <h4>Dados basicos</h4>
+              <h4>Dados básicos</h4>
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="client-code">ID cliente (automatico)</label>
+                  <label htmlFor="client-code">ID do cliente (automático)</label>
                   <input id="client-code" value={clientCode} readOnly />
                 </div>
                 <div>
@@ -3103,7 +3103,7 @@ export function CadastroPage() {
             </section>
 
             <section className="suppliers-section">
-              <h4>Endereco</h4>
+              <h4>Endereço</h4>
 
               <div className="suppliers-row-address-top">
                 <div>
@@ -3123,7 +3123,7 @@ export function CadastroPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="client-number">Numero</label>
+                  <label htmlFor="client-number">Número</label>
                   <input
                     id="client-number"
                     value={clientNumber}
@@ -3143,7 +3143,7 @@ export function CadastroPage() {
               {(isClientCepLookupLoading || clientCepSuggestionMessage) && (
                 <p className="suppliers-cep-feedback">
                   {isClientCepLookupLoading
-                    ? 'Buscando sugestao de endereco pelo CEP...'
+                    ? 'Buscando sugestão de endereço pelo CEP...'
                     : clientCepSuggestionMessage}
                 </p>
               )}
@@ -3183,11 +3183,11 @@ export function CadastroPage() {
             </section>
 
             <section className="suppliers-section">
-              <h4>Historico de consumo (Fiado)</h4>
+              <h4>Histórico de consumo (fiado)</h4>
 
               <div className="client-history-filter-row">
                 <div>
-                  <label htmlFor="client-history-period-start">Periodo de</label>
+                  <label htmlFor="client-history-period-start">Período de</label>
                   <input
                     id="client-history-period-start"
                     type="date"
@@ -3196,7 +3196,7 @@ export function CadastroPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="client-history-period-end">ate</label>
+                  <label htmlFor="client-history-period-end">até</label>
                   <input
                     id="client-history-period-end"
                     type="date"
@@ -3217,17 +3217,17 @@ export function CadastroPage() {
                   id="client-consumption-description"
                   value={clientConsumptionDescription}
                   onChange={(e) => setClientConsumptionDescription(e.target.value)}
-                  placeholder="Descreva o lancamento de consumo fiado"
+                  placeholder="Descreva o lançamento de consumo fiado"
                 />
                 <button type="button" onClick={addClientConsumptionEntry}>
-                  Lancar com data/hora
+                  Lançar com data/hora
                 </button>
               </div>
 
               {clientConsumptionHistory.length === 0 ? (
                 <p className="client-history-empty">Nenhum consumo lancado para este cliente.</p>
               ) : filteredClientConsumptionHistory.length === 0 ? (
-                <p className="client-history-empty">Nenhum consumo encontrado no periodo selecionado.</p>
+                <p className="client-history-empty">Nenhum consumo encontrado no período selecionado.</p>
               ) : (
                 <ul className="client-history-list">
                   {filteredClientConsumptionHistory.map((entry) => (
@@ -3247,7 +3247,7 @@ export function CadastroPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={savingClient}>
-                {savingClient ? 'Salvando...' : editingClientId ? 'Salvar edicao' : 'Salvar dados'}
+                {savingClient ? 'Salvando...' : editingClientId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -3269,16 +3269,16 @@ export function CadastroPage() {
       {activeTab === 'CONVENIOS' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3>Cadastro rapido | Convênios</h3>
+            <h3>Cadastro rápido | Convênios</h3>
           </header>
 
           <form onSubmit={onSubmitConvenio} className="suppliers-form">
             <section className="suppliers-section">
-              <h4>Dados basicos</h4>
+              <h4>Dados básicos</h4>
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="convenio-code">ID convenio (automatico)</label>
+                  <label htmlFor="convenio-code">ID do convênio (automático)</label>
                   <input id="convenio-code" value={convenioCode} readOnly />
                 </div>
                 <div>
@@ -3327,7 +3327,7 @@ export function CadastroPage() {
                     id="convenio-bank-name"
                     value={convenioBankName}
                     onChange={(e) => setConvenioBankName(e.target.value)}
-                    placeholder="Ex: Banco Z"
+                    placeholder="Ex.: Banco Z"
                   />
                 </div>
                 <div>
@@ -3336,7 +3336,7 @@ export function CadastroPage() {
                     id="convenio-account-name"
                     value={convenioAccountName}
                     onChange={(e) => setConvenioAccountName(e.target.value)}
-                    placeholder="Ex: Conta corrente"
+                    placeholder="Ex.: conta corrente"
                   />
                 </div>
               </div>
@@ -3355,7 +3355,7 @@ export function CadastroPage() {
             </section>
 
             <section className="suppliers-section">
-              <h4>Observacoes</h4>
+              <h4>Observações</h4>
               <div className="suppliers-notes-field">
                 <label htmlFor="convenio-notes">Notas</label>
                 <textarea
@@ -3363,14 +3363,14 @@ export function CadastroPage() {
                   value={convenioNotes}
                   onChange={(e) => setConvenioNotes(e.target.value)}
                   rows={4}
-                  placeholder="Ex: PIX Banco Z, dinheiro em especie, convenios de cartao, saidas e entradas"
+                  placeholder="Ex.: PIX Banco Z, dinheiro em espécie, convênios de cartão, saídas e entradas"
                 />
               </div>
             </section>
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={savingConvenio}>
-                {savingConvenio ? 'Salvando...' : editingConvenioId ? 'Salvar edicao' : 'Salvar dados'}
+                {savingConvenio ? 'Salvando...' : editingConvenioId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -3392,16 +3392,16 @@ export function CadastroPage() {
       {activeTab === 'ADMIN_CARTOES' && showCadastroSpan && (
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3>Cadastro rapido | Administradora de Cartões</h3>
+            <h3>Cadastro rápido | Administradora de cartões</h3>
           </header>
 
           <form onSubmit={onSubmitCardManager} className="suppliers-form">
             <section className="suppliers-section">
-              <h4>Dados basicos</h4>
+              <h4>Dados básicos</h4>
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="card-manager-code">ID administradora (automatico)</label>
+                  <label htmlFor="card-manager-code">ID da administradora (automático)</label>
                   <input id="card-manager-code" value={cardManagerCode} readOnly />
                 </div>
                 <div>
@@ -3431,21 +3431,21 @@ export function CadastroPage() {
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="card-manager-mdr-debit">Taxa debito (%)</label>
+                  <label htmlFor="card-manager-mdr-debit">Taxa de débito (%)</label>
                   <input
                     id="card-manager-mdr-debit"
                     value={cardManagerMdrDebit}
                     onChange={(e) => setCardManagerMdrDebit(e.target.value)}
-                    placeholder="Ex: 1,99"
+                    placeholder="Ex.: 1,99"
                   />
                 </div>
                 <div>
-                  <label htmlFor="card-manager-mdr-credit">Taxa credito (%)</label>
+                  <label htmlFor="card-manager-mdr-credit">Taxa de crédito (%)</label>
                   <input
                     id="card-manager-mdr-credit"
                     value={cardManagerMdrCredit}
                     onChange={(e) => setCardManagerMdrCredit(e.target.value)}
-                    placeholder="Ex: 3,49"
+                    placeholder="Ex.: 3,49"
                   />
                 </div>
                 <div>
@@ -3475,7 +3475,7 @@ export function CadastroPage() {
             </section>
 
             <section className="suppliers-section">
-              <h4>Observacoes</h4>
+              <h4>Observações</h4>
               <div className="suppliers-notes-field">
                 <label htmlFor="card-manager-notes">Notas</label>
                 <textarea
@@ -3483,14 +3483,14 @@ export function CadastroPage() {
                   value={cardManagerNotes}
                   onChange={(e) => setCardManagerNotes(e.target.value)}
                   rows={4}
-                  placeholder="Ex: taxas negociadas por volume, antecipacao D+2, repasse mensal"
+                  placeholder="Ex.: taxas negociadas por volume, antecipação D+2, repasse mensal"
                 />
               </div>
             </section>
 
             <div className="products-cadastro-footer">
               <button type="submit">
-                {editingCardManagerId ? 'Salvar edicao' : 'Salvar dados'}
+                {editingCardManagerId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -3513,8 +3513,8 @@ export function CadastroPage() {
         <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
             <div>
-              <h3>Cadastro rapido | Financeiro</h3>
-              <p className="products-subtitle">Lancamentos por categoria financeira.</p>
+              <h3>Cadastro rápido | Financeiro</h3>
+              <p className="products-subtitle">Lançamentos por categoria financeira.</p>
             </div>
             <div className="products-cadastro-tabs">
               {financeTabs.map((tab) => (
@@ -3547,7 +3547,7 @@ export function CadastroPage() {
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="finance-code">ID lançamento (automatico)</label>
+                  <label htmlFor="finance-code">ID do lançamento (automático)</label>
                   <input id="finance-code" value={financeCode} readOnly />
                 </div>
                 <div>
@@ -3567,7 +3567,7 @@ export function CadastroPage() {
                       type="button"
                       className="products-supplier-picker-button"
                       onClick={openSupplierFormFromFinance}
-                      aria-label="Cadastrar fornecedor rapido"
+                      aria-label="Cadastrar fornecedor rápido"
                     >
                       +
                     </button>
@@ -3641,7 +3641,7 @@ export function CadastroPage() {
                     id="finance-account-name"
                     value={financeAccountName}
                     onChange={(e) => setFinanceAccountName(e.target.value)}
-                    placeholder="Ex: Caixa, Banco X, Conta Operacional"
+                    placeholder="Ex.: caixa, Banco X, conta operacional"
                   />
                 </div>
                 <div>
@@ -3655,7 +3655,7 @@ export function CadastroPage() {
                         setFinanceDocumentRef(e.target.value);
                         setFinanceFormError(null);
                       }}
-                      placeholder="Ex: boleto, pix, ted, adiantamento"
+                      placeholder="Ex.: boleto, PIX, TED, adiantamento"
                     />
                     <button
                       type="button"
@@ -3700,7 +3700,7 @@ export function CadastroPage() {
             </section>
 
             <div className="products-cadastro-footer">
-              <button type="submit">{editingFinanceEntryId ? 'Salvar edicao' : 'Salvar lançamento'}</button>
+              <button type="submit">{editingFinanceEntryId ? 'Salvar edição' : 'Salvar lançamento'}</button>
               <button
                 type="button"
                 className="button-muted"
@@ -3755,7 +3755,7 @@ export function CadastroPage() {
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="stock-entry-code">ID da entrada (automatico)</label>
+                  <label htmlFor="stock-entry-code">ID da entrada (automático)</label>
                   <input id="stock-entry-code" value={stockEntryCode} readOnly />
                 </div>
                 <div>
@@ -3847,7 +3847,7 @@ export function CadastroPage() {
                     id="stock-entry-invoice"
                     value={stockEntryInvoiceNumber}
                     onChange={(e) => setStockEntryInvoiceNumber(e.target.value)}
-                    placeholder="Ex: NF 12345"
+                    placeholder="Ex.: NF 12345"
                   />
                 </div>
                 <div>
@@ -3856,7 +3856,7 @@ export function CadastroPage() {
                     id="stock-entry-series"
                     value={stockEntrySeries}
                     onChange={(e) => setStockEntrySeries(e.target.value)}
-                    placeholder="Ex: 1"
+                    placeholder="Ex.: 1"
                   />
                 </div>
               </div>
@@ -3886,7 +3886,7 @@ export function CadastroPage() {
                     id="stock-entry-document-model"
                     value={stockEntryDocumentModel}
                     onChange={(e) => setStockEntryDocumentModel(e.target.value)}
-                    placeholder="Ex: 55"
+                    placeholder="Ex.: 55"
                   />
                 </div>
               </div>
@@ -3916,7 +3916,7 @@ export function CadastroPage() {
                     id="stock-entry-payment-condition"
                     value={stockEntryPaymentCondition}
                     onChange={(e) => setStockEntryPaymentCondition(e.target.value)}
-                    placeholder="Ex: À vista / 28 dias"
+                    placeholder="Ex.: à vista / 28 dias"
                   />
                 </div>
               </div>
@@ -4060,7 +4060,7 @@ export function CadastroPage() {
                     value={stockEntryStockLocation}
                     onChange={(e) => setStockEntryStockLocation(e.target.value)}
                   >
-                    <option value="PADRAO">PADRAO</option>
+                    <option value="PADRAO">PADRÃO</option>
                     <option value="FRIOS">FRIOS</option>
                     <option value="BEBIDAS">BEBIDAS</option>
                     <option value="SECOS">SECOS</option>
@@ -4072,7 +4072,7 @@ export function CadastroPage() {
                     id="stock-entry-freight-by-account"
                     value={stockEntryFreightByAccount}
                     onChange={(e) => setStockEntryFreightByAccount(e.target.value)}
-                    placeholder="Ex: Emitente / Destinatário"
+                    placeholder="Ex.: emitente / destinatário"
                   />
                 </div>
                 <div>
@@ -4201,7 +4201,7 @@ export function CadastroPage() {
                         <div className="products-imported-item-summary">
                           <span>Item {index + 1}</span>
                           <strong>{currencyFormatter.format(itemTotal)}</strong>
-                          <small>{selectedProduct ? selectedProduct.name : 'Produto nao vinculado'}</small>
+                          <small>{selectedProduct ? selectedProduct.name : 'Produto não vinculado'}</small>
                           {item.xmlProductCode && <small>XML {item.xmlProductCode}</small>}
                         </div>
                       </div>
@@ -4213,7 +4213,7 @@ export function CadastroPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={savingStockEntry}>
-                {savingStockEntry ? 'Salvando...' : 'Lancar entrada'}
+                {savingStockEntry ? 'Salvando...' : 'Lançar entrada'}
               </button>
               <button
                 type="button"
@@ -4254,7 +4254,7 @@ export function CadastroPage() {
                       Quantidade: {entry.quantity} | Custo unitario: {currencyFormatter.format(entry.unitCost)} | Total: {currencyFormatter.format(entry.totalCost)}
                     </span>
                     <span>Recebimento: {entry.receivedAt instanceof Date ? entry.receivedAt.toLocaleString('pt-BR') : new Date(entry.receivedAt).toLocaleString('pt-BR')}</span>
-                    <span>{entry.notes || 'Sem observacoes'}</span>
+                    <span>{entry.notes || 'Sem observações'}</span>
                   </div>
                   <div>
                     <span>Produto vinculado e estoque ajustado automaticamente.</span>
@@ -4264,7 +4264,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => void onDeleteStockEntry(entry.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4299,7 +4299,7 @@ export function CadastroPage() {
                     <span>
                       Contato: {supplier.mobile || supplier.phone || '-'}{' '}
                       {supplier.mobile && (
-                        <span className="whatsapp-badge" title="Numero com WhatsApp" aria-label="Numero com WhatsApp">
+                        <span className="whatsapp-badge" title="Número com WhatsApp" aria-label="Número com WhatsApp">
                           <svg
                             className="whatsapp-icon"
                             viewBox="0 0 24 24"
@@ -4324,7 +4324,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => void onDeleteSupplier(supplier.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4337,10 +4337,10 @@ export function CadastroPage() {
 
       {activeTab === 'FUNCIONARIOS' && (
         <article className="card products-list-card">
-          <h3>Funcionarios ativos</h3>
+          <h3>Funcionários ativos</h3>
 
           {employeeRows.length === 0 ? (
-            <p className="empty-state">Nenhum funcionario cadastrado ainda.</p>
+            <p className="empty-state">Nenhum funcionário cadastrado ainda.</p>
           ) : (
             <ul className="products-list suppliers-list">
               {employeeRows.map((employee) => (
@@ -4365,7 +4365,7 @@ export function CadastroPage() {
                     <span>
                       Contato: {employee.mobile || employee.phone || '-'}{' '}
                       {employee.mobile && (
-                        <span className="whatsapp-badge" title="Numero com WhatsApp" aria-label="Numero com WhatsApp">
+                        <span className="whatsapp-badge" title="Número com WhatsApp" aria-label="Número com WhatsApp">
                           <svg
                             className="whatsapp-icon"
                             viewBox="0 0 24 24"
@@ -4391,7 +4391,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => void onDeleteEmployee(employee.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4425,12 +4425,12 @@ export function CadastroPage() {
                       Contato: {client.mobile || client.phone || '-'} | E-mail: {client.email || '-'}
                     </span>
                     <span>Status: {client.active ? 'ATIVO' : 'INATIVO'}</span>
-                    <span>Historico fiado: {client.consumptionHistory.length} lancamento(s)</span>
+                    <span>Histórico de fiado: {client.consumptionHistory.length} lançamento(s)</span>
                   </div>
                   <div>
                     {client.consumptionHistory.length > 0 && (
                       <div className="client-history-list-preview">
-                        <strong>Ultimo lancamento</strong>
+                        <strong>Último lançamento</strong>
                         <span>{client.consumptionHistory[0]?.launchedAt}</span>
                         <span>{client.consumptionHistory[0]?.description}</span>
                       </div>
@@ -4444,7 +4444,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => void onDeleteClient(client.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4480,7 +4480,7 @@ export function CadastroPage() {
                     <span>Status: {convenio.active ? 'ATIVO' : 'INATIVO'}</span>
                   </div>
                   <div>
-                    <span>{convenio.notes || 'Sem observacoes'}</span>
+                    <span>{convenio.notes || 'Sem observações'}</span>
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
                         Editar
@@ -4490,7 +4490,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => void onDeleteConvenio(convenio.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4520,12 +4520,12 @@ export function CadastroPage() {
                       Bandeira: {cardManager.brandGroup} | Prazo: {cardManager.settlementDays} dia(s)
                     </span>
                     <span>
-                      Debito: {cardManager.mdrDebit || '-'}% | Credito: {cardManager.mdrCredit || '-'}%
+                      Débito: {cardManager.mdrDebit || '-'}% | Crédito: {cardManager.mdrCredit || '-'}%
                     </span>
                     <span>Status: {cardManager.active ? 'ATIVO' : 'INATIVO'}</span>
                   </div>
                   <div>
-                    <span>{cardManager.notes || 'Sem observacoes'}</span>
+                    <span>{cardManager.notes || 'Sem observações'}</span>
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditCardManager(cardManager.id)}>
                         Editar
@@ -4535,7 +4535,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => onDeleteCardManager(cardManager.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>
@@ -4702,7 +4702,7 @@ export function CadastroPage() {
                     </span>
                   </div>
                   <div>
-                    <span>{entry.notes || 'Sem observacoes'}</span>
+                    <span>{entry.notes || 'Sem observações'}</span>
                     <div className="products-row-actions">
                       <button
                         type="button"
@@ -4727,7 +4727,7 @@ export function CadastroPage() {
                         className="products-delete-button"
                         onClick={() => onDeleteFinanceEntry(entry.id)}
                       >
-                        Deletar
+                        Excluir
                       </button>
                     </div>
                   </div>

@@ -4,7 +4,7 @@ import { CreateSupplier } from '@/modules/suppliers/application/use-cases/Create
 import { InMemorySupplierRepository } from '@/modules/suppliers/infrastructure/repositories/InMemorySupplierRepository';
 
 describe('Suppliers use cases', () => {
-  it('cria fornecedor com dados basicos e endereco', async () => {
+  it('cria fornecedor com dados básicos e endereço', async () => {
     const repository = new InMemorySupplierRepository();
     const createSupplier = new CreateSupplier(repository);
 
@@ -20,7 +20,7 @@ describe('Suppliers use cases', () => {
       number: '100',
       neighborhood: 'Centro',
       state: 'SP',
-      city: 'Sao Paulo',
+      city: 'São Paulo',
       complement: 'Sala 2',
       serviceFee: '0,00',
       phone: '(11) 3000-0000',
@@ -33,7 +33,7 @@ describe('Suppliers use cases', () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.supplierCode).toBe('001');
     expect(loaded?.cpfCnpj).toBe('12.345.678/0001-99');
-    expect(loaded?.city).toBe('Sao Paulo');
+    expect(loaded?.city).toBe('São Paulo');
     expect(loaded?.version).toBe(1);
   });
 
@@ -66,7 +66,7 @@ describe('Suppliers use cases', () => {
 
     const existing = await repository.findById('sup-2');
     if (!existing) {
-      throw new Error('Fornecedor esperado nao encontrado.');
+      throw new Error('Fornecedor esperado não encontrado.');
     }
 
     await repository.save({

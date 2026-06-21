@@ -7,7 +7,7 @@ const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', 'Backspace'
 export function NumericKeypad({ onKeyPress }: NumericKeypadProps) {
   return (
     <section className="comanda-panel">
-      <p className="panel-label">Teclado numerico</p>
+      <p className="panel-label">Teclado numérico</p>
       <div className="numeric-keypad-grid">
         {keys.map((key) => (
           <button key={key} type="button" onClick={() => onKeyPress(key)}>

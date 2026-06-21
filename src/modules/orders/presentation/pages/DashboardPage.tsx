@@ -297,7 +297,7 @@ export function DashboardPage() {
       periodLabel:
         periodStart || periodEnd
           ? `${periodStart ? periodStart.toLocaleDateString('pt-BR') : 'início'} até ${periodEnd ? periodEnd.toLocaleDateString('pt-BR') : 'agora'}`
-          : 'periodo atual'
+          : 'período atual'
     };
   }, [cashMovements, orders, periodEnd, periodStart]);
 
@@ -324,7 +324,7 @@ export function DashboardPage() {
     const result = await ordersContainer.syncOrders.execute();
     await reloadOrders();
     setSyncMessage(
-      `Sincronizacao concluida: ${result.mergedCount} pedidos, ${result.resolvedConflicts} conflitos resolvidos.`
+      `Sincronização concluída: ${result.mergedCount} pedidos, ${result.resolvedConflicts} conflitos resolvidos.`
     );
   };
 
@@ -333,7 +333,7 @@ export function DashboardPage() {
 
     const amount = Number(movementAmount.replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setMovementError('Informe um valor valido para o lancamento.');
+      setMovementError('Informe um valor válido para o lançamento.');
       return;
     }
 
@@ -387,7 +387,7 @@ export function DashboardPage() {
     const filename = `fechamento-${kind}-${now.toISOString().slice(0, 10)}.csv`;
 
     const rows: string[][] = [
-      ['tipo', 'data', 'codigo', 'descricao', 'categoria', 'valor', 'convenio', 'meio_pagamento', 'status_pedido'],
+      ['tipo', 'data', 'código', 'descrição', 'categoria', 'valor', 'convênio', 'meio_pagamento', 'status_pedido'],
       ...closingOrders.map((order) => [
         'PEDIDO',
         normalizeDate(order.createdAt)?.toLocaleString('pt-BR') ?? '--',
@@ -418,7 +418,7 @@ export function DashboardPage() {
   const exportFilteredCsv = () => {
     const filename = `fechamento-filtrado-${new Date().toISOString().slice(0, 10)}.csv`;
     const rows: string[][] = [
-      ['tipo', 'data', 'codigo', 'descricao', 'categoria', 'valor', 'convenio', 'meio_pagamento', 'status_pedido'],
+      ['tipo', 'data', 'código', 'descrição', 'categoria', 'valor', 'convênio', 'meio_pagamento', 'status_pedido'],
       ...dashboard.reportOrders.map((order) => [
         'PEDIDO',
         normalizeDate(order.createdAt)?.toLocaleString('pt-BR') ?? '--',
@@ -450,7 +450,7 @@ export function DashboardPage() {
     <section className="dashboard-page">
       <header className="card dashboard-hero">
         <div>
-          <p className="products-eyebrow">Operacao em tempo real</p>
+          <p className="products-eyebrow">Operação em tempo real</p>
           <h2>Dashboard</h2>
           <p className="products-subtitle">Leitura visual do fluxo de pedidos, caixa, convênios e saldo diario/mensal.</p>
         </div>
@@ -486,7 +486,7 @@ export function DashboardPage() {
       <section className="card dashboard-panel dashboard-period-card">
         <div className="dashboard-panel-header">
           <div>
-            <p className="products-eyebrow">Periodo</p>
+            <p className="products-eyebrow">Período</p>
             <h3>Filtrar fechamento</h3>
           </div>
           <span>{dashboard.periodLabel}</span>
@@ -528,7 +528,7 @@ export function DashboardPage() {
           <div className="dashboard-panel-header">
             <div>
               <p className="products-eyebrow">Caixa</p>
-              <h3>Lancar entrada ou saida</h3>
+              <h3>Lançar entrada ou saída</h3>
             </div>
             <span>Use convênios para classificar as entradas e as saídas do fechamento.</span>
           </div>
@@ -599,12 +599,12 @@ export function DashboardPage() {
             </div>
 
             <div className="dashboard-finance-span-2">
-              <label htmlFor="movement-description">Descricao</label>
+              <label htmlFor="movement-description">Descrição</label>
               <input
                 id="movement-description"
                 value={movementDescription}
                 onChange={(event) => setMovementDescription(event.target.value)}
-                placeholder="Ex: Pix Banco Z, retirada de troco, gasto com insumos"
+                placeholder="Ex.: PIX Banco Z, retirada de troco, gasto com insumos"
               />
             </div>
 
@@ -619,8 +619,8 @@ export function DashboardPage() {
             </div>
 
             <div className="dashboard-finance-actions">
-              <button type="submit" disabled={savingCashMovement}>Salvar lancamento</button>
-              <span>{savingCashMovement ? 'Gravando movimentacao...' : 'Lancamentos diarios e mensais ficam persistidos localmente.'}</span>
+              <button type="submit" disabled={savingCashMovement}>Salvar lançamento</button>
+              <span>{savingCashMovement ? 'Gravando movimentação...' : 'Lançamentos diários e mensais ficam persistidos localmente.'}</span>
             </div>
 
             {movementError && <p className="products-form-warning">{movementError}</p>}
@@ -660,7 +660,7 @@ export function DashboardPage() {
           <div className="dashboard-panel-header">
             <div>
               <p className="products-eyebrow">Tendencia</p>
-              <h3>Vendas e caixa dos ultimos 7 dias</h3>
+              <h3>Vendas e caixa dos últimos 7 dias</h3>
             </div>
             <span>{currencyFormatter.format(dashboard.peakDailySalesValue)} no pico de vendas</span>
           </div>
@@ -729,7 +729,7 @@ export function DashboardPage() {
               <p className="products-eyebrow">Caixa</p>
               <h3>Resumo diário e mensal</h3>
             </div>
-            <span>Fechamento operacional do periodo</span>
+            <span>Fechamento operacional do período</span>
           </div>
 
           <div className="dashboard-finance-summary-grid">
@@ -756,13 +756,13 @@ export function DashboardPage() {
           <div className="dashboard-panel-header">
             <div>
               <p className="products-eyebrow">Movimentos</p>
-              <h3>Ultimos lancamentos</h3>
+              <h3>Últimos lançamentos</h3>
             </div>
             <span>{cashMovements.length} registros no livro-caixa</span>
           </div>
 
           {cashMovements.length === 0 ? (
-            <p className="empty-state">Nenhum lancamento financeiro registrado ainda.</p>
+            <p className="empty-state">Nenhum lançamento financeiro registrado ainda.</p>
           ) : (
             <ul className="dashboard-movement-list">
               {sortedMovements.slice(0, 8).map((movement) => (
@@ -779,7 +779,7 @@ export function DashboardPage() {
                   <div>
                     <strong>{currencyFormatter.format(movement.amount)}</strong>
                     <button type="button" className="products-delete-button" onClick={() => void onDeleteMovement(movement.id)}>
-                      Deletar
+                      Excluir
                     </button>
                   </div>
                 </li>
@@ -827,9 +827,9 @@ export function DashboardPage() {
 
       <section className="card dashboard-sync-card">
         <div>
-          <p className="products-eyebrow">Sincronizacao</p>
-          <h3>Ultimo status</h3>
-          {syncMessage ? <p>{syncMessage}</p> : <p>Execute a sincronizacao para atualizar os dados locais.</p>}
+          <p className="products-eyebrow">Sincronização</p>
+          <h3>Último status</h3>
+          {syncMessage ? <p>{syncMessage}</p> : <p>Execute a sincronização para atualizar os dados locais.</p>}
         </div>
       </section>
     </section>
