@@ -883,7 +883,7 @@ export function ProductsPage() {
                     <label htmlFor="barcode">Codigo de barra</label>
                     <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} autoComplete="off" />
                   </div>
-                  <div>
+                  <div className="products-photo-field">
                     <label htmlFor="image-upload">Foto do produto</label>
                     <input
                       id="image-upload"
@@ -899,11 +899,11 @@ export function ProductsPage() {
                     {imageUploadError && <small className="products-form-warning">{imageUploadError}</small>}
 
                     {imageUrl && (
-                      <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.5rem' }}>
+                      <div className="products-image-preview">
                         <img
                           src={imageUrl}
                           alt="Preview do produto"
-                          style={{ width: '100%', maxWidth: '220px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                          className="products-image-preview-img"
                         />
                         <button
                           type="button"
