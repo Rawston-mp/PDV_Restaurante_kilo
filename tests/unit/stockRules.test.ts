@@ -7,11 +7,11 @@ describe('stockRules', () => {
     expect(calculateNewStock(10, 5)).toBe(15);
   });
 
-  it('ajusta estoque com saida', () => {
+  it('ajusta o estoque com saída', () => {
     expect(calculateNewStock(10, -3)).toBe(7);
   });
 
-  it('nao permite estoque negativo', () => {
-    expect(() => calculateNewStock(2, -5)).toThrow('Estoque nao pode ficar negativo');
+  it('não permite estoque negativo', () => {
+    expect(() => calculateNewStock(2, -5)).toThrow('O estoque não pode ficar negativo');
   });
 });

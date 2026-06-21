@@ -153,7 +153,7 @@ Implemented and active:
 - Offline-first queue and retry/backoff infrastructure
 
 Pending to reach target architecture:
-- Domain migration from generic orders toward Balancas, Caixa, Vendas, Fiscal, and Auditoria modules
+- Domain migration from generic orders toward Balanças, Caixa, Vendas, Fiscal, and Auditoria modules
 - Backend modularization into Controllers/Services/Repositories
 - PostgreSQL repositories and migrations for sales/outbox/audit
 - JWT issuance/refresh and route guards in backend
@@ -165,12 +165,12 @@ Pending to reach target architecture:
 
 ## 11) Business Operating Model
 ### Main entities
-- Balancas is the main user-facing operational screen while the customer is inside the restaurant.
-- Comanda remains the internal domain record carried by the Balancas flow.
+- Balanças is the main user-facing operational screen while the customer is inside the restaurant.
+- Comanda remains the internal domain record carried by the Balanças flow.
 - Venda is the final financial/fiscal entity created only at cashier checkout.
-- Pedido must not remain the central business concept for the restaurant-by-weight flow; existing order code should be migrated or wrapped by Balancas/Caixa flows.
+- Pedido must not remain the central business concept for the restaurant-by-weight flow; existing order code should be migrated or wrapped by Balanças/Caixa flows.
 
-### Balancas/Comanda rules
+### Balanças/Comanda rules
 - A comanda can have multiple items.
 - A comanda can receive multiple weighings during the same customer stay.
 - Weighted items require a valid weight.
@@ -217,8 +217,8 @@ Pending to reach target architecture:
 - Settings for BALANCA_A and BALANCA_B activation
 - Fiscal setup placeholders for A1 certificate, SP, token/CSC, XML folder import, and future API adapter
 
-### Stage 2: Balancas and Scales A/B
-- Balancas module as operational core
+### Stage 2: Balanças and Scales A/B
+- Balanças module as operational core
 - Multiple items and multiple weighings per comanda
 - Independent channels, health checks, and failover handling
 - Weight event provenance and anti-jump policy per scale
@@ -254,7 +254,7 @@ Pending to reach target architecture:
 8. Fiscal/accounting assumptions documented before production use
 
 ## 14) Immediate Next Sprint (Core-1)
-- Update domain language from Pedido-first to Balancas/Venda/Caixa-first.
+- Update domain language from Pedido-first to Balanças/Venda/Caixa-first.
 - Create PostgreSQL schema draft for comandas, comanda_items, pesagens, caixa_sessions, vendas, pagamentos, orcamentos, nfce_documents, audit_logs, outbox_events, scale_devices, and system_settings.
 - Modularize backend skeleton into controllers, services, repositories, routes, middlewares, and fiscal gateways.
 - Add comanda lock rules for BALANCA_A/B.

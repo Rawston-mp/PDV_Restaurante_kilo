@@ -20,7 +20,7 @@ vi.mock('socket.io-client', () => ({
 }));
 
 describe('New order flow e2e', () => {
-  it('acessa pagina, abre comanda, usa peso do sensor e avanca status', async () => {
+  it('acessa a página, abre a comanda, usa o peso do sensor e avança o status', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url =
           typeof input === 'string'
@@ -58,7 +58,7 @@ describe('New order flow e2e', () => {
     fireEvent.change(screen.getByLabelText('Senha'), { target: { value: '2025' } });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
-    expect(await screen.findByText('Usuario logado')).toBeTruthy();
+    expect(await screen.findByText('Usuário logado')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir comanda' }));
     expect(await screen.findByText(/Comanda ativa:\s*sim/)).toBeTruthy();
@@ -69,7 +69,7 @@ describe('New order flow e2e', () => {
     expect(await screen.findByText(/Pedido criado:/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Nome do item'), { target: { value: 'Suco' } });
-    fireEvent.change(screen.getByLabelText('Preco unitario'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Preço unitário'), { target: { value: '100' } });
     fireEvent.click(screen.getByLabelText('Item por peso'));
 
     socketHandlers.get('connect')?.();
@@ -85,7 +85,7 @@ describe('New order flow e2e', () => {
 
     expect(await screen.findByText('Total atual: R$ 45.50')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Avancar status do pedido' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Avançar status do pedido' }));
     expect(await screen.findByText('Status atual: EM_PREPARO')).toBeTruthy();
 
     vi.unstubAllGlobals();

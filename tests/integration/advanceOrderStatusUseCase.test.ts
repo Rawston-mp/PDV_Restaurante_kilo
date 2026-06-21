@@ -20,12 +20,12 @@ describe('AdvanceOrderStatus use case integration', () => {
     expect(updated.status).toBe('EM_PREPARO');
   });
 
-  it('falha quando pedido nao existe', async () => {
+  it('falha quando o pedido não existe', async () => {
     const repository = new InMemoryOrderRepository();
     const advanceOrderStatus = new AdvanceOrderStatus(repository);
 
     await expect(advanceOrderStatus.execute({ orderId: 'missing' })).rejects.toThrow(
-      'Pedido nao encontrado'
+      'Pedido não encontrado'
     );
   });
 });

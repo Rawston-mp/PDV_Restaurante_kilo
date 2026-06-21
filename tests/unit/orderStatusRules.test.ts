@@ -11,7 +11,7 @@ describe('orderStatusRules', () => {
     expect(getNextOrderStatus('EM_PREPARO')).toBe('PRONTO');
   });
 
-  it('falha ao avancar quando pedido ja entregue', () => {
-    expect(() => getNextOrderStatus('ENTREGUE')).toThrow('Pedido ja esta no status final');
+  it('falha ao avançar quando o pedido já foi entregue', () => {
+    expect(() => getNextOrderStatus('ENTREGUE')).toThrow('O pedido já está no status final');
   });
 });

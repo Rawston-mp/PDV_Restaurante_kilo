@@ -34,7 +34,7 @@ export function AuthAccessPanel() {
   if (user) {
     return (
       <section className="auth-sidebar-status">
-        <p className="auth-sidebar-label">Usuario logado</p>
+        <p className="auth-sidebar-label">Usuário logado</p>
         <strong>{user.name}</strong>
         <span>{roleLabel[user.role]}</span>
         <span>Logado em: {roleLabel[user.role]}</span>
@@ -48,7 +48,7 @@ export function AuthAccessPanel() {
             signOut();
           }}
         >
-          Trocar usuario
+          Trocar usuário
         </button>
       </section>
     );
@@ -104,7 +104,7 @@ export function AuthAccessPanel() {
         {message && <p className="auth-message">{message}</p>}
 
         <p className="auth-hint">
-          PIN login: Admin 9000, Caixa 2025, Balança A 1111, Balança B 2222. PIN sensivel: Admin 9900, Caixa 2200.
+          PIN login: Admin 9000, Caixa 2025, Balança A 1111, Balança B 2222. PIN sensível: Admin 9900, Caixa 2200.
         </p>
       </section>
     </div>

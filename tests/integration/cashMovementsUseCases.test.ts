@@ -4,7 +4,7 @@ import { CreateCashMovement } from '@/modules/finance/application/use-cases/Crea
 import { InMemoryCashMovementRepository } from '@/modules/finance/infrastructure/repositories/InMemoryCashMovementRepository';
 
 describe('Cash movements use cases', () => {
-  it('cria lancamento de entrada', async () => {
+  it('cria lançamento de entrada', async () => {
     const repository = new InMemoryCashMovementRepository();
     const createCashMovement = new CreateCashMovement(repository);
 
@@ -27,7 +27,7 @@ describe('Cash movements use cases', () => {
     expect(loaded?.amount).toBe(120.5);
   });
 
-  it('atualiza e remove lancamento', async () => {
+  it('atualiza e remove lançamento', async () => {
     const repository = new InMemoryCashMovementRepository();
     const now = new Date();
 
@@ -46,7 +46,7 @@ describe('Cash movements use cases', () => {
 
     const existing = await repository.findById('mov-2');
     if (!existing) {
-      throw new Error('Movimento esperado nao encontrado.');
+      throw new Error('Movimento esperado não encontrado.');
     }
 
     await repository.save({

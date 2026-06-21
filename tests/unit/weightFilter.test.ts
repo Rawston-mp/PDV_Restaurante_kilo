@@ -10,7 +10,7 @@ describe('weightFilter', () => {
     maxJump: 1.2
   };
 
-  it('nao aceita peso antes da janela minima', () => {
+  it('não aceita peso antes da janela mínima', () => {
     let state: WeightFilterState = { history: [], stableWeight: null };
     state = applyWeightFilter(0.45, state, options);
 
@@ -18,7 +18,7 @@ describe('weightFilter', () => {
     expect(state.history).toHaveLength(1);
   });
 
-  it('aceita media estavel quando janela fecha', () => {
+  it('aceita média estável quando a janela fecha', () => {
     let state: WeightFilterState = { history: [], stableWeight: null };
 
     state = applyWeightFilter(0.45, state, options);

@@ -52,7 +52,7 @@ describe('ComandaStateMachineService', () => {
     service.transition('103', 'CANCELADA', 'cancelamento_autorizado');
 
     expect(() => service.markEmUsoBalanca('103', 'balanca_a')).toThrow(
-      'Comanda em status CANCELADA nao aceita pesagem.'
+      'Comanda em status CANCELADA não aceita pesagem.'
     );
     expect(service.getActive()).toBeNull();
   });
@@ -89,7 +89,7 @@ describe('ComandaStateMachineService', () => {
     expect(service.get('104')?.transitions[0]?.to).toBe('EM_USO_BALANCA');
   });
 
-  it('adquire lock para uma balanca e bloqueia lock concorrente', () => {
+  it('adquire lock para uma balança e bloqueia lock concorrente', () => {
     const service = new ComandaStateMachineService();
 
     service.open('201');
@@ -106,7 +106,7 @@ describe('ComandaStateMachineService', () => {
         owner: 'COMANDA_B',
         stationId: 'BALANCA_B'
       })
-    ).toThrow('Comanda ja esta em uso por outra balanca.');
+    ).toThrow('Comanda já está em uso por outra balança.');
   });
 
   it('renova e libera lock para o mesmo owner/estacao', () => {
@@ -178,7 +178,7 @@ describe('ComandaStateMachineService', () => {
     });
   });
 
-  it('registra pesagem vinculada ao item e coloca a comanda em uso na balanca', () => {
+  it('registra pesagem vinculada ao item e coloca a comanda em uso na balança', () => {
     const service = new ComandaStateMachineService();
 
     service.open('302');

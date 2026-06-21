@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { executeWithRetry } from '@/shared/sync/application/services/executeWithRetry';
 
 describe('executeWithRetry', () => {
-  it('reexecuta ate sucesso com backoff', async () => {
+  it('reexecuta até obter sucesso com backoff', async () => {
     const wait = vi.fn().mockResolvedValue(undefined);
     const operation = vi
       .fn<() => Promise<string>>()

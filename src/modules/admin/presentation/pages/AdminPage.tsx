@@ -345,7 +345,7 @@ export function AdminPage() {
   const onClearAudit = () => {
     clearSensitiveAuditEvents();
     setAuditEvents([]);
-    setMessage('Auditoria local de acoes sensiveis foi limpa.');
+    setMessage('A auditoria local de ações sensíveis foi limpa.');
 
     logInfo({
       event: 'ADMIN_CLEAR_AUDIT',
@@ -392,7 +392,7 @@ export function AdminPage() {
         <div>
           <p className="admin-eyebrow">Etapa 1 | Governanca</p>
           <h2>Painel Admin</h2>
-          <p className="admin-subtitle">Controle de sincronizacao e trilha de acoes sensiveis.</p>
+          <p className="admin-subtitle">Controle de sincronização e trilha de ações sensíveis.</p>
         </div>
       </header>
 
@@ -401,8 +401,8 @@ export function AdminPage() {
           <h3>Visao operacional</h3>
           <ul>
             <li>
-              <span>Usuario ativo</span>
-              <strong>{user ? `${user.name} (${user.role})` : 'Nao autenticado'}</strong>
+              <span>Usuário ativo</span>
+              <strong>{user ? `${user.name} (${user.role})` : 'Não autenticado'}</strong>
             </li>
             <li>
               <span>Fila total</span>
@@ -417,7 +417,7 @@ export function AdminPage() {
               <strong>{queueSummary.pendingOrders}</strong>
             </li>
             <li>
-              <span>Eventos sensiveis</span>
+              <span>Eventos sensíveis</span>
               <strong>{auditEvents.length}</strong>
             </li>
             <li>
@@ -425,7 +425,7 @@ export function AdminPage() {
               <strong>{pinHealth.loginStrengthIssues}</strong>
             </li>
             <li>
-              <span>PIN sensivel fraco</span>
+              <span>PIN sensível fraco</span>
               <strong>{pinHealth.sensitiveStrengthIssues}</strong>
             </li>
           </ul>
@@ -445,7 +445,7 @@ export function AdminPage() {
           {message && <p className="admin-message">{message}</p>}
 
           <form onSubmit={onChangePin} className="admin-pin-form">
-            <h4>Gestao de PIN</h4>
+            <h4>Gestão de PIN</h4>
 
             <label htmlFor="pin-role">Perfil</label>
             <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
@@ -499,12 +499,12 @@ export function AdminPage() {
         </article>
 
         <article className="card admin-audit">
-          <h3>Auditoria de acoes sensiveis</h3>
+          <h3>Auditoria de ações sensíveis</h3>
           <div className="admin-audit-filters">
             <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value as typeof actionFilter)}>
               {actionOptions.map((item) => (
                 <option key={item} value={item}>
-                  Acao: {item}
+                  Ação: {item}
                 </option>
               ))}
             </select>
@@ -541,14 +541,14 @@ export function AdminPage() {
           </div>
 
           {filteredAuditEvents.length === 0 ? (
-            <p className="empty-state">Nenhum evento sensivel registrado.</p>
+            <p className="empty-state">Nenhum evento sensível registrado.</p>
           ) : (
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead>
                   <tr>
                     <th>Quando</th>
-                    <th>Acao</th>
+                    <th>Ação</th>
                     <th>Perfil</th>
                     <th>Estacao</th>
                     <th>Resultado</th>
@@ -572,7 +572,7 @@ export function AdminPage() {
           )}
 
           <section className="admin-margin-section">
-            <h3>Analise de Margem por Produto</h3>
+            <h3>Análise de margem por produto</h3>
             {marginRows.length === 0 ? (
               <p className="empty-state">Nenhum produto para analisar.</p>
             ) : (

@@ -24,6 +24,12 @@ const fiscalTypeOptions = [
   'Com substituicao tributaria'
 ];
 
+const fiscalTypeLabels: Record<string, string> = {
+  'Sem substituicao tributaria': 'Sem substituição tributária',
+  'Produzida internamente': 'Produzida internamente',
+  'Com substituicao tributaria': 'Com substituição tributária'
+};
+
 const cstIcmsOptions = [
   '0 - Nacional (exceto as indicadas nos codigos 3, 4, 5 e 8)',
   '1 - Estrangeira - Importacao direta',
@@ -35,6 +41,18 @@ const cstIcmsOptions = [
   '7 - Estrangeira - mercado interno, sem similar, lista CAMEX',
   '8 - Nacional, Conteudo de importacao superior a 70%'
 ];
+
+const cstIcmsLabels: Record<string, string> = {
+  [cstIcmsOptions[0]]: '0 - Nacional (exceto as indicadas nos códigos 3, 4, 5 e 8)',
+  [cstIcmsOptions[1]]: '1 - Estrangeira - Importação direta',
+  [cstIcmsOptions[2]]: '2 - Estrangeira - Adquirida no mercado interno',
+  [cstIcmsOptions[3]]: '3 - Nacional, conteúdo superior a 40% e inferior ou igual a 70%',
+  [cstIcmsOptions[4]]: '4 - Nacional, processos produtivos básicos',
+  [cstIcmsOptions[5]]: '5 - Nacional, conteúdo inferior a 40%',
+  [cstIcmsOptions[6]]: '6 - Estrangeira - Importação direta, com similar nacional, lista CAMEX',
+  [cstIcmsOptions[7]]: '7 - Estrangeira - Mercado interno, sem similar, lista CAMEX',
+  [cstIcmsOptions[8]]: '8 - Nacional, conteúdo de importação superior a 70%'
+};
 
 const cstPisCofinsOptions = [
   '01',
@@ -61,20 +79,20 @@ const ncmLookupCatalog = [
   { code: '03038990', description: 'Peixes congelados (outros)' },
   { code: '04012010', description: 'Leite UHT integral' },
   { code: '07031019', description: 'Cebola fresca ou refrigerada (outras)' },
-  { code: '07133329', description: 'Feijao comum, seco, debulhado (outros)' },
-  { code: '09012100', description: 'Cafe torrado, nao descafeinado' },
+  { code: '07133329', description: 'Feijão comum, seco, debulhado (outros)' },
+  { code: '09012100', description: 'Café torrado, não descafeinado' },
   { code: '10063021', description: 'Arroz semibranqueado ou branqueado, polido' },
   { code: '11010010', description: 'Farinha de trigo' },
-  { code: '16025000', description: 'Preparacoes alimenticias de carne bovina' },
-  { code: '17019900', description: 'Acucares de cana ou de beterraba (outros)' },
-  { code: '19021900', description: 'Massas alimenticias nao cozidas (outras)' },
+  { code: '16025000', description: 'Preparações alimentícias de carne bovina' },
+  { code: '17019900', description: 'Açúcares de cana ou de beterraba (outros)' },
+  { code: '19021900', description: 'Massas alimentícias não cozidas (outras)' },
   { code: '19059090', description: 'Produtos de padaria e pastelaria (outros)' },
   { code: '20057000', description: 'Azeitonas preparadas ou conservadas' },
   { code: '21039021', description: 'Molhos preparados (maionese)' },
-  { code: '22011000', description: 'Agua mineral e agua gaseificada' },
-  { code: '22021000', description: 'Refrigerantes e bebidas nao alcoolicas' },
+  { code: '22011000', description: 'Água mineral e água gaseificada' },
+  { code: '22021000', description: 'Refrigerantes e bebidas não alcoólicas' },
   { code: '22030000', description: 'Cervejas de malte' },
-  { code: '22042100', description: 'Vinhos em recipientes ate 2 litros' },
+  { code: '22042100', description: 'Vinhos em recipientes de até 2 litros' },
   { code: '25010020', description: 'Sal refinado' }
 ];
 
@@ -128,7 +146,7 @@ const generateRandomProductCode = (usedCodes: Set<string>) => {
     }
   }
 
-  // Fallback para manter unicidade mesmo com alta ocupacao de codigos curtos.
+  // Fallback para manter a unicidade mesmo com alta ocupação de códigos curtos.
   for (let fallback = 100; fallback <= 9999; fallback += 1) {
     const candidate = String(fallback);
     if (!usedCodes.has(candidate)) {
@@ -177,7 +195,7 @@ const imageFileToDataUrl = (file: File): Promise<string> =>
         return;
       }
 
-      reject(new Error('Arquivo de imagem invalido.'));
+      reject(new Error('Arquivo de imagem inválido.'));
     };
 
     reader.onerror = () => {
@@ -420,7 +438,7 @@ export function ProductsPage() {
       }
 
       if (categoryOptions.some((option) => isSameCategoryName(option, nextCategoryName))) {
-        setCategoryActionError('Ja existe uma categoria com esse nome.');
+        setCategoryActionError('Já existe uma categoria com esse nome.');
         return;
       }
 
@@ -449,7 +467,7 @@ export function ProductsPage() {
           (option) => !isSameCategoryName(option, targetCategory) && isSameCategoryName(option, nextCategoryName)
         )
       ) {
-        setCategoryActionError('Ja existe outra categoria com esse nome.');
+        setCategoryActionError('Já existe outra categoria com esse nome.');
         return;
       }
 
@@ -465,13 +483,13 @@ export function ProductsPage() {
     }
 
     if (categoryOptions.length === 1) {
-      setCategoryActionError('Nao e possivel excluir a unica categoria cadastrada.');
+      setCategoryActionError('Não é possível excluir a única categoria cadastrada.');
       return;
     }
 
     const fallbackCategory = categoryOptions.find((option) => !isSameCategoryName(option, targetCategory));
     if (!fallbackCategory) {
-      setCategoryActionError('Nao foi possivel definir a categoria de destino.');
+      setCategoryActionError('Não foi possível definir a categoria de destino.');
       return;
     }
 
@@ -519,12 +537,12 @@ export function ProductsPage() {
       const result = await productsContainer.syncProducts.execute();
       await reload();
       setSyncMessage(
-        `Sincronizacao de produtos: ${result.mergedCount} itens, ${result.resolvedConflicts} conflitos.`
+        `Sincronização de produtos: ${result.mergedCount} itens, ${result.resolvedConflicts} conflitos.`
       );
     } catch (error) {
       await productsContainer.syncTaskQueue.enqueue('SYNC_PRODUCTS');
       setSyncMessage(
-        `Falha na sincronizacao. Tarefa enviada para fila: ${
+        `Falha na sincronização. Tarefa enviada para a fila: ${
           error instanceof Error ? error.message : 'erro desconhecido'
         }`
       );
@@ -545,7 +563,7 @@ export function ProductsPage() {
     event.preventDefault();
 
     if (!canEditOrDelete) {
-      setFormError('Perfil de comanda nao pode cadastrar ou editar produtos.');
+      setFormError('O perfil de comanda não pode cadastrar nem editar produtos.');
       return;
     }
 
@@ -556,7 +574,7 @@ export function ProductsPage() {
     }
 
     if (!isFilled(aliqIcms) || !isFilled(aliqPis) || !isFilled(aliqCofins)) {
-      setFormError('Preencha as aliquotas fiscais (ICMS, PIS e COFINS) antes de salvar.');
+      setFormError('Preencha as alíquotas fiscais (ICMS, PIS e COFINS) antes de salvar.');
       setActiveTab('FISCAL');
       return;
     }
@@ -570,7 +588,7 @@ export function ProductsPage() {
       const existingProduct = products.find((product) => product.id === editingProductId);
 
       if (!existingProduct) {
-        setFormError('Produto selecionado para edicao nao foi encontrado.');
+        setFormError('O produto selecionado para edição não foi encontrado.');
         return;
       }
 
@@ -642,7 +660,7 @@ export function ProductsPage() {
 
   const onEditProduct = (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('Perfil de comanda nao pode editar produtos.');
+      setFormError('O perfil de comanda não pode editar produtos.');
       return;
     }
 
@@ -687,7 +705,7 @@ export function ProductsPage() {
 
   const onDeleteProduct = async (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('Perfil de comanda nao pode deletar produtos.');
+      setFormError('O perfil de comanda não pode excluir produtos.');
       return;
     }
 
@@ -696,7 +714,7 @@ export function ProductsPage() {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja deletar o produto "${getProductDisplayName(target)}"?`);
+    const confirmed = window.confirm(`Deseja excluir o produto "${getProductDisplayName(target)}"?`);
     if (!confirmed) {
       return;
     }
@@ -718,7 +736,7 @@ export function ProductsPage() {
     }
 
     if (!PRODUCT_IMAGE_MIME_TYPES.has(file.type)) {
-      setImageUploadError('Formato invalido. Use JPG, PNG ou WEBP.');
+      setImageUploadError('Formato inválido. Use JPG, PNG ou WEBP.');
       event.target.value = '';
       return;
     }
@@ -735,7 +753,7 @@ export function ProductsPage() {
       setImageUploadError(null);
       setFormError(null);
     } catch {
-      setImageUploadError('Nao foi possivel carregar ou comprimir a imagem selecionada.');
+      setImageUploadError('Não foi possível carregar ou comprimir a imagem selecionada.');
     } finally {
       event.target.value = '';
     }
@@ -761,7 +779,7 @@ export function ProductsPage() {
         <div>
           <p className="products-eyebrow">Catalogo e precificacao</p>
           <h2>Produtos</h2>
-          <p className="products-subtitle">Cadastre e sincronize itens com foco em operacao rapida de caixa.</p>
+          <p className="products-subtitle">Cadastre e sincronize itens com foco em operação rápida de caixa.</p>
         </div>
         <div className="products-kpi">
           <strong>{products.length}</strong>
@@ -790,7 +808,7 @@ export function ProductsPage() {
             Sincronizar produtos
           </button>
           <button type="button" className="button-muted" onClick={onProcessSyncQueue}>
-            Processar fila de sincronizacao
+            Processar fila de sincronização
           </button>
         </div>
         {syncMessage && <p className="sync-banner">{syncMessage}</p>}
@@ -798,7 +816,7 @@ export function ProductsPage() {
 
       {canEditOrDelete && (
         <article className="card products-cadastro-quickbar">
-          <p className="products-help-note">Categorias rapidas: clique para abrir o cadastro ja na categoria.</p>
+          <p className="products-help-note">Categorias rápidas: clique para abrir o cadastro já na categoria.</p>
           <div className="products-category-quickbar" role="tablist" aria-label="Categorias rapidas de cadastro">
             {categoryOptions.map((option) => {
               const isActiveCategory = isSameCategoryName(option, category);
@@ -846,7 +864,7 @@ export function ProductsPage() {
               <>
                 <div className="products-row-4">
                   <div className="products-field-compact">
-                    <label htmlFor="product-code">ID do produto (automatico)</label>
+                    <label htmlFor="product-code">ID do produto (automático)</label>
                     <input
                       id="product-code"
                       placeholder="Gerado automaticamente"
@@ -869,18 +887,18 @@ export function ProductsPage() {
                     />
                   </div>
                   <div className="products-field-main">
-                    <label htmlFor="description">Descricao</label>
+                    <label htmlFor="description">Descrição</label>
                     <input
                       id="description"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="Descricao exibida no caixa"
+                      placeholder="Descrição exibida no caixa"
                     />
                   </div>
                   <div>
-                    <label htmlFor="barcode">Codigo de barra</label>
+                    <label htmlFor="barcode">Código de barras</label>
                     <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} autoComplete="off" />
                   </div>
                   <div className="products-photo-field">
@@ -894,7 +912,7 @@ export function ProductsPage() {
                         void onUploadProductImage(event);
                       }}
                     />
-                    <small className="products-help-note">PNG, JPG ou WEBP ate 2MB.</small>
+                    <small className="products-help-note">PNG, JPG ou WEBP de até 2 MB.</small>
 
                     {imageUploadError && <small className="products-form-warning">{imageUploadError}</small>}
 
@@ -1017,8 +1035,8 @@ export function ProductsPage() {
                         <input
                           value={ncmSearchQuery}
                           onChange={(e) => setNcmSearchQuery(e.target.value)}
-                          placeholder="Buscar por codigo ou descricao"
-                          aria-label="Buscar por codigo ou descricao de NCM"
+                          placeholder="Buscar por código ou descrição"
+                          aria-label="Buscar por código ou descrição de NCM"
                           autoComplete="off"
                         />
                         <ul>
@@ -1099,7 +1117,7 @@ export function ProductsPage() {
                       />
                     </div>
                     <div className="products-field-compact">
-                      <label htmlFor="sale-price">Preco venda</label>
+                      <label htmlFor="sale-price">Preço de venda</label>
                       <input
                         id="sale-price"
                         type="number"
@@ -1120,7 +1138,7 @@ export function ProductsPage() {
                 <div className="products-row-2">
                   <div>
                     <small className="products-help-note">
-                      O sistema calcula automaticamente preco de venda por custo + margem, e tambem recalcula a margem quando voce informa custo + preco de venda.
+                      O sistema calcula automaticamente o preço de venda por custo + margem e também recalcula a margem quando você informa custo + preço de venda.
                     </small>
                   </div>
                 </div>
@@ -1140,7 +1158,7 @@ export function ProductsPage() {
                     checked={isUnavailable}
                     onChange={(e) => setIsUnavailable(e.target.checked)}
                   />
-                  Tornar indisponivel no caixa
+                  Tornar indisponível no caixa
                 </label>
 
                 <label className="checkbox-label">
@@ -1149,7 +1167,7 @@ export function ProductsPage() {
                     checked={isHidden}
                     onChange={(e) => setIsHidden(e.target.checked)}
                   />
-                  Ocultar do caixa e dos terminais de balanca
+                  Ocultar do caixa e dos terminais de balança
                 </label>
               </>
             ) : (
@@ -1160,7 +1178,7 @@ export function ProductsPage() {
                     <select id="cfop" value={cfop} onChange={(e) => setCfop(e.target.value)}>
                       {cfopOptions.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {cstIcmsLabels[option] ?? option}
                         </option>
                       ))}
                     </select>
@@ -1174,10 +1192,10 @@ export function ProductsPage() {
                         </option>
                       ))}
                     </select>
-                    <small className="products-help-note">Dica: use o codigo CST/CSOSN conforme seu regime.</small>
+                    <small className="products-help-note">Dica: use o código CST/CSOSN conforme seu regime.</small>
                   </div>
                   <div>
-                    <label htmlFor="tax-situation-code">Codigo 61 a 900</label>
+                    <label htmlFor="tax-situation-code">Código 61 a 900</label>
                     <select
                       id="tax-situation-code"
                       value={taxSituationCode}
@@ -1191,7 +1209,7 @@ export function ProductsPage() {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="aliq-icms">Aliq. ICMS</label>
+                    <label htmlFor="aliq-icms">Alíq. ICMS</label>
                     <input
                       id="aliq-icms"
                       placeholder="Ex.: 18,00"
@@ -1213,7 +1231,7 @@ export function ProductsPage() {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="aliq-pis">Aliq. PIS</label>
+                    <label htmlFor="aliq-pis">Alíq. PIS</label>
                     <input
                       id="aliq-pis"
                       placeholder="Ex.: 1,65"
@@ -1235,7 +1253,7 @@ export function ProductsPage() {
 
                 <div className="products-row-2 products-fiscal-row-end">
                   <div>
-                    <label htmlFor="aliq-cofins">Aliq. COFINS</label>
+                    <label htmlFor="aliq-cofins">Alíq. COFINS</label>
                     <input
                       id="aliq-cofins"
                       placeholder="Ex.: 7,60"
@@ -1248,7 +1266,7 @@ export function ProductsPage() {
                     <select id="fiscal-type" value={fiscalType} onChange={(e) => setFiscalType(e.target.value)}>
                       {fiscalTypeOptions.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {fiscalTypeLabels[option] ?? option}
                         </option>
                       ))}
                     </select>
@@ -1259,7 +1277,7 @@ export function ProductsPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={saving}>
-                {saving ? 'Salvando...' : editingProductId ? 'Salvar edicao' : 'Salvar dados'}
+                {saving ? 'Salvando...' : editingProductId ? 'Salvar edição' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -1302,7 +1320,7 @@ export function ProductsPage() {
                     <strong>{currency.format(product.price)}</strong>
                     <span>estoque {product.stock}</span>
                     <span>
-                      {product.isUnavailable ? 'indisponivel' : 'disponivel'} | {product.isHidden ? 'oculto' : 'visivel'}
+                      {product.isUnavailable ? 'indisponível' : 'disponível'} | {product.isHidden ? 'oculto' : 'visível'}
                     </span>
                     {canEditOrDelete && (
                       <span>
@@ -1329,7 +1347,7 @@ export function ProductsPage() {
                           className="products-delete-button"
                           onClick={() => void onDeleteProduct(product.id)}
                         >
-                          Deletar
+                          Excluir
                         </button>
                       </div>
                     )}
@@ -1410,8 +1428,8 @@ export function ProductsPage() {
                   {categoryManagerMode === 'ADD'
                     ? 'Cadastrar'
                     : categoryManagerMode === 'EDIT'
-                      ? 'Salvar alteracao'
-                      : 'Confirmar exclusao'}
+                      ? 'Salvar alteração'
+                      : 'Confirmar exclusão'}
                 </button>
                 <button type="button" className="button-muted" onClick={closeCategoryManager}>
                   Cancelar

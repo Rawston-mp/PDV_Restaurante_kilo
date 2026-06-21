@@ -310,7 +310,7 @@ export function CashierPage() {
     showNotice(
       backendCancelled
         ? `Comanda #${trimmed} cancelada.`
-        : `Comanda #${trimmed} cancelada localmente. Confirme a sincronizacao quando o backend voltar.`,
+        : `Comanda #${trimmed} cancelada localmente. Confirme a sincronização quando o backend voltar.`,
       backendCancelled ? 'success' : 'warning'
     );
   };
@@ -325,7 +325,7 @@ export function CashierPage() {
       kind: 'CANCEL_COMANDA',
       numero: trimmed,
       title: `Cancelar comanda #${trimmed}`,
-      description: 'Essa acao remove a comanda da operacao do caixa e registra o cancelamento quando o backend estiver disponivel.'
+      description: 'Essa ação remove a comanda da operação do caixa e registra o cancelamento quando o backend estiver disponível.'
     });
   };
 
@@ -365,7 +365,7 @@ export function CashierPage() {
     }
 
     if (openComandas.length === 0) {
-      showNotice('Nao ha comandas abertas para cancelar.', 'warning');
+      showNotice('Não há comandas abertas para cancelar.', 'warning');
       return;
     }
 
@@ -387,7 +387,7 @@ export function CashierPage() {
       upsertComandaItems(trimmed, backendItems);
     } catch {
       setCartItems(mapComandaItemsToCashierCart(readComandaItems(trimmed), catalogProducts));
-      showNotice(`Comanda #${trimmed} carregada do cache local. Backend indisponivel para itens.`, 'warning');
+      showNotice(`Comanda #${trimmed} carregada do cache local. Backend indisponível para itens.`, 'warning');
     }
 
     setOpenComandas((prev) => {
@@ -446,7 +446,7 @@ export function CashierPage() {
     setPendingAction({
       kind: 'CLEAR_COMANDA_CACHE',
       title: 'Limpar cache local de comandas',
-      description: 'Essa acao remove os snapshots locais do caixa. Use apenas quando a fila local estiver inconsistente.'
+      description: 'Essa ação remove os snapshots locais do caixa. Use apenas quando a fila local estiver inconsistente.'
     });
   };
 
@@ -549,7 +549,7 @@ export function CashierPage() {
         }
       }
     } catch {
-      // Endpoint ainda nao existe no MVP; fechamento cego continua sem mockar valores.
+      // O endpoint ainda não existe no MVP; o fechamento cego continua sem simular valores.
     }
 
     return {
@@ -742,7 +742,7 @@ export function CashierPage() {
     opened.document.write(`
       <html>
         <head>
-          <title>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento nao fiscal'}</title>
+          <title>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento não fiscal'}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -818,14 +818,14 @@ export function CashierPage() {
           <div class="receipt">
             <div class="header">
               <h1>PDV Touch</h1>
-              <p>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento nao fiscal'}</p>
+              <p>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento não fiscal'}</p>
               <p>${escapeHtml(now.toLocaleString('pt-BR'))}</p>
             </div>
 
             <div class="section">
               <div class="section-title">Identificação</div>
               <div class="row"><span>Atendimento</span><strong>${escapeHtml(comandaNumber)}</strong></div>
-              <div class="row"><span>Operador</span><strong>${escapeHtml(user?.name ?? 'Nao autenticado')}</strong></div>
+              <div class="row"><span>Operador</span><strong>${escapeHtml(user?.name ?? 'Não autenticado')}</strong></div>
             </div>
 
             <div class="section">
@@ -837,7 +837,7 @@ export function CashierPage() {
                       <div class="item-name">${escapeHtml(item.name)}</div>
                       <div class="item-meta">${formatQuantity(item.quantity, item.unit)} ${item.unit === 'KG' ? 'kg' : 'un'} · ${escapeHtml(item.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</div>
                       <div class="item-fiscal">ID ${escapeHtml(item.productCode ?? '--')} · NCM ${escapeHtml(item.ncm ?? '--')} · CFOP ${escapeHtml(item.cfop ?? '--')}</div>
-                      <div class="item-fiscal">${escapeHtml(item.fiscalType ?? 'Fiscal nao informado')} · CST ${escapeHtml(item.taxSituationCode ?? '--')} · EAN ${escapeHtml(item.barcode ?? '--')}</div>
+                      <div class="item-fiscal">${escapeHtml(item.fiscalType ?? 'Fiscal não informado')} · CST ${escapeHtml(item.taxSituationCode ?? '--')} · EAN ${escapeHtml(item.barcode ?? '--')}</div>
                     </div>
                   `
                 )
@@ -995,7 +995,7 @@ export function CashierPage() {
     try {
       await ensureComandaExistsInBackend(numero);
     } catch {
-      showNotice('Nao foi possivel preparar a comanda no backend. O pagamento nao foi finalizado.', 'error');
+      showNotice('Não foi possível preparar a comanda no backend. O pagamento não foi finalizado.', 'error');
       return false;
     }
 
@@ -1017,7 +1017,7 @@ export function CashierPage() {
     }
 
     if (!finalClosed) {
-      showNotice('Nao foi possivel fechar a comanda no backend. A venda permanece na tela para nova tentativa.', 'error');
+      showNotice('Não foi possível fechar a comanda no backend. A venda permanece na tela para uma nova tentativa.', 'error');
       return false;
     }
 
@@ -1031,7 +1031,7 @@ export function CashierPage() {
     await refreshComandaIndicators().catch(() => undefined);
     showNotice(
       documentMode === 'ORCAMENTO'
-        ? `Comanda #${numero} fechada como orçamento nao fiscal.`
+        ? `Comanda #${numero} fechada como orçamento não fiscal.`
         : `Comanda #${numero} fechada como venda NFC-e.`,
       'success'
     );
@@ -1058,7 +1058,7 @@ export function CashierPage() {
         if (targetClient) {
           const launchedAt = formatLaunchDateTime(new Date());
           const discountNote = discountAmount > 0 ? ` - Desconto R$ ${discountAmount.toFixed(2)}` : '';
-          const entryDescription = `Fiado atendimento ${currentComandaNumber} - Total R$ ${payableTotal.toFixed(2)}${discountNote} - Orcamento nao fiscal`;
+          const entryDescription = `Fiado atendimento ${currentComandaNumber} - Total R$ ${payableTotal.toFixed(2)}${discountNote} - Orçamento não fiscal`;
 
           const updatedClient = {
             ...targetClient,
@@ -1185,7 +1185,7 @@ export function CashierPage() {
             <UserRound size={20} className="text-sky-600" />
             <div>
               <p className="text-xs leading-tight text-slate-500">Operador</p>
-              <p className="text-sm font-semibold leading-tight">{user?.name ?? 'Nao autenticado'}</p>
+              <p className="text-sm font-semibold leading-tight">{user?.name ?? 'Não autenticado'}</p>
             </div>
           </div>
           <div className="h-8 w-px bg-slate-200" />
@@ -1280,7 +1280,7 @@ export function CashierPage() {
                 onChange={setQuery}
                 onSubmit={handleSmartInputSubmit}
                 keepFocused
-                placeholder="Digite ou leia a comanda (numero/codigo) e pressione Enter"
+                placeholder="Digite ou leia a comanda (número/código) e pressione Enter"
               />
             </div>
 

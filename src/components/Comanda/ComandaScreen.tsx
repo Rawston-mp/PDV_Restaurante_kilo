@@ -58,7 +58,7 @@ export function ComandaScreen() {
       : state.isOfflineMode
         ? 'Modo local'
         : state.isComandaConectada
-          ? `Balanca conectada${stationLabel ? ` · ${stationLabel}` : ''}`
+          ? `Balança conectada${stationLabel ? ` · ${stationLabel}` : ''}`
           : 'Sensor desconectado';
   const deveBloquearResultados = pesquisaSanitizada.length > 0 && pesquisaSanitizada.length < 3;
   const categoriaDesabilitadaSemComanda = !isComandaOpen
@@ -125,7 +125,7 @@ export function ComandaScreen() {
     const nextPeso = Number(sanitized);
 
     if (!Number.isFinite(nextPeso) || nextPeso <= 0) {
-      setPesoManualError('Peso invalido. Use valor maior que zero.');
+      setPesoManualError('Peso inválido. Use um valor maior que zero.');
       return;
     }
 
@@ -192,15 +192,15 @@ export function ComandaScreen() {
             status={statusOperacional}
             title={isComandaOpen ? `Comanda #${state.comandaAtual?.id} aberta` : 'Abra uma comanda'}
             subtitle={isComandaOpen
-              ? 'Adicione itens ou libere a balanca para o proximo atendimento.'
-              : 'Digite ou leia o numero da comanda para iniciar.'}
+              ? 'Adicione itens ou libere a balança para o próximo atendimento.'
+              : 'Digite ou leia o número da comanda para iniciar.'}
             tone={statusTone}
             pendingSyncCount={state.pendingSyncCount}
             onRetry={state.isOfflineMode ? () => void actions.retrySync() : undefined}
           />
           <div className="comanda-top-fields">
             <div className="comanda-field-group">
-              <label htmlFor="comanda-number-input">Numero da comanda</label>
+              <label htmlFor="comanda-number-input">Número da comanda</label>
               <input
                 id="comanda-number-input"
                 ref={comandaInputRef}
@@ -309,6 +309,7 @@ export function ComandaScreen() {
                     <button
                       key={produto.id}
                       type="button"
+                      className="comanda-product-row"
                       onClick={() => actions.selecionarProduto(produto)}
                       aria-label={`Adicionar ${produto.nome}`}
                     >
@@ -370,10 +371,10 @@ export function ComandaScreen() {
             <NextComandaButton
               onClick={isComandaOpen ? actions.finalizeComanda : actions.focarPesquisa}
               disabled={isComandaOpen ? !state.canFinalize : !state.canOpen}
-              label={isComandaOpen ? 'LIBERAR BALANCA' : 'ABRIR COMANDA'}
+              label={isComandaOpen ? 'LIBERAR BALANÇA' : 'ABRIR COMANDA'}
               helperText={isComandaOpen
                 ? 'A comanda permanece aberta para novos consumos e para o caixa.'
-                : 'Informe o numero acima para iniciar o atendimento.'}
+                : 'Informe o número acima para iniciar o atendimento.'}
             />
           </section>
         </div>

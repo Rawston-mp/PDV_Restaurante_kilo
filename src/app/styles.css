@@ -32,7 +32,7 @@ body {
 }
 
 
-/* Essencial: grid children precisam de min-height:0 para h-full funcionar em netos */
+/* Essencial: os filhos do grid precisam de min-height: 0 para h-full funcionar nos descendentes. */
 
 .layout>* {
     min-height: 0;
@@ -80,7 +80,7 @@ body {
 }
 
 
-/* Rota /caixa ocupa toda a area sem padding */
+/* A rota /caixa ocupa toda a área sem padding. */
 
 .content--flush {
     padding: 0;
@@ -2203,7 +2203,8 @@ body {
 }
 
 .comanda-screen {
-    height: calc(100vh - 2.7rem);
+    height: 100%;
+    min-height: 0;
     position: relative;
     background: radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 48%), #071226;
     color: #e2e8f0;
@@ -2435,7 +2436,7 @@ body {
     margin-bottom: 0;
 }
 
-.content .comanda-panel-heading button.comanda-expand-button {
+:is(.content, .content--flush) .comanda-panel-heading button.comanda-expand-button {
     width: 44px;
     height: 44px;
     flex: 0 0 44px;
@@ -2450,8 +2451,8 @@ body {
     transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
-.content .comanda-panel-heading button.comanda-expand-button:hover,
-.content .comanda-panel-heading button.comanda-expand-button:focus-visible {
+:is(.content, .content--flush) .comanda-panel-heading button.comanda-expand-button:hover,
+:is(.content, .content--flush) .comanda-panel-heading button.comanda-expand-button:focus-visible {
     border-color: #38bdf8;
     background: rgba(2, 132, 199, 0.28);
     outline: none;
@@ -2500,7 +2501,7 @@ body {
     overflow-y: auto;
 }
 
-.content .comanda-workspace.is-expanded .comanda-suggestions button {
+:is(.content, .content--flush) .comanda-workspace.is-expanded .comanda-suggestions button {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     min-height: 56px;
@@ -2638,7 +2639,7 @@ body {
     gap: 0.45rem;
 }
 
-.content .comanda-categories button {
+:is(.content, .content--flush) .comanda-categories button {
     border-radius: 12px;
     border: 1px solid rgba(148, 163, 184, 0.45);
     background: linear-gradient(120deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 0.98) 100%);
@@ -2649,13 +2650,13 @@ body {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
-.content .comanda-categories button:hover:not(:disabled) {
+:is(.content, .content--flush) .comanda-categories button:hover:not(:disabled) {
     border-color: #7dd3fc;
     background: linear-gradient(120deg, #f8fdff 0%, #eef8ff 100%);
     color: #0f172a;
 }
 
-.content .comanda-categories button.is-active {
+:is(.content, .content--flush) .comanda-categories button.is-active {
     border-color: #38bdf8;
     background: #0369a1;
     color: #ffffff;
@@ -2705,7 +2706,7 @@ body {
     padding-right: 0.2rem;
 }
 
-.content .comanda-suggestions-panel .comanda-suggestions button {
+:is(.content, .content--flush) .comanda-suggestions-panel .comanda-suggestions button.comanda-product-row {
     border-radius: 8px;
     border: 1px solid rgba(71, 85, 105, 0.7);
     background: #020c1b;
@@ -2717,13 +2718,14 @@ body {
     gap: 0.75rem;
     padding: 0.5rem 0.7rem;
     min-height: 56px;
-    font-size: 0.86rem;
+    font-size: 0.9rem;
+    font-weight: 600;
     box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.34);
     transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
-.content .comanda-suggestions-panel .comanda-suggestions button:hover,
-.content .comanda-suggestions-panel .comanda-suggestions button:focus-visible {
+:is(.content, .content--flush) .comanda-suggestions-panel .comanda-suggestions button.comanda-product-row:hover,
+:is(.content, .content--flush) .comanda-suggestions-panel .comanda-suggestions button.comanda-product-row:focus-visible {
     border-color: rgba(56, 189, 248, 0.78);
     background: #07162c;
     outline: none;
@@ -2738,6 +2740,8 @@ body {
     display: block;
     overflow: hidden;
     color: #f8fafc;
+    font-size: 0.96rem;
+    font-weight: 800;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -2752,7 +2756,8 @@ body {
 
 .comanda-product-price {
     color: #fbbf24;
-    font-size: 1rem;
+    font-size: 1.08rem;
+    font-weight: 800;
     white-space: nowrap;
 }
 
@@ -3068,10 +3073,218 @@ body {
     font-size: 0.8rem;
 }
 
+@media (max-width: 1280px) and (min-width: 1081px) {
+    .comanda-layout-grid {
+        grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+        gap: 0.7rem;
+    }
+}
+
+@media (max-height: 800px) and (min-width: 1081px) {
+    .comanda-screen {
+        padding: 0.6rem;
+    }
+
+    .comanda-container {
+        gap: 0.55rem;
+    }
+
+    .comanda-header-wrap {
+        gap: 0.4rem;
+    }
+
+    .comanda-header {
+        padding: 0.5rem 0.65rem;
+        border-radius: 10px;
+    }
+
+    .comanda-header-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+
+    .comanda-header-title {
+        gap: 0.55rem;
+    }
+
+    .comanda-header h2 {
+        font-size: 0.94rem;
+    }
+
+    .comanda-header p {
+        margin-top: 0.1rem;
+        font-size: 0.72rem;
+    }
+
+    .comanda-header-status {
+        gap: 0.35rem;
+    }
+
+    .comanda-status {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.7rem;
+    }
+
+    .comanda-retry-button {
+        min-height: 36px;
+        padding: 0 0.55rem;
+        font-size: 0.72rem;
+    }
+
+    .comanda-top-fields {
+        gap: 0.45rem;
+    }
+
+    .comanda-field-group {
+        gap: 0.18rem;
+    }
+
+    .comanda-field-group label,
+    .comanda-field-group > small {
+        font-size: 0.68rem;
+    }
+
+    .comanda-number-input,
+    .comanda-search-input {
+        min-height: 42px;
+        border-radius: 8px;
+        font-size: 0.94rem;
+    }
+
+    .comanda-layout-grid,
+    .comanda-left-column,
+    .comanda-right-column,
+    .comanda-display-grid {
+        gap: 0.5rem;
+    }
+
+    .comanda-left-column {
+        grid-template-rows: auto auto minmax(64px, 0.65fr) minmax(92px, 1.35fr) auto auto;
+    }
+
+    .comanda-panel {
+        padding: 0.55rem;
+        border-radius: 10px;
+    }
+
+    .panel-label {
+        margin-bottom: 0.3rem;
+        font-size: 0.7rem;
+    }
+
+    .panel-value {
+        font-size: 2rem;
+    }
+
+    .weight-panel-status,
+    .price-panel > small {
+        margin-top: 0.25rem;
+        font-size: 0.68rem;
+    }
+
+    .comanda-panel-heading {
+        margin-bottom: 0.3rem;
+    }
+
+    :is(.content, .content--flush) .comanda-panel-heading button.comanda-expand-button {
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
+    }
+
+    :is(.content, .content--flush) .comanda-categories button {
+        min-height: 44px;
+        border-radius: 9px;
+        font-size: 0.8rem;
+    }
+
+    .comanda-suggestions {
+        margin-top: 0.35rem;
+        gap: 0.25rem;
+    }
+
+    .comanda-suggestions-panel .comanda-suggestions {
+        max-height: 96px;
+    }
+
+    :is(.content, .content--flush) .comanda-suggestions-panel .comanda-suggestions button.comanda-product-row {
+        min-height: 52px;
+        padding: 0.4rem 0.6rem;
+    }
+
+    .comanda-items {
+        gap: 0.3rem;
+    }
+
+    .comanda-items-panel {
+        min-height: 92px;
+    }
+
+    .comanda-item-row {
+        min-height: 58px;
+        padding: 0.35rem;
+    }
+
+    .comanda-item-actions button {
+        width: 44px;
+        height: 44px;
+    }
+
+    .total-panel {
+        gap: 0.65rem;
+        padding-block: 0.45rem;
+    }
+
+    .total-panel .is-total strong {
+        font-size: 2rem;
+    }
+
+    .comanda-keyboard-toolbar {
+        grid-template-columns: minmax(0, 1fr) 44px;
+        gap: 0.35rem;
+    }
+
+    .comanda-keyboard-collapse {
+        width: 44px;
+        height: 44px;
+    }
+
+    .comanda-keyboard-toggle button,
+    .numeric-keypad-grid button,
+    .virtual-row button,
+    .virtual-row-actions button {
+        min-height: 44px;
+    }
+
+    .numeric-keypad-grid,
+    .virtual-keyboard-grid,
+    .virtual-row,
+    .virtual-row-actions {
+        gap: 0.3rem;
+    }
+
+    .numeric-keypad-grid .is-enter {
+        grid-column: span 2;
+    }
+
+    .next-comanda-button {
+        min-height: 52px;
+    }
+
+    .comanda-primary-action {
+        gap: 0.25rem;
+    }
+
+    .comanda-primary-action > p {
+        font-size: 0.68rem;
+    }
+}
+
 @media (max-width: 1080px) {
     .comanda-screen {
         height: auto;
-        min-height: calc(100vh - 2.7rem);
+        min-height: 100%;
         overflow-y: auto;
     }
     .comanda-container,

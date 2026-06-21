@@ -6,7 +6,7 @@ import { InMemoryOrderRepository } from '@/modules/orders/infrastructure/reposit
 import { InMemoryOrderSyncGateway } from '@/modules/orders/infrastructure/sync/InMemoryOrderSyncGateway';
 
 describe('SyncOrders use case integration', () => {
-  it('resolve conflito por versao e replica resultado para local e remoto', async () => {
+  it('resolve conflito por versão e replica o resultado local e remotamente', async () => {
     const repository = new InMemoryOrderRepository();
     const createOrder = new CreateOrder(repository);
 

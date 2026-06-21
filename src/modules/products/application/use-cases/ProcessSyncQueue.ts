@@ -35,7 +35,7 @@ export class ProcessSyncQueue {
       } catch (error) {
         await this.syncTaskQueue.markFailed(
           task.id,
-          error instanceof Error ? error.message : 'Falha ao processar tarefa de sincronizacao',
+          error instanceof Error ? error.message : 'Falha ao processar tarefa de sincronização',
           this.baseDelayMs
         );
         failed += 1;

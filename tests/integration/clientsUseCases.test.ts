@@ -4,7 +4,7 @@ import { CreateClient } from '@/modules/clients/application/use-cases/CreateClie
 import { InMemoryClientRepository } from '@/modules/clients/infrastructure/repositories/InMemoryClientRepository';
 
 describe('Clients use cases', () => {
-  it('cria cliente com historico de consumo', async () => {
+  it('cria cliente com histórico de consumo', async () => {
     const repository = new InMemoryClientRepository();
     const createClient = new CreateClient(repository);
 
@@ -18,7 +18,7 @@ describe('Clients use cases', () => {
       number: '100',
       neighborhood: 'Centro',
       state: 'SP',
-      city: 'Sao Paulo',
+      city: 'São Paulo',
       complement: 'Apto 12',
       phone: '(11) 3000-1111',
       mobile: '(11) 99999-1111',
@@ -38,7 +38,7 @@ describe('Clients use cases', () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.clientCode).toBe('001');
     expect(loaded?.fullName).toBe('Cliente Teste');
-    expect(loaded?.city).toBe('Sao Paulo');
+    expect(loaded?.city).toBe('São Paulo');
     expect(loaded?.consumptionHistory).toHaveLength(1);
     expect(loaded?.consumptionHistory[0]?.description).toContain('Fiado');
   });
@@ -71,7 +71,7 @@ describe('Clients use cases', () => {
 
     const existing = await repository.findById('cli-2');
     if (!existing) {
-      throw new Error('Cliente esperado nao encontrado.');
+      throw new Error('Cliente esperado não encontrado.');
     }
 
     await repository.save({

@@ -6,7 +6,7 @@ import { InMemoryProductRepository } from '@/modules/products/infrastructure/rep
 import { InMemoryProductSyncGateway } from '@/modules/products/infrastructure/sync/InMemoryProductSyncGateway';
 
 describe('SyncProducts use case integration', () => {
-  it('resolve conflito por versao e aplica merge', async () => {
+  it('resolve conflito por versão e aplica merge', async () => {
     const repository = new InMemoryProductRepository();
     const createProduct = new CreateProduct(repository);
 

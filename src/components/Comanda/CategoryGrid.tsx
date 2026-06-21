@@ -28,8 +28,8 @@ export function CategoryGrid({
             type="button"
             className="comanda-expand-button"
             onClick={onToggleExpand}
-            aria-label={expanded ? 'Restaurar visualizacao' : 'Expandir visualizacao'}
-            title={expanded ? 'Restaurar visualizacao' : 'Expandir visualizacao'}
+            aria-label={expanded ? 'Restaurar visualização' : 'Expandir visualização'}
+            title={expanded ? 'Restaurar visualização' : 'Expandir visualização'}
           >
             {expanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
           </button>

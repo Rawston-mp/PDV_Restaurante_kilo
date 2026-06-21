@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: 'Senha invalida para o perfil selecionado.'
+            message: 'Senha inválida para o perfil selecionado.'
           };
         }
 
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user) {
           return {
             success: false,
-            message: 'Usuario nao autenticado para acao sensivel.'
+            message: 'Usuário não autenticado para ação sensível.'
           };
         }
 
@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: `Senha de confirmacao invalida para ${actionNameMap[action]}.`
+            message: `Senha de confirmação inválida para ${actionNameMap[action]}.`
           };
         }
 
@@ -188,21 +188,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          message: `Confirmacao de ${actionNameMap[action]} aprovada.`
+          message: `Confirmação de ${actionNameMap[action]} aprovada.`
         };
       },
       changePin: ({ kind, role, currentPin, nextPin, confirmPin }: ChangePinInput) => {
         if (!user || user.role !== 'ADMIN') {
           return {
             success: false,
-            message: 'Somente ADMIN pode alterar politica de PIN.'
+            message: 'Somente ADMIN pode alterar a política de PIN.'
           };
         }
 
         if (nextPin !== confirmPin) {
           return {
             success: false,
-            message: 'Confirmacao do novo PIN nao confere.'
+            message: 'A confirmação do novo PIN não confere.'
           };
         }
 

@@ -115,7 +115,7 @@ describe('Stock entries use cases', () => {
 
     const existing = await stockEntryRepository.findById('stock-2');
     if (!existing) {
-      throw new Error('Entrada esperada nao encontrada.');
+      throw new Error('Entrada esperada não encontrada.');
     }
 
     await stockEntryRepository.save({

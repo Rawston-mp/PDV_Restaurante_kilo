@@ -11,7 +11,7 @@ export function getNextOrderStatus(currentStatus: OrderStatus): OrderStatus {
   const next = transitions[currentStatus];
 
   if (!next) {
-    throw new Error('Pedido ja esta no status final');
+    throw new Error('O pedido já está no status final');
   }
 
   return next;
