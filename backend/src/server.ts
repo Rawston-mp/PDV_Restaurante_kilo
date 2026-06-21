@@ -7,8 +7,10 @@ import {
   ComandaLockNotFoundError,
   ComandaLockOwnershipError,
   ComandaStateMachineService,
+  type ComandaItemRecord,
   type ComandaLockOwner,
   type ComandaLockStationId,
+  type ComandaPesagemInput,
   type ComandaStatus
 } from './domain/comandaStateMachine';
 import type { ComandaStore } from './infrastructure/comandaStore';
@@ -93,6 +95,68 @@ const parseStatus = (value: unknown): ComandaStatus | null => {
 
   const normalized = value.trim().toUpperCase();
   return COMANDA_STATUSES.includes(normalized as ComandaStatus) ? (normalized as ComandaStatus) : null;
+};
+
+const parseOptionalText = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+};
+
+const parseComandaItemsPayload = (body: unknown): ComandaItemRecord[] | null => {
+  if (typeof body !== 'object' || body === null) {
+    return null;
+  }
+
+  const payload = body as { items?: unknown; itens?: unknown };
+  const items = Array.isArray(payload.items) ? payload.items : payload.itens;
+  return Array.isArray(items) ? (items as ComandaItemRecord[]) : null;
+};
+
+const parseComandaPesagemInput = (body: unknown): ComandaPesagemInput | null => {
+  if (typeof body !== 'object' || body === null) {
+    return null;
+  }
+
+  const payload = body as Record<string, unknown>;
+  const peso = parsePositiveNumber(payload.peso);
+  if (!peso) {
+    return null;
+  }
+
+  return {
+    id: parseOptionalText(payload.id),
+    peso,
+    origem: parseOptionalText(payload.origem) ?? parseOptionalText(payload.origin),
+    owner: parseLockOwner(payload.owner) ?? undefined,
+    stationId: parseLockStationId(payload.stationId) ?? undefined,
+    itemId: parseOptionalText(payload.itemId),
+    productName: parseOptionalText(payload.productName),
+    reason: parseOptionalText(payload.reason)
+  };
+};
+
+const resolveComandaMutationError = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message === 'Comanda nao encontrada.') {
+    return {
+      status: 404,
+      body: {
+        ok: false,
+        message: error.message
+      }
+    };
+  }
+
+  return {
+    status: 400,
+    body: {
+      ok: false,
+      message: error instanceof Error ? error.message : fallbackMessage
+    }
+  };
 };
 
 const persistComandas = async () => {
@@ -267,6 +331,92 @@ app.get('/api/v1/comandas/:numero', (req, res) => {
   res.status(200).json({ ok: true, comanda });
 });
 
+app.get('/api/v1/comandas/:numero/items', (req, res) => {
+  const comanda = comandaService.get(req.params.numero);
+  if (!comanda) {
+    res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+    return;
+  }
+
+  res.status(200).json({
+    ok: true,
+    numero: comanda.numero,
+    status: comanda.status,
+    items: comanda.items,
+    updatedAt: comanda.updatedAt
+  });
+});
+
+app.put('/api/v1/comandas/:numero/items', (req, res) => {
+  const items = parseComandaItemsPayload(req.body);
+  if (!items) {
+    res.status(400).json({ ok: false, message: 'Campo items deve ser uma lista.' });
+    return;
+  }
+
+  try {
+    const reason = parseOptionalText(req.body?.reason) ?? 'items_sync';
+    const comanda = comandaService.setItems(req.params.numero, items, reason);
+
+    void comandaStore.appendAudit({
+      action: 'ITEMS_SYNCED',
+      numero: comanda.numero,
+      toStatus: comanda.status,
+      at: comanda.updatedAt,
+      reason,
+      itemCount: comanda.items.length
+    });
+    void persistComandas();
+
+    res.status(200).json({ ok: true, comanda, items: comanda.items });
+  } catch (error) {
+    const response = resolveComandaMutationError(error, 'Falha ao salvar itens da comanda.');
+    res.status(response.status).json(response.body);
+  }
+});
+
+app.post('/api/v1/comandas/:numero/items', (req, res) => {
+  const rawItem = typeof req.body?.item === 'object' && req.body.item !== null ? req.body.item : req.body;
+
+  try {
+    const reason = parseOptionalText(req.body?.reason) ?? 'item_added';
+    const comanda = comandaService.addItem(req.params.numero, rawItem as ComandaItemRecord, reason);
+    const item = comanda.items[0];
+
+    void comandaStore.appendAudit({
+      action: 'ITEM_ADDED',
+      numero: comanda.numero,
+      toStatus: comanda.status,
+      at: comanda.updatedAt,
+      reason,
+      itemId: item?.id,
+      itemCount: comanda.items.length
+    });
+    void persistComandas();
+
+    res.status(201).json({ ok: true, comanda, item });
+  } catch (error) {
+    const response = resolveComandaMutationError(error, 'Falha ao adicionar item da comanda.');
+    res.status(response.status).json(response.body);
+  }
+});
+
+app.get('/api/v1/comandas/:numero/pesagens', (req, res) => {
+  const comanda = comandaService.get(req.params.numero);
+  if (!comanda) {
+    res.status(404).json({ ok: false, message: 'Comanda nao encontrada.' });
+    return;
+  }
+
+  res.status(200).json({
+    ok: true,
+    numero: comanda.numero,
+    status: comanda.status,
+    pesagens: comanda.pesagens,
+    updatedAt: comanda.updatedAt
+  });
+});
+
 app.get('/api/v1/comandas', (_req, res) => {
   res.status(200).json({ ok: true, comandas: comandaService.getAll() });
 });
@@ -317,7 +467,41 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
       return;
     }
 
-    const comanda = comandaService.markPesagemEmAndamento(req.params.numero, parseNumero(req.body?.reason));
+    const pesagemInput = parseComandaPesagemInput(req.body);
+    if (pesagemInput) {
+      const result = comandaService.recordPesagem(req.params.numero, pesagemInput);
+      const comanda = result.comanda;
+
+      if (before.status !== comanda.status) {
+        const lastTransition = comanda.transitions[comanda.transitions.length - 1];
+        if (lastTransition) {
+          void appendTransitionAudit(
+            comanda.numero,
+            before.status,
+            lastTransition.to,
+            lastTransition.at,
+            lastTransition.reason
+          );
+        }
+      }
+
+      void comandaStore.appendAudit({
+        action: 'PESAGEM_RECORDED',
+        numero: comanda.numero,
+        toStatus: comanda.status,
+        at: result.pesagem.createdAt,
+        reason: pesagemInput.reason ?? 'pesagem_registrada',
+        itemId: result.pesagem.itemId,
+        peso: result.pesagem.peso,
+        origem: result.pesagem.origem
+      });
+      void persistComandas();
+
+      res.status(200).json({ ok: true, comanda, pesagem: result.pesagem });
+      return;
+    }
+
+    const comanda = comandaService.markPesagemEmAndamento(req.params.numero, parseOptionalText(req.body?.reason) ?? 'peso_recebido');
 
     if (before.status !== comanda.status) {
       const lastTransition = comanda.transitions[comanda.transitions.length - 1];
@@ -336,10 +520,8 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
 
     res.status(200).json({ ok: true, comanda });
   } catch (error) {
-    res.status(400).json({
-      ok: false,
-      message: error instanceof Error ? error.message : 'Falha ao registrar pesagem.'
-    });
+    const response = resolveComandaMutationError(error, 'Falha ao registrar pesagem.');
+    res.status(response.status).json(response.body);
   }
 });
 

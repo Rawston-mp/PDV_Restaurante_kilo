@@ -17,6 +17,7 @@ const FLUSH_ROUTES = ['/caixa', '/comanda'];
 export function App() {
   const { user } = useAuth();
   const location = useLocation();
+  const isScaleTerminal = user?.role === 'COMANDA_A' || user?.role === 'COMANDA_B';
   const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
   const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
@@ -27,12 +28,12 @@ export function App() {
         <h1>PDV Touch</h1>
         <nav>
           {canAccessDashboard && <NavLink to="/">Dashboard</NavLink>}
-          <NavLink to="/orders/new">Novo Pedido</NavLink>
-          <NavLink to="/products">Produtos</NavLink>
+          {!isScaleTerminal && <NavLink to="/orders/new">Novo Pedido</NavLink>}
+          {!isScaleTerminal && <NavLink to="/products">Produtos</NavLink>}
           <NavLink to="/comanda">Balanças</NavLink>
-          <NavLink to="/caixa">Caixa</NavLink>
+          {!isScaleTerminal && <NavLink to="/caixa">Caixa</NavLink>}
           {canAccessCadastro && <NavLink to="/cadastro">Cadastros</NavLink>}
-          <NavLink to="/admin">Admin</NavLink>
+          {!isScaleTerminal && user?.role === 'ADMIN' && <NavLink to="/admin">Admin</NavLink>}
         </nav>
 
         <AuthAccessPanel />

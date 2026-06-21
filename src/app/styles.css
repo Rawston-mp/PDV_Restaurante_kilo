@@ -2204,6 +2204,7 @@ body {
 
 .comanda-screen {
     height: calc(100vh - 2.7rem);
+    position: relative;
     background: radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 48%), #071226;
     color: #e2e8f0;
     padding: 1rem;
@@ -2256,6 +2257,33 @@ body {
     padding: 0.85rem;
 }
 
+.comanda-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.comanda-header-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    background: rgba(2, 132, 199, 0.16);
+    color: #7dd3fc;
+}
+
+.comanda-header-status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .comanda-header h2 {
     margin: 0;
     font-size: 1rem;
@@ -2269,12 +2297,61 @@ body {
 
 .comanda-status {
     border-radius: 999px;
-    padding: 0.25rem 0.55rem;
-    border: 1px solid rgba(52, 211, 153, 0.45);
-    background: rgba(6, 95, 70, 0.42);
-    color: #6ee7b7;
+    padding: 0.38rem 0.65rem;
+    border: 1px solid rgba(148, 163, 184, 0.48);
+    background: rgba(51, 65, 85, 0.52);
+    color: #cbd5e1;
     font-size: 0.75rem;
     font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.comanda-status.is-success {
+    border-color: rgba(52, 211, 153, 0.5);
+    background: rgba(6, 95, 70, 0.42);
+    color: #6ee7b7;
+}
+
+.comanda-status.is-warning,
+.comanda-status.is-syncing {
+    border-color: rgba(251, 191, 36, 0.58);
+    background: rgba(120, 53, 15, 0.38);
+    color: #fde68a;
+}
+
+.comanda-status.is-danger {
+    border-color: rgba(251, 113, 133, 0.58);
+    background: rgba(127, 29, 29, 0.38);
+    color: #fecdd3;
+}
+
+.comanda-sync-pending {
+    color: #fde68a;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.comanda-retry-button {
+    min-height: 38px;
+    padding: 0 0.7rem;
+    border-radius: 9px;
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    background: rgba(120, 53, 15, 0.34);
+    color: #fde68a;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 700;
+}
+
+.is-spinning {
+    animation: comanda-spin 0.9s linear infinite;
+}
+
+@keyframes comanda-spin {
+    to { transform: rotate(360deg); }
 }
 
 .comanda-number-input,
@@ -2284,14 +2361,31 @@ body {
     border: 1px solid rgba(71, 85, 105, 0.65);
     background: rgba(2, 12, 27, 0.7);
     color: #f8fafc;
-    min-height: 36px;
+    min-height: 48px;
     padding: 0 0.68rem;
-    font-size: 0.84rem;
+    font-size: 1rem;
+}
+
+.comanda-number-input:focus,
+.comanda-search-input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
+    outline: none;
+}
+
+.comanda-search-input:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+}
+
+.comanda-field-group>small {
+    color: #94a3b8;
+    font-size: 0.72rem;
 }
 
 .comanda-layout-grid {
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr;
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
     gap: 1rem;
     min-height: 0;
 }
@@ -2305,7 +2399,11 @@ body {
 }
 
 .comanda-left-column {
-    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto minmax(90px, 0.65fr) minmax(130px, 1.35fr) auto auto;
+}
+
+.comanda-right-column {
+    align-content: start;
 }
 
 .comanda-display-grid {
@@ -2319,6 +2417,110 @@ body {
     border: 1px solid rgba(71, 85, 105, 0.45);
     border-radius: 12px;
     padding: 0.75rem;
+}
+
+.comanda-workspace {
+    display: contents;
+}
+
+.comanda-panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.45rem;
+}
+
+.comanda-panel-heading .panel-label {
+    margin-bottom: 0;
+}
+
+.content .comanda-panel-heading button.comanda-expand-button {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.45);
+    background: rgba(2, 132, 199, 0.14);
+    color: #bae6fd;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.content .comanda-panel-heading button.comanda-expand-button:hover,
+.content .comanda-panel-heading button.comanda-expand-button:focus-visible {
+    border-color: #38bdf8;
+    background: rgba(2, 132, 199, 0.28);
+    outline: none;
+}
+
+.comanda-workspace.is-expanded {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(900px, calc(100% - 2rem));
+    height: min(560px, calc(100% - 2rem));
+    transform: translate(-50%, -50%);
+    z-index: 60;
+    display: grid;
+    grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.65rem;
+    min-height: 0;
+    padding: 0.75rem;
+    overflow: hidden;
+    border: 1px solid rgba(56, 189, 248, 0.58);
+    border-radius: 12px;
+    background: #071226;
+    box-shadow: 0 0 0 100vmax rgba(2, 6, 23, 0.58), 0 24px 70px rgba(2, 6, 23, 0.72);
+}
+
+.comanda-workspace.is-expanded > .comanda-panel:first-child {
+    grid-column: 1 / -1;
+}
+
+.comanda-workspace.is-expanded .comanda-suggestions-panel,
+.comanda-workspace.is-expanded .comanda-items-panel {
+    min-height: 0;
+    max-height: none;
+}
+
+.comanda-workspace.is-expanded .comanda-suggestions-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+}
+
+.comanda-workspace.is-expanded .comanda-suggestions-panel .comanda-suggestions {
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+}
+
+.content .comanda-workspace.is-expanded .comanda-suggestions button {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 56px;
+    gap: 0.75rem;
+    padding: 0.5rem 0.7rem;
+}
+
+.comanda-workspace.is-expanded .comanda-suggestions button strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comanda-workspace.is-expanded .comanda-suggestions button small {
+    justify-self: end;
+    white-space: nowrap;
+}
+
+.comanda-workspace.is-expanded .comanda-items-panel {
+    height: 100%;
 }
 
 .panel-label {
@@ -2342,6 +2544,17 @@ body {
 
 .panel-value-success {
     color: #34d399;
+}
+
+.panel-value-success.is-placeholder {
+    color: #64748b;
+}
+
+.price-panel>small {
+    display: block;
+    margin-top: 0.45rem;
+    color: #94a3b8;
+    font-size: 0.72rem;
 }
 
 .weight-panel-head {
@@ -2369,6 +2582,11 @@ body {
     text-align: left;
     background: transparent;
     cursor: pointer;
+}
+
+.panel-value-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
 }
 
 .panel-value-input {
@@ -2425,8 +2643,9 @@ body {
     border: 1px solid rgba(148, 163, 184, 0.45);
     background: linear-gradient(120deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 0.98) 100%);
     color: #64748b;
-    min-height: 42px;
-    font-size: 0.78rem;
+    min-height: 50px;
+    font-size: 0.88rem;
+    font-weight: 700;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
@@ -2437,10 +2656,10 @@ body {
 }
 
 .content .comanda-categories button.is-active {
-    border-color: #0284c7;
-    background: linear-gradient(120deg, #f0f9ff 0%, #e0f2fe 100%);
-    color: #075985;
-    box-shadow: 0 6px 14px rgba(14, 165, 233, 0.14);
+    border-color: #38bdf8;
+    background: #0369a1;
+    color: #ffffff;
+    box-shadow: 0 7px 16px rgba(14, 165, 233, 0.22);
 }
 
 .comanda-categories button:disabled {
@@ -2459,25 +2678,91 @@ body {
     min-height: 0;
 }
 
+.comanda-products-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+
+.comanda-products-heading .panel-label {
+    margin-bottom: 0;
+}
+
+.comanda-products-heading > span {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.16);
+    color: #7dd3fc;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
 .comanda-suggestions-panel .comanda-suggestions {
-    max-height: 120px;
+    max-height: 132px;
     overflow-y: auto;
     padding-right: 0.2rem;
 }
 
-.comanda-suggestions button {
+.content .comanda-suggestions-panel .comanda-suggestions button {
     border-radius: 8px;
-    border: 1px solid rgba(71, 85, 105, 0.55);
-    background: rgba(2, 12, 27, 0.72);
+    border: 1px solid rgba(71, 85, 105, 0.7);
+    background: #020c1b;
     color: #f8fafc;
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     text-align: left;
-    gap: 0.15rem;
-    padding: 0.45rem 0.55rem;
+    gap: 0.75rem;
+    padding: 0.5rem 0.7rem;
+    min-height: 56px;
+    font-size: 0.86rem;
+    box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.34);
+    transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
-.comanda-suggestions button small {
-    color: #34d399;
+.content .comanda-suggestions-panel .comanda-suggestions button:hover,
+.content .comanda-suggestions-panel .comanda-suggestions button:focus-visible {
+    border-color: rgba(56, 189, 248, 0.78);
+    background: #07162c;
+    outline: none;
+    filter: none;
+}
+
+.comanda-product-description {
+    min-width: 0;
+}
+
+.comanda-product-description strong {
+    display: block;
+    overflow: hidden;
+    color: #f8fafc;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comanda-product-description small {
+    display: block;
+    margin-top: 0.2rem;
+    color: #7dd3fc;
+    font-size: 0.74rem;
+    line-height: 1.2;
+}
+
+.comanda-product-price {
+    color: #fbbf24;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.comanda-suggestions::-webkit-scrollbar {
+    width: 8px;
+}
+
+.comanda-suggestions::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.38);
 }
 
 .comanda-suggestions-empty {
@@ -2496,10 +2781,30 @@ body {
 }
 
 .comanda-items-panel {
-    max-height: 460px;
+    min-height: 130px;
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
+}
+
+.comanda-items-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.comanda-items-header .panel-label {
+    margin-bottom: 0.45rem;
+}
+
+.comanda-items-header>span {
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.16);
+    color: #7dd3fc;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .comanda-items-panel .comanda-items {
@@ -2522,7 +2827,27 @@ body {
     padding: 0.45rem;
     background: rgba(2, 12, 27, 0.6);
     display: grid;
-    gap: 0.35rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 68px;
+}
+
+.comanda-item-description {
+    min-width: 0;
+}
+
+.comanda-item-description strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comanda-item-subtotal {
+    color: #fbbf24;
+    font-size: 1rem;
+    white-space: nowrap;
 }
 
 .comanda-item-row small {
@@ -2537,13 +2862,20 @@ body {
 }
 
 .comanda-item-actions button {
-    min-height: 30px;
+    width: 48px;
+    height: 48px;
     border-radius: 7px;
     border: 1px solid rgba(56, 189, 248, 0.45);
     background: rgba(2, 132, 199, 0.2);
     color: #e0f2fe;
-    padding: 0 0.5rem;
-    font-size: 0.78rem;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+}
+
+.comanda-item-actions button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .comanda-item-actions .is-danger {
@@ -2560,7 +2892,14 @@ body {
 
 .total-panel {
     display: grid;
-    gap: 0.35rem;
+    grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1.3fr);
+    align-items: center;
+    gap: 1rem;
+}
+
+.total-panel-breakdown {
+    display: grid;
+    gap: 0.3rem;
 }
 
 .total-panel p {
@@ -2570,11 +2909,42 @@ body {
 }
 
 .total-panel .is-total {
-    margin-top: 0.35rem;
-    padding-top: 0.35rem;
-    border-top: 1px dashed rgba(148, 163, 184, 0.45);
+    margin: 0;
+    padding-left: 1rem;
+    border-left: 1px dashed rgba(148, 163, 184, 0.45);
     color: #fbbf24;
     font-weight: 700;
+    display: grid;
+    justify-items: end;
+    gap: 0.2rem;
+}
+
+.total-panel .is-total span {
+    color: #cbd5e1;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+}
+
+.total-panel .is-total strong {
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    line-height: 1;
+}
+
+.comanda-keyboard-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 48px;
+    gap: 0.5rem;
+}
+
+.comanda-keyboard-collapse {
+    width: 48px;
+    height: 48px;
+    border-radius: 9px;
+    border: 1px solid rgba(71, 85, 105, 0.65);
+    background: rgba(2, 12, 27, 0.6);
+    color: #cbd5e1;
+    display: inline-grid;
+    place-items: center;
 }
 
 .comanda-keyboard-toggle {
@@ -2584,12 +2954,16 @@ body {
 }
 
 .comanda-keyboard-toggle button {
-    min-height: 38px;
+    min-height: 48px;
     border-radius: 9px;
     border: 1px solid rgba(71, 85, 105, 0.65);
     background: rgba(2, 12, 27, 0.6);
     color: #cbd5e1;
     font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
 }
 
 .comanda-keyboard-toggle button.is-active {
@@ -2605,7 +2979,7 @@ body {
 
 .numeric-keypad-grid button,
 .virtual-row button {
-    min-height: 42px;
+    min-height: 48px;
     border-radius: 8px;
     border: 1px solid rgba(71, 85, 105, 0.55);
     background: rgba(2, 12, 27, 0.7);
@@ -2656,13 +3030,27 @@ body {
 }
 
 .next-comanda-button {
-    min-height: 52px;
+    min-height: 64px;
     border-radius: 10px;
     border: 1px solid rgba(16, 185, 129, 0.65);
     background: linear-gradient(120deg, #059669 0%, #10b981 100%);
     color: #f8fafc;
     font-weight: 800;
     font-size: 0.94rem;
+}
+
+.comanda-primary-action {
+    margin-top: auto;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.comanda-primary-action>p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.74rem;
+    line-height: 1.35;
+    text-align: center;
 }
 
 .next-comanda-button:disabled {
@@ -2681,6 +3069,16 @@ body {
 }
 
 @media (max-width: 1080px) {
+    .comanda-screen {
+        height: auto;
+        min-height: calc(100vh - 2.7rem);
+        overflow-y: auto;
+    }
+    .comanda-container,
+    .comanda-left-column,
+    .comanda-right-column {
+        overflow: visible;
+    }
     .comanda-top-fields {
         grid-template-columns: 1fr;
     }
@@ -2689,6 +3087,30 @@ body {
     }
     .comanda-left-column {
         grid-template-rows: auto;
+    }
+    .comanda-workspace.is-expanded {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: min(760px, calc(100vw - 1.5rem));
+        height: min(720px, calc(100vh - 1.5rem));
+        transform: translate(-50%, -50%);
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(180px, 0.8fr) minmax(220px, 1.2fr);
+        overflow-y: auto;
+    }
+    .comanda-workspace.is-expanded .comanda-suggestions-panel,
+    .comanda-workspace.is-expanded .comanda-items-panel {
+        min-height: 180px;
+    }
+    .total-panel {
+        grid-template-columns: 1fr;
+    }
+    .total-panel .is-total {
+        padding-left: 0;
+        padding-top: 0.75rem;
+        border-left: 0;
+        border-top: 1px dashed rgba(148, 163, 184, 0.45);
     }
 }
 
@@ -3149,4 +3571,22 @@ body {
     .sensitive-modal-actions {
         grid-template-columns: 1fr;
     }
+}
+
+.comanda-feedback {
+    margin: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(52, 211, 153, 0.5);
+    background: rgba(6, 95, 70, 0.32);
+    color: #a7f3d0;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+}
+
+.virtual-row-actions button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
 }

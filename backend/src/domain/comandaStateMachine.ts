@@ -29,6 +29,41 @@ export type ComandaTransition = {
   reason?: string;
 };
 
+export type ComandaItemRecord = {
+  id: string;
+  nome: string;
+  precoUnitario: number;
+  peso?: number;
+  quantidade: number;
+  categoriaId: string;
+  subtotal: number;
+  porUnidade: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ComandaPesagemRecord = {
+  id: string;
+  peso: number;
+  origem?: string;
+  owner?: ComandaLockOwner;
+  stationId?: ComandaLockStationId;
+  itemId?: string;
+  productName?: string;
+  createdAt: string;
+};
+
+export type ComandaPesagemInput = {
+  id?: string;
+  peso: number;
+  origem?: string;
+  owner?: ComandaLockOwner;
+  stationId?: ComandaLockStationId;
+  itemId?: string;
+  productName?: string;
+  reason?: string;
+};
+
 export type ComandaRecord = {
   numero: string;
   status: ComandaStatus;
@@ -36,6 +71,8 @@ export type ComandaRecord = {
   updatedAt: string;
   lock: ComandaLock | null;
   transitions: ComandaTransition[];
+  items: ComandaItemRecord[];
+  pesagens: ComandaPesagemRecord[];
 };
 
 export type ComandaStateSnapshot = {
@@ -69,6 +106,115 @@ const transitionMap: Record<ComandaStatus, ComandaStatus[]> = {
 const canTransition = (from: ComandaStatus, to: ComandaStatus) => transitionMap[from].includes(to);
 
 const nowIso = () => new Date().toISOString();
+
+const buildGeneratedId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const normalizeFiniteNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const normalizeOptionalIso = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  return Number.isNaN(Date.parse(value)) ? undefined : value;
+};
+
+const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.reduce<ComandaItemRecord[]>((acc, rawItem) => {
+    if (typeof rawItem !== 'object' || rawItem === null) {
+      return acc;
+    }
+
+    const item = rawItem as Partial<ComandaItemRecord>;
+    const id = normalizeText(item.id);
+    const nome = normalizeText(item.nome);
+    const precoUnitario = normalizeFiniteNumber(item.precoUnitario);
+    const quantidade = normalizeFiniteNumber(item.quantidade);
+
+    if (!id || !nome || precoUnitario === null || quantidade === null || precoUnitario < 0 || quantidade <= 0) {
+      return acc;
+    }
+
+    const peso = normalizeFiniteNumber(item.peso);
+    const subtotal = normalizeFiniteNumber(item.subtotal) ?? Number((precoUnitario * quantidade).toFixed(2));
+
+    acc.push({
+      id,
+      nome,
+      precoUnitario,
+      quantidade,
+      peso: peso !== null && peso > 0 ? Number(peso.toFixed(3)) : undefined,
+      categoriaId: normalizeText(item.categoriaId) || 'GERAL',
+      subtotal: Number(subtotal.toFixed(2)),
+      porUnidade: Boolean(item.porUnidade),
+      createdAt: normalizeOptionalIso(item.createdAt),
+      updatedAt: normalizeOptionalIso(item.updatedAt)
+    });
+
+    return acc;
+  }, []);
+};
+
+const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => {
+  if (!Array.isArray(pesagens)) {
+    return [];
+  }
+
+  return pesagens.reduce<ComandaPesagemRecord[]>((acc, rawPesagem) => {
+    if (typeof rawPesagem !== 'object' || rawPesagem === null) {
+      return acc;
+    }
+
+    const pesagem = rawPesagem as Partial<ComandaPesagemRecord>;
+    const peso = normalizeFiniteNumber(pesagem.peso);
+    const createdAt = normalizeOptionalIso(pesagem.createdAt);
+
+    if (peso === null || peso <= 0 || !createdAt) {
+      return acc;
+    }
+
+    const owner = pesagem.owner === 'COMANDA_A' || pesagem.owner === 'COMANDA_B' ? pesagem.owner : undefined;
+    const stationId = pesagem.stationId === 'BALANCA_A' || pesagem.stationId === 'BALANCA_B' ? pesagem.stationId : undefined;
+
+    acc.push({
+      id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
+      peso: Number(peso.toFixed(3)),
+      origem: normalizeText(pesagem.origem) || undefined,
+      owner,
+      stationId,
+      itemId: normalizeText(pesagem.itemId) || undefined,
+      productName: normalizeText(pesagem.productName) || undefined,
+      createdAt
+    });
+
+    return acc;
+  }, []);
+};
+
+const ensureMutableItemsStatus = (status: ComandaStatus) => {
+  if (isInactiveStatus(status) || status === 'EM_FECHAMENTO') {
+    throw new Error(`Comanda em status ${status} nao aceita alteracao de itens.`);
+  }
+};
 
 const DEFAULT_LOCK_TTL_SECONDS = 120;
 
@@ -208,7 +354,9 @@ export class ComandaStateMachineService {
           ...transition,
           from: normalizeStatus(transition.from),
           to: normalizeStatus(transition.to)
-        }))
+        })),
+        items: normalizeComandaItems((comanda as Partial<ComandaRecord>).items),
+        pesagens: normalizeComandaPesagens((comanda as Partial<ComandaRecord>).pesagens)
       };
 
       this.comandas.set(normalizedComanda.numero, normalizedComanda);
@@ -261,7 +409,9 @@ export class ComandaStateMachineService {
       createdAt,
       updatedAt: createdAt,
       lock: null,
-      transitions: []
+      transitions: [],
+      items: [],
+      pesagens: []
     };
 
     this.comandas.set(normalized, created);
@@ -355,6 +505,81 @@ export class ComandaStateMachineService {
 
   markPesagemEmAndamento(numero: string, reason = 'peso_recebido') {
     return this.markEmUsoBalanca(numero, reason);
+  }
+
+  setItems(numero: string, items: ComandaItemRecord[], _reason = 'items_sync') {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    ensureMutableItemsStatus(existing.status);
+
+    const updatedAt = nowIso();
+    const normalizedItems = normalizeComandaItems(items).map((item) => ({
+      ...item,
+      createdAt: item.createdAt ?? updatedAt,
+      updatedAt
+    }));
+
+    const updated: ComandaRecord = {
+      ...existing,
+      items: normalizedItems,
+      updatedAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return updated;
+  }
+
+  addItem(numero: string, item: ComandaItemRecord, reason = 'item_added') {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    ensureMutableItemsStatus(existing.status);
+
+    const normalizedItems = normalizeComandaItems([item]);
+    if (normalizedItems.length === 0) {
+      throw new Error('Item da comanda invalido.');
+    }
+
+    return this.setItems(numero, [normalizedItems[0], ...existing.items], reason);
+  }
+
+  recordPesagem(numero: string, input: ComandaPesagemInput) {
+    const peso = normalizeFiniteNumber(input.peso);
+    if (peso === null || peso <= 0) {
+      throw new Error('Peso da pesagem deve ser maior que zero.');
+    }
+
+    const record = this.markEmUsoBalanca(numero, input.reason ?? 'pesagem_registrada');
+    const createdAt = nowIso();
+    const pesagem: ComandaPesagemRecord = {
+      id: normalizeText(input.id) || buildGeneratedId('pesagem'),
+      peso: Number(peso.toFixed(3)),
+      origem: normalizeText(input.origem) || undefined,
+      owner: input.owner,
+      stationId: input.stationId,
+      itemId: normalizeText(input.itemId) || undefined,
+      productName: normalizeText(input.productName) || undefined,
+      createdAt
+    };
+
+    const updated: ComandaRecord = {
+      ...record,
+      pesagens: [pesagem, ...record.pesagens],
+      updatedAt: createdAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return {
+      comanda: updated,
+      pesagem
+    };
   }
 
   acquireLock(

@@ -10,6 +10,11 @@ import {
   readStoredProductCategories
 } from '@/modules/products/domain/services/productCategories';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
+import {
+  fetchComandaItemsFromBackend,
+  registerComandaPesagemInBackend,
+  saveComandaItemsToBackend
+} from '@/shared/infrastructure/api/comandaApi';
 import { readComandaCache, writeComandaCache } from '@/shared/infrastructure/storage/comandaCache';
 
 type ProdutoCatalogo = {
@@ -168,7 +173,7 @@ const isSelServiceProduct = (value: string) => {
   return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
 };
 
-export function useComanda(taxaImposto = 0.1) {
+export function useComanda(taxaImposto = 0) {
   const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
   const [comandaAtivaId, setComandaAtivaId] = useState<string | null>(null);
@@ -180,14 +185,23 @@ export function useComanda(taxaImposto = 0.1) {
   const [catalogoProdutos, setCatalogoProdutos] = useState<ProdutoCatalogo[]>([]);
   const [pesquisa, setPesquisa] = useState('');
   const [itens, setItens] = useState<ItemComanda[]>([]);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [precoAtual, setPrecoAtual] = useState(0);
+  const [precoAtual, setPrecoAtual] = useState<number | null>(null);
   const [lockData, setLockData] = useState<LockData | null>(null);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
   const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
   const activeComandaRef = useRef<string | null>(null);
+  const lastSyncNumeroRef = useRef<string | null>(null);
+  const pendingPesagensRef = useRef<Array<{
+    numero: string;
+    item: ItemComanda;
+    origem: 'sensor' | 'manual';
+  }>>([]);
   const lockContext = useMemo(() => roleToLockContext(user?.role), [user?.role]);
 
   useEffect(() => {
@@ -215,12 +229,12 @@ export function useComanda(taxaImposto = 0.1) {
 
           return nextCategorias[0]?.id ?? '';
         });
-        setPrecoAtual((current) => current || mappedProducts[0]?.precoUnitario || 0);
+        setPrecoAtual(null);
       } catch {
         setCatalogoProdutos([]);
         setCategorias([]);
         setCategoriaSelecionada('');
-        setPrecoAtual(0);
+        setPrecoAtual(null);
       }
     };
 
@@ -235,6 +249,16 @@ export function useComanda(taxaImposto = 0.1) {
     [categorias]
   );
   const isComandaAberta = Boolean(comandaAtivaId);
+  const canDeleteItems = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setFeedback(null), 2400);
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
 
   useEffect(() => {
     activeComandaRef.current = comandaAtivaId;
@@ -275,6 +299,91 @@ export function useComanda(taxaImposto = 0.1) {
 
     if (!response.ok) {
       throw await parseError(response);
+    }
+  };
+
+  const persistItensNoBackend = (numero: string, nextItems: ItemComanda[], reason: string) => {
+    lastSyncNumeroRef.current = numero;
+    setIsSyncing(true);
+    void saveComandaItemsToBackend(numero, nextItems, reason)
+      .then(() => {
+        const pendingPesagens = pendingPesagensRef.current.length;
+        setIsOfflineMode(pendingPesagens > 0);
+        setPendingSyncCount(pendingPesagens);
+      })
+      .catch(() => {
+        setIsOfflineMode(true);
+        setPendingSyncCount((current) => Math.max(1, current + 1));
+      })
+      .finally(() => {
+        setIsSyncing(false);
+      });
+  };
+
+  const registrarPesagemNoBackend = (
+    numero: string,
+    item: ItemComanda,
+    origem: 'sensor' | 'manual'
+  ) => {
+    if (!item.peso || item.peso <= 0) {
+      return;
+    }
+
+    lastSyncNumeroRef.current = numero;
+    void registerComandaPesagemInBackend(numero, {
+      peso: item.peso,
+      origem,
+      owner: lockContext?.owner,
+      stationId: lockContext?.stationId,
+      itemId: item.id,
+      productName: item.nome,
+      reason: 'item_lancado'
+    }).catch(() => {
+      pendingPesagensRef.current.push({ numero, item, origem });
+      setIsOfflineMode(true);
+      setPendingSyncCount((current) => Math.max(1, current + 1));
+    });
+  };
+
+  const retrySync = async () => {
+    const numero = comandaAtivaId ?? lastSyncNumeroRef.current;
+    if (!numero) {
+      return;
+    }
+
+    const cachedItems = readComandaCache()[numero]?.itens ?? itens;
+    setIsSyncing(true);
+
+    try {
+      await saveComandaItemsToBackend(numero, cachedItems, 'manual_retry');
+
+      const pendingPesagens = [...pendingPesagensRef.current];
+      for (const pending of pendingPesagens) {
+        if (!pending.item.peso || pending.item.peso <= 0) {
+          continue;
+        }
+
+        await registerComandaPesagemInBackend(pending.numero, {
+          peso: pending.item.peso,
+          origem: pending.origem,
+          owner: lockContext?.owner,
+          stationId: lockContext?.stationId,
+          itemId: pending.item.id,
+          productName: pending.item.nome,
+          reason: 'manual_retry'
+        });
+      }
+
+      pendingPesagensRef.current = [];
+      setPendingSyncCount(0);
+      setIsOfflineMode(false);
+      setErro(null);
+      setFeedback('Sincronizacao concluida.');
+    } catch {
+      setIsOfflineMode(true);
+      setPendingSyncCount((current) => Math.max(1, current));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -443,6 +552,7 @@ export function useComanda(taxaImposto = 0.1) {
 
     const comandaAnterior = comandaAtivaId && comandaAtivaId !== nextId ? comandaAtivaId : null;
     let openedOffline = false;
+    let backendItems: ItemComanda[] | null = null;
 
     try {
       await requestOpenComanda(nextId);
@@ -453,6 +563,13 @@ export function useComanda(taxaImposto = 0.1) {
         if (comandaAnterior) {
           await releaseLock(comandaAnterior);
         }
+      }
+
+      try {
+        backendItems = await fetchComandaItemsFromBackend(nextId);
+        setPendingSyncCount(0);
+      } catch {
+        backendItems = null;
       }
     } catch (backendError) {
       if (isConnectivityError(backendError)) {
@@ -480,39 +597,46 @@ export function useComanda(taxaImposto = 0.1) {
       : null;
 
     const snapshotDestino = comandasAbertas[nextId];
+    const shouldHydrateBackendFromLocal =
+      backendItems !== null && backendItems.length === 0 && Boolean(snapshotDestino?.itens.length);
+    const nextItems = backendItems !== null
+      ? (backendItems.length > 0 || !snapshotDestino ? backendItems : snapshotDestino.itens)
+      : snapshotDestino?.itens ?? [];
+    const nextDataAbertura = snapshotDestino?.dataAbertura ?? new Date();
 
     setComandasAbertas((prev) => {
-      if (!comandaAtivaId) {
-        return prev;
-      }
+      const next = comandaAtivaId
+        ? {
+            ...prev,
+            [comandaAtivaId]: snapshotAtual ?? prev[comandaAtivaId]
+          }
+        : prev;
 
       return {
-        ...prev,
-        [comandaAtivaId]: snapshotAtual ?? prev[comandaAtivaId]
+        ...next,
+        [nextId]: {
+          itens: nextItems,
+          dataAbertura: nextDataAbertura
+        }
       };
     });
 
-    if (snapshotDestino) {
-      setItens(snapshotDestino.itens);
-      setDataAberturaAtual(snapshotDestino.dataAbertura);
-    } else {
-      setItens([]);
-      setDataAberturaAtual(new Date());
-      setComandasAbertas((prev) => ({
-        ...prev,
-        [nextId]: {
-          itens: [],
-          dataAbertura: new Date()
-        }
-      }));
+    setItens(nextItems);
+    setDataAberturaAtual(nextDataAbertura);
+    setPrecoAtual(nextItems[0]?.precoUnitario ?? null);
 
-      if (porQuiloCategoryId) {
-        setCategoriaSelecionada(porQuiloCategoryId);
-      }
+    if (shouldHydrateBackendFromLocal) {
+      persistItensNoBackend(nextId, nextItems, 'hydrate_backend_from_local_cache');
+    }
+
+    if (!snapshotDestino && porQuiloCategoryId) {
+      setCategoriaSelecionada(porQuiloCategoryId);
     }
 
     setComandaAtivaId(nextId);
-    setErro(openedOffline ? 'Backend indisponivel. Comanda aberta em modo local.' : null);
+    lastSyncNumeroRef.current = nextId;
+    setErro(null);
+    setFeedback(openedOffline ? `Comanda #${nextId} aberta em modo local.` : `Comanda #${nextId} aberta.`);
 
     return true;
   };
@@ -546,9 +670,17 @@ export function useComanda(taxaImposto = 0.1) {
       porUnidade: produto.porUnidade
     };
 
-    setItens((prev) => [novoItem, ...prev]);
+    const nextItems = [novoItem, ...itens];
+    setItens(nextItems);
+    if (comandaAtivaId) {
+      persistItensNoBackend(comandaAtivaId, nextItems, 'item_added');
+      if (!produto.porUnidade) {
+        registrarPesagemNoBackend(comandaAtivaId, novoItem, pesoManual !== null ? 'manual' : 'sensor');
+      }
+    }
     setPesquisa('');
     setErro(null);
+    setFeedback(`${produto.nome} adicionado.`);
     setPrecoAtual(produto.precoUnitario);
 
     if (!produto.porUnidade && pesoManual !== null) {
@@ -557,34 +689,41 @@ export function useComanda(taxaImposto = 0.1) {
   };
 
   const removerItem = (id: string) => {
-    setItens((prev) => prev.filter((item) => item.id !== id));
+    const nextItems = itens.filter((item) => item.id !== id);
+    setItens(nextItems);
+    if (comandaAtivaId) {
+      persistItensNoBackend(comandaAtivaId, nextItems, 'item_removed');
+    }
   };
 
   const ajustarQuantidade = (id: string, delta: number) => {
-    setItens((prev) =>
-      prev
-        .map((item) => {
-          if (item.id !== id) {
-            return item;
-          }
+    const nextItems = itens
+      .map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
 
-          const proximaQuantidade = item.porUnidade
-            ? item.quantidade + delta
-            : Number((item.quantidade + delta * 0.1).toFixed(3));
+        const proximaQuantidade = item.porUnidade
+          ? item.quantidade + delta
+          : Number((item.quantidade + delta * 0.1).toFixed(3));
 
-          if (proximaQuantidade <= 0) {
-            return null;
-          }
+        if (proximaQuantidade <= 0) {
+          return null;
+        }
 
-          return {
-            ...item,
-            quantidade: proximaQuantidade,
-            peso: item.porUnidade ? undefined : proximaQuantidade,
-            subtotal: Number((item.precoUnitario * proximaQuantidade).toFixed(2))
-          };
-        })
-        .filter((item): item is ItemComanda => item !== null)
-    );
+        return {
+          ...item,
+          quantidade: proximaQuantidade,
+          peso: item.porUnidade ? undefined : proximaQuantidade,
+          subtotal: Number((item.precoUnitario * proximaQuantidade).toFixed(2))
+        };
+      })
+      .filter((item): item is ItemComanda => item !== null);
+
+    setItens(nextItems);
+    if (comandaAtivaId) {
+      persistItensNoBackend(comandaAtivaId, nextItems, 'item_quantity_changed');
+    }
   };
 
   const finalizeComanda = () => {
@@ -608,6 +747,8 @@ export function useComanda(taxaImposto = 0.1) {
     setItens([]);
     setPesquisa('');
     setErro(null);
+    setFeedback(activeNumero ? `Comanda #${activeNumero} liberada para novos consumos e caixa.` : null);
+    setPrecoAtual(null);
     setPesoManual(null);
     setIsOfflineMode(false);
     setCampoAtivo('COMANDA');
@@ -730,7 +871,12 @@ export function useComanda(taxaImposto = 0.1) {
     pesquisa,
     tecladoAtivo,
     isComandaConectada,
+    isSyncing,
+    pendingSyncCount,
+    feedback,
     erro,
+    canOpen: Boolean(comandaNumber.trim()),
+    canDeleteItems,
     canFinalize: isComandaAberta
   };
 
@@ -745,6 +891,7 @@ export function useComanda(taxaImposto = 0.1) {
     removerItem,
     ajustarQuantidade,
     finalizeComanda,
+    retrySync,
     handleKeyPress,
     toggleToNumerico,
     toggleToVirtual

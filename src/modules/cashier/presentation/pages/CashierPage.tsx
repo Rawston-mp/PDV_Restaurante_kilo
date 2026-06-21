@@ -23,6 +23,10 @@ import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClients
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import type { ItemComanda } from '@/types/comanda';
 import {
+  fetchComandaItemsFromBackend,
+  saveComandaItemsToBackend
+} from '@/shared/infrastructure/api/comandaApi';
+import {
   clearComandaCache,
   listOpenComandaNumbers,
   readComandaItems,
@@ -184,24 +188,24 @@ const mapComandaItemsToCashierCart = (items: ItemComanda[], catalog: CashierProd
   });
 };
 
+const mapCashierCartToComandaItems = (items: CashierCartItem[]): ItemComanda[] =>
+  items.map((item) => ({
+    id: item.id,
+    nome: item.name,
+    precoUnitario: item.unitPrice,
+    quantidade: item.quantity,
+    categoriaId: 'CAIXA',
+    subtotal: Number((item.quantity * item.unitPrice).toFixed(2)),
+    porUnidade: item.unit === 'UN',
+    peso: item.unit === 'KG' ? item.quantity : undefined
+  }));
+
 const persistCashierItemsToComanda = (numero: string, items: CashierCartItem[]) => {
   if (!numero.trim()) {
     return;
   }
 
-  upsertComandaItems(
-    numero,
-    items.map((item) => ({
-      id: item.id,
-      nome: item.name,
-      precoUnitario: item.unitPrice,
-      quantidade: item.quantity,
-      categoriaId: 'CAIXA',
-      subtotal: Number((item.quantity * item.unitPrice).toFixed(2)),
-      porUnidade: item.unit === 'UN',
-      peso: item.unit === 'KG' ? item.quantity : undefined
-    }))
-  );
+  upsertComandaItems(numero, mapCashierCartToComandaItems(items));
 };
 
 const extractComandaNumber = (raw: string) => {
@@ -369,23 +373,32 @@ export function CashierPage() {
     setIsOpenComandasPanelOpen(true);
     showNotice('Selecione uma comanda aberta na lista e confirme o cancelamento.', 'info');
   };
-  const handleSmartInputSubmit = (rawValue: string) => {
-    const comandaFromInput = extractComandaNumber(rawValue);
-    if (!comandaFromInput) {
+  const loadComandaIntoCashier = async (numero: string) => {
+    const trimmed = numero.trim();
+    if (!trimmed) {
       return;
     }
 
-    setComandaNumber(comandaFromInput);
-    setCartItems(mapComandaItemsToCashierCart(readComandaItems(comandaFromInput), catalogProducts));
+    setComandaNumber(trimmed);
+
+    try {
+      const backendItems = await fetchComandaItemsFromBackend(trimmed);
+      setCartItems(mapComandaItemsToCashierCart(backendItems, catalogProducts));
+      upsertComandaItems(trimmed, backendItems);
+    } catch {
+      setCartItems(mapComandaItemsToCashierCart(readComandaItems(trimmed), catalogProducts));
+      showNotice(`Comanda #${trimmed} carregada do cache local. Backend indisponivel para itens.`, 'warning');
+    }
+
     setOpenComandas((prev) => {
-      if (prev.some((entry) => entry.numero === comandaFromInput)) {
+      if (prev.some((entry) => entry.numero === trimmed)) {
         return prev;
       }
 
       const next = sortComandasByNumero([
         ...prev,
         {
-          numero: comandaFromInput,
+          numero: trimmed,
           origem: 'CAIXA'
         }
       ]);
@@ -397,14 +410,22 @@ export function CashierPage() {
     focusProductSearchInput();
   };
 
+  const handleSmartInputSubmit = (rawValue: string) => {
+    const comandaFromInput = extractComandaNumber(rawValue);
+    if (!comandaFromInput) {
+      return;
+    }
+
+    void loadComandaIntoCashier(comandaFromInput);
+  };
+
   const refreshCurrentComanda = () => {
     const currentNumber = comandaNumber.trim();
     if (!currentNumber) {
       return;
     }
 
-    setCartItems(mapComandaItemsToCashierCart(readComandaItems(currentNumber), catalogProducts));
-    focusProductSearchInput();
+    void loadComandaIntoCashier(currentNumber);
   };
 
   const notifyFeaturePending = (featureLabel: string) => {
@@ -649,7 +670,16 @@ export function CashierPage() {
   }, [activeCategory, query, catalogProducts]);
 
   useEffect(() => {
-    persistCashierItemsToComanda(comandaNumber, cartItems);
+    const numero = comandaNumber.trim();
+    persistCashierItemsToComanda(numero, cartItems);
+
+    if (!numero) {
+      return;
+    }
+
+    void saveComandaItemsToBackend(numero, mapCashierCartToComandaItems(cartItems), 'caixa_items_sync').catch(() => {
+      // O cache local continua como contingencia para queda temporaria.
+    });
   }, [cartItems, comandaNumber]);
 
   useEffect(() => {
