@@ -2,10 +2,18 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { type CashierCartItem } from './CartItem';
-import { type PaymentEntry, type PaymentMethod, PAYMENT_METHODS, formatBRL } from '../../types';
+import {
+  type PaymentDocumentMode,
+  type PaymentEntry,
+  type PaymentMethod,
+  PAYMENT_METHODS,
+  formatBRL
+} from '../../types';
 
 export type PaymentConfirmPayload = {
   payments: PaymentEntry[];
+  discountAmount: number;
+  documentMode: PaymentDocumentMode;
   fiadoClientId?: string;
 };
 
@@ -16,9 +24,8 @@ type PaymentPanelProps = {
   onBack: () => void;
 };
 
-// ─── Simple numpad ─────────────────────────────────────────────────────────────
 function Numpad({ onKey }: { onKey: (k: string) => void }) {
-  const keys = ['7','8','9','4','5','6','1','2','3','0',',','⌫'];
+  const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', ',', '⌫'];
   return (
     <div className="grid grid-cols-3 gap-2">
       {keys.map((k) => (
@@ -46,7 +53,9 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
   const { clients } = useClientsQuery();
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
+  const [documentMode, setDocumentMode] = useState<PaymentDocumentMode>('NFCE');
   const [inputRaw, setInputRaw] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [selectedFiadoClientId, setSelectedFiadoClientId] = useState('');
   const [fiadoFeedback, setFiadoFeedback] = useState<string | null>(null);
   const [isLaunchingFiado, setIsLaunchingFiado] = useState(false);
@@ -56,9 +65,10 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
     [clients]
   );
 
-  const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
-  const remaining = Math.max(0, total - totalPaid);
-  const change = totalPaid > total ? totalPaid - total : 0;
+  const payableTotal = Math.max(0, total - discountAmount);
+  const totalPaid = entries.reduce((sum, entry) => sum + entry.amount, 0);
+  const remaining = Math.max(0, payableTotal - totalPaid);
+  const change = totalPaid > payableTotal ? totalPaid - payableTotal : 0;
   const fiscalSummary = items.map((item) => ({
     id: item.id,
     name: item.name,
@@ -75,18 +85,17 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
   const totalWeightItems = items.filter((item) => item.unit === 'KG').length;
   const totalUnitQuantity = items.filter((item) => item.unit === 'UN').reduce((acc, item) => acc + item.quantity, 0);
 
-  // Parse the raw string input (e.g. "5990" → 59.90)
-  const parseAmount = (raw: string): number => {
-    if (!raw) return remaining; // empty = remaining balance
-    const digits = raw.replace(',', '');
-    return parseFloat(digits) / 100;
+  const parseAmount = (raw: string, fallback: number): number => {
+    if (!raw) return fallback;
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return 0;
+    return Number.parseInt(digits, 10) / 100;
   };
 
   const handleKey = (k: string) => {
     if (k === '⌫') {
       setInputRaw((prev) => prev.slice(0, -1));
     } else if (k === ',') {
-      // comma is the decimal separator; only allow once
       if (!inputRaw.includes(',')) setInputRaw((prev) => prev + ',');
     } else {
       setInputRaw((prev) => (prev.length >= 10 ? prev : prev + k));
@@ -94,17 +103,28 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
   };
 
   const displayValue = () => {
-    if (!inputRaw) return formatBRL(remaining);
+    if (!inputRaw) {
+      return formatBRL(selectedMethod === 'DESCONTO' ? Math.max(0, total - discountAmount) : remaining);
+    }
+
     const digits = inputRaw.replace(/\D/g, '');
     if (!digits) return 'R$ 0,00';
-    const cents = parseInt(digits, 10);
+    const cents = Number.parseInt(digits, 10);
     return formatBRL(cents / 100);
   };
 
   const handleAddPayment = () => {
-    const amount = inputRaw ? parseAmount(inputRaw) : remaining;
+    if (selectedMethod === 'DESCONTO') {
+      const amount = parseAmount(inputRaw, 0);
+      if (amount <= 0) return;
+      setDiscountAmount((current) => Math.min(total, current + amount));
+      setInputRaw('');
+      return;
+    }
+
+    const amount = parseAmount(inputRaw, remaining);
     if (amount <= 0) return;
-    const label = PAYMENT_METHODS.find((m) => m.method === selectedMethod)?.label ?? selectedMethod;
+    const label = PAYMENT_METHODS.find((method) => method.method === selectedMethod)?.label ?? selectedMethod;
     setEntries((prev) => [...prev, { method: selectedMethod, label, amount }]);
     setInputRaw('');
   };
@@ -114,17 +134,19 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
   };
 
   const handleLaunchFiado = async (clientId: string) => {
-    if (!clientId || isLaunchingFiado) {
+    if (!clientId || isLaunchingFiado || payableTotal <= 0) {
       return;
     }
 
-    const fiadoLabel = PAYMENT_METHODS.find((m) => m.method === 'FIADO')?.label ?? 'Fiado';
+    const fiadoLabel = PAYMENT_METHODS.find((method) => method.method === 'FIADO')?.label ?? 'Fiado';
 
     setIsLaunchingFiado(true);
     setFiadoFeedback(null);
     try {
       await onConfirm({
-        payments: [{ method: 'FIADO', label: fiadoLabel, amount: total }],
+        payments: [{ method: 'FIADO', label: fiadoLabel, amount: payableTotal }],
+        discountAmount,
+        documentMode: 'ORCAMENTO',
         fiadoClientId: clientId
       });
     } catch {
@@ -134,17 +156,16 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
     }
   };
 
-  const canConfirm = totalPaid >= total;
+  const canConfirm = selectedMethod !== 'FIADO' && totalPaid >= payableTotal && (entries.length > 0 || payableTotal === 0);
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
-
-      {/* ── Header ──────────────────────────────────────────────── */}
       <header className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
         <button
           type="button"
           onClick={onBack}
           className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          aria-label="Voltar ao caixa"
         >
           <ArrowLeft size={20} />
         </button>
@@ -156,8 +177,6 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
       </header>
 
       <div className="flex flex-1 gap-0 overflow-hidden">
-
-        {/* ── Left: payment methods list ──────────────────────── */}
         <div className="w-[42%] flex flex-col border-r border-slate-200 bg-white overflow-y-auto">
           <p className="px-3 pt-3 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Forma de Pagamento
@@ -166,7 +185,10 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
             <button
               key={method}
               type="button"
-              onClick={() => setSelectedMethod(method)}
+              onClick={() => {
+                setSelectedMethod(method);
+                setInputRaw('');
+              }}
               className={`
                 mx-2 mb-1 px-4 py-3 rounded-lg border text-sm font-semibold
                 text-left transition-all duration-100 active:scale-95
@@ -181,6 +203,26 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
           ))}
 
           <div className="mx-2 mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Documento</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setDocumentMode('NFCE')}
+                className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'NFCE' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                NFC-e
+              </button>
+              <button
+                type="button"
+                onClick={() => setDocumentMode('ORCAMENTO')}
+                className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'ORCAMENTO' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                Orçamento
+              </button>
+            </div>
+          </div>
+
+          <div className="mx-2 mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo fiscal</p>
             <div className="space-y-2 text-xs text-slate-600">
               <div className="flex justify-between gap-3">
@@ -192,23 +234,27 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
                 <strong className="text-slate-800">{totalUnitQuantity}</strong>
               </div>
               <div className="flex justify-between gap-3">
-                <span>Subtotal fiscal</span>
+                <span>Subtotal</span>
                 <strong className="text-slate-800">{formatBRL(total)}</strong>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Desconto</span>
+                <strong className="text-red-600">-{formatBRL(discountAmount)}</strong>
+              </div>
+              <div className="flex justify-between gap-3 border-t border-slate-200 pt-2">
+                <span>A pagar</span>
+                <strong className="text-slate-900">{formatBRL(payableTotal)}</strong>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Right: numpad + applied payments ──────────────────── */}
         <div className="flex-1 flex flex-col p-3 gap-3 overflow-y-auto">
-
-          {/* Display value */}
           <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 text-right">
-            <p className="text-xs text-slate-400 mb-1">Valor</p>
+            <p className="text-xs text-slate-400 mb-1">{selectedMethod === 'DESCONTO' ? 'Valor do desconto' : 'Valor'}</p>
             <p className="text-2xl font-extrabold text-slate-800">{displayValue()}</p>
           </div>
 
-          {/* Numpad */}
           {selectedMethod === 'FIADO' ? (
             <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente do fiado</p>
@@ -224,7 +270,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
                       void handleLaunchFiado(clientId);
                     }
                   }}
-                  className="w-full min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                  className="w-full min-h-[48px] rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
                   disabled={isLaunchingFiado}
                 >
                   <option value="">Selecione um cliente</option>
@@ -237,7 +283,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
               )}
 
               <p className="text-xs text-slate-500">
-                Ao selecionar o cliente, o valor sera lancado como fiado sem emissao fiscal. A definicao Fiscal ou Orcamento sera feita no pagamento futuro.
+                Fiado fecha a comanda como orçamento nao fiscal e mantém a cobrança para acerto futuro.
               </p>
 
               {fiadoFeedback && (
@@ -250,7 +296,6 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
             <Numpad onKey={handleKey} />
           )}
 
-          {/* Add payment button */}
           {selectedMethod !== 'FIADO' && (
             <button
               type="button"
@@ -262,26 +307,43 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
                 transition-colors active:scale-95
               "
             >
-              + Adicionar pagamento
+              {selectedMethod === 'DESCONTO' ? '+ Aplicar desconto' : '+ Adicionar pagamento'}
             </button>
           )}
 
-          {/* Applied payments */}
+          {discountAmount > 0 && (
+            <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm">
+              <span className="font-semibold text-red-700">Desconto aplicado</span>
+              <div className="flex items-center gap-2">
+                <strong className="text-red-700">-{formatBRL(discountAmount)}</strong>
+                <button
+                  type="button"
+                  onClick={() => setDiscountAmount(0)}
+                  className="min-h-[48px] min-w-[48px] rounded-lg text-red-500 hover:bg-red-100"
+                  aria-label="Remover desconto"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+
           {entries.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
               <p className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
                 Pagamentos
               </p>
               <ul>
-                {entries.map((e, i) => (
-                  <li key={i} className="flex justify-between items-center px-3 py-2 border-b border-slate-50 last:border-0">
-                    <span className="text-sm text-slate-700">{e.label}</span>
+                {entries.map((entry, index) => (
+                  <li key={`${entry.method}-${index}`} className="flex justify-between items-center px-3 py-2 border-b border-slate-50 last:border-0">
+                    <span className="text-sm text-slate-700">{entry.label}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-800">{formatBRL(e.amount)}</span>
+                      <span className="text-sm font-semibold text-slate-800">{formatBRL(entry.amount)}</span>
                       <button
                         type="button"
-                        onClick={() => handleRemoveEntry(i)}
-                        className="p-1 rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        onClick={() => handleRemoveEntry(index)}
+                        className="min-h-[48px] min-w-[48px] rounded text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        aria-label="Remover pagamento"
                       >
                         ×
                       </button>
@@ -334,12 +396,11 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
         </div>
       </div>
 
-      {/* ── Confirm ──────────────────────────────────────────────── */}
       <div className="p-4 bg-white border-t border-slate-200">
         <button
           type="button"
           disabled={!canConfirm}
-          onClick={() => onConfirm({ payments: entries })}
+          onClick={() => onConfirm({ payments: entries, discountAmount, documentMode })}
           className="
             w-full h-14 rounded-xl flex items-center justify-center gap-2
             bg-emerald-500 hover:bg-emerald-600

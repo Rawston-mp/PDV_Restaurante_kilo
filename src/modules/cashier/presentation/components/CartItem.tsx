@@ -51,11 +51,11 @@ export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemP
             type="button"
             onClick={() => onDecrement(item.id)}
             aria-label={`Diminuir ${item.name}`}
-            className="h-8 w-8 text-slate-500 hover:bg-slate-100 transition-colors"
+            className="h-12 w-12 text-slate-500 hover:bg-slate-100 transition-colors"
           >
             <Minus size={14} className="mx-auto" />
           </button>
-          <span className="h-8 min-w-[36px] px-2 flex items-center justify-center text-sm font-semibold text-slate-700 border-x border-slate-200">
+          <span className="h-12 min-w-[48px] px-2 flex items-center justify-center text-sm font-semibold text-slate-700 border-x border-slate-200">
             {item.quantity.toLocaleString('pt-BR', {
               minimumFractionDigits: isKg ? 3 : 0,
               maximumFractionDigits: isKg ? 3 : 0,
@@ -65,7 +65,7 @@ export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemP
             type="button"
             onClick={() => onIncrement(item.id)}
             aria-label={`Aumentar ${item.name}`}
-            className="h-8 w-8 text-sky-600 hover:bg-sky-50 transition-colors"
+            className="h-12 w-12 text-sky-600 hover:bg-sky-50 transition-colors"
           >
             <Plus size={14} className="mx-auto" />
           </button>
@@ -78,7 +78,7 @@ export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemP
           type="button"
           onClick={() => onRemove(item.id)}
           aria-label={`Remover ${item.name}`}
-          className="mt-1 p-1.5 rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+          className="mt-1 inline-flex h-12 w-12 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
         >
           <Trash2 size={16} />
         </button>

@@ -12,11 +12,11 @@ type ProductGridProps = {
 export function ProductGrid({ products, onAdd, onToggleUnavailable, onToggleHidden, loading }: ProductGridProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
+      <div className="grid grid-cols-[repeat(auto-fill,156px)] justify-start gap-3 p-1">
         {Array.from({ length: 15 }).map((_, i) => (
           <div
             key={i}
-            className="h-56 rounded-2xl bg-slate-100 animate-pulse"
+            className="h-[188px] rounded-xl bg-slate-100 animate-pulse"
           />
         ))}
       </div>
@@ -33,7 +33,7 @@ export function ProductGrid({ products, onAdd, onToggleUnavailable, onToggleHidd
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-1 content-start">
+    <div className="grid grid-cols-[repeat(auto-fill,156px)] justify-start gap-3 p-1 content-start">
       {products.map((product) => (
         <ProductCard
           key={product.id}
