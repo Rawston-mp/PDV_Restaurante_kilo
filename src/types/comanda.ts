@@ -40,10 +40,15 @@ export interface EstadoComanda {
   total: number;
   pesoAtual: number;
   pesoManual: number | null;
-  precoAtual: number;
+  precoAtual: number | null;
   pesquisa: string;
   tecladoAtivo: 'NUMERICO' | 'VIRTUAL';
   isComandaConectada: boolean;
+  isSyncing: boolean;
+  pendingSyncCount: number;
+  feedback: string | null;
   erro: string | null;
+  canOpen: boolean;
+  canDeleteItems: boolean;
   canFinalize: boolean;
 }

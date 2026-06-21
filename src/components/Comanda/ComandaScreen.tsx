@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 import { CategoryGrid } from '@/components/Comanda/CategoryGrid';
-import { ComandaHeader } from '@/components/Comanda/ComandaHeader';
+import { ComandaHeader, type ComandaStatusTone } from '@/components/Comanda/ComandaHeader';
 import { ItemsList } from '@/components/Comanda/ItemsList';
 import { KeyboardToggle } from '@/components/Comanda/KeyboardToggle';
 import { NextComandaButton } from '@/components/Comanda/NextComandaButton';
@@ -23,27 +24,46 @@ const isSelServiceName = (value: string) => {
   return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
 };
 
-const isPorQuiloCategoryName = (value: string) => {
-  const normalized = normalizeSearchText(value).replace(/\s+/g, ' ').trim();
-  return normalized === 'por quilo' || normalized === 'por kilo';
-};
+const formatCurrency = (value: number) =>
+  value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
 
 export function ComandaScreen() {
   const { state, actions, produtosFiltrados } = useComanda();
   const comandaInputRef = useRef<HTMLInputElement | null>(null);
   const pesquisaInputRef = useRef<HTMLInputElement | null>(null);
   const [isPesoManualEditing, setIsPesoManualEditing] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
+  const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState(false);
   const [pesoManualDraft, setPesoManualDraft] = useState('');
   const [pesoManualError, setPesoManualError] = useState<string | null>(null);
   const pesquisaSanitizada = state.pesquisa.trim();
-  const statusOperacional = state.lockStationId
-    ? `${state.isComandaConectada ? 'Conectada' : 'Sem conexao'} | lock ${state.lockStationId}`
-    : state.isComandaConectada
-      ? 'Conectada'
-      : 'Sem conexao';
+  const isComandaOpen = Boolean(state.comandaAtual?.id);
+  const statusTone: ComandaStatusTone = !isComandaOpen
+    ? 'neutral'
+    : state.isSyncing
+      ? 'syncing'
+      : state.isOfflineMode
+        ? 'warning'
+        : state.isComandaConectada
+          ? 'success'
+          : 'danger';
+  const stationLabel = state.lockStationId?.replace('_', ' ');
+  const statusOperacional = !isComandaOpen
+    ? 'Aguardando comanda'
+    : state.isSyncing
+      ? 'Sincronizando'
+      : state.isOfflineMode
+        ? 'Modo local'
+        : state.isComandaConectada
+          ? `Balanca conectada${stationLabel ? ` · ${stationLabel}` : ''}`
+          : 'Sensor desconectado';
   const deveBloquearResultados = pesquisaSanitizada.length > 0 && pesquisaSanitizada.length < 3;
-  const porQuiloCategoryId = state.categorias.find((categoria) => isPorQuiloCategoryName(categoria.nome))?.id;
-  const categoriaDesabilitadaSemComanda = !state.comandaAtual?.id && porQuiloCategoryId ? [porQuiloCategoryId] : [];
+  const categoriaDesabilitadaSemComanda = !isComandaOpen
+    ? state.categorias.map((categoria) => categoria.id)
+    : [];
 
   useEffect(() => {
     if (state.campoAtivo === 'COMANDA') {
@@ -53,6 +73,25 @@ export function ComandaScreen() {
 
     pesquisaInputRef.current?.focus();
   }, [state.campoAtivo]);
+
+  useEffect(() => {
+    setIsKeyboardVisible(true);
+  }, [state.campoAtivo]);
+
+  useEffect(() => {
+    if (!isWorkspaceExpanded) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsWorkspaceExpanded(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isWorkspaceExpanded]);
 
   const iniciarEdicaoPesoManual = () => {
     setPesoManualDraft((state.pesoManual ?? state.pesoAtual).toFixed(3));
@@ -151,8 +190,13 @@ export function ComandaScreen() {
         <div className="comanda-header-wrap">
           <ComandaHeader
             status={statusOperacional}
-            title="TELA DE COMANDA"
-            isOfflineMode={state.isOfflineMode}
+            title={isComandaOpen ? `Comanda #${state.comandaAtual?.id} aberta` : 'Abra uma comanda'}
+            subtitle={isComandaOpen
+              ? 'Adicione itens ou libere a balanca para o proximo atendimento.'
+              : 'Digite ou leia o numero da comanda para iniciar.'}
+            tone={statusTone}
+            pendingSyncCount={state.pendingSyncCount}
+            onRetry={state.isOfflineMode ? () => void actions.retrySync() : undefined}
           />
           <div className="comanda-top-fields">
             <div className="comanda-field-group">
@@ -173,6 +217,7 @@ export function ComandaScreen() {
                 placeholder="Ex.: 125"
                 className="comanda-number-input"
               />
+              <small>Pressione Enter ou use o botao Abrir comanda.</small>
             </div>
             <div className="comanda-field-group">
               <label htmlFor="comanda-search-input">Pesquisa de item</label>
@@ -183,13 +228,14 @@ export function ComandaScreen() {
                 value={state.pesquisa}
                 onFocus={actions.focarPesquisa}
                 onChange={(event) => actions.setPesquisa(event.target.value)}
+                disabled={!isComandaOpen}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     actions.handleKeyPress('Enter');
                   }
                 }}
-                placeholder="Digite para filtrar produtos"
+                placeholder={isComandaOpen ? 'Digite para filtrar produtos' : 'Abra uma comanda para pesquisar'}
                 className="comanda-search-input"
               />
             </div>
@@ -202,6 +248,8 @@ export function ComandaScreen() {
               <WeightDisplay
                 value={state.pesoAtual}
                 manualValue={state.pesoManual}
+                isConnected={state.isComandaConectada}
+                isComandaOpen={isComandaOpen}
                 isEditing={isPesoManualEditing}
                 draftValue={pesoManualDraft}
                 error={pesoManualError}
@@ -218,55 +266,115 @@ export function ComandaScreen() {
               <PriceDisplay value={state.precoAtual} />
             </div>
 
-            <CategoryGrid
-              categories={state.categorias}
-              activeId={state.categoriaSelecionada}
-              onSelect={actions.selecionarCategoria}
-              disabledIds={categoriaDesabilitadaSemComanda}
-            />
+            <div className={`comanda-workspace${isWorkspaceExpanded ? ' is-expanded' : ''}`}>
+              <CategoryGrid
+                categories={state.categorias}
+                activeId={state.categoriaSelecionada}
+                onSelect={actions.selecionarCategoria}
+                disabledIds={categoriaDesabilitadaSemComanda}
+                expanded={isWorkspaceExpanded}
+                onToggleExpand={() => setIsWorkspaceExpanded((current) => !current)}
+              />
 
-            <section className="comanda-panel comanda-suggestions-panel">
-              <p className="panel-label">Resultados da pesquisa</p>
-              <div className="comanda-suggestions">
-                {deveBloquearResultados && (
-                  <p className="comanda-suggestions-empty">
-                    Digite ao menos 3 letras para listar os produtos.
+              <section className="comanda-panel comanda-suggestions-panel">
+                <div className="comanda-products-heading">
+                  <p className="panel-label">
+                    {!isComandaOpen
+                      ? 'Produtos'
+                      : pesquisaSanitizada.length >= 3
+                        ? 'Resultados da pesquisa'
+                        : 'Produtos da categoria'}
                   </p>
-                )}
-                {!deveBloquearResultados && pesquisaSanitizada.length >= 3 && produtosFiltrados.length === 0 && (
-                  <p className="comanda-suggestions-empty">
-                    Nenhum produto encontrado para "{pesquisaSanitizada}".
-                  </p>
-                )}
-                {produtosFiltrados.map((produto) => (
-                  <button key={produto.id} type="button" onClick={() => actions.selecionarProduto(produto)}>
-                    <strong>{produto.nome}</strong>
-                    <small>R$ {produto.precoUnitario.toFixed(2)} / {produto.porUnidade ? 'un' : 'kg'}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
+                  {isComandaOpen && !deveBloquearResultados && (
+                    <span>{produtosFiltrados.length} {produtosFiltrados.length === 1 ? 'produto' : 'produtos'}</span>
+                  )}
+                </div>
+                <div className="comanda-suggestions">
+                  {!isComandaOpen && (
+                    <p className="comanda-suggestions-empty">
+                      Abra uma comanda para consultar e adicionar produtos.
+                    </p>
+                  )}
+                  {isComandaOpen && deveBloquearResultados && (
+                    <p className="comanda-suggestions-empty">
+                      Digite ao menos 3 letras para listar os produtos.
+                    </p>
+                  )}
+                  {isComandaOpen && !deveBloquearResultados && pesquisaSanitizada.length >= 3 && produtosFiltrados.length === 0 && (
+                    <p className="comanda-suggestions-empty">
+                      Nenhum produto encontrado para "{pesquisaSanitizada}".
+                    </p>
+                  )}
+                  {isComandaOpen && produtosFiltrados.map((produto) => (
+                    <button
+                      key={produto.id}
+                      type="button"
+                      onClick={() => actions.selecionarProduto(produto)}
+                      aria-label={`Adicionar ${produto.nome}`}
+                    >
+                      <span className="comanda-product-description">
+                        <strong>{produto.nome}</strong>
+                        <small>
+                          {produto.porUnidade ? '1 un' : 'Venda por peso'}
+                          <span aria-hidden="true"> · </span>
+                          {formatCurrency(produto.precoUnitario)} / {produto.porUnidade ? 'un' : 'kg'}
+                        </small>
+                      </span>
+                      <strong className="comanda-product-price">
+                        {formatCurrency(produto.precoUnitario)}
+                      </strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-            <ItemsList items={state.itens} onDelete={actions.removerItem} onAdjust={actions.ajustarQuantidade} />
+              <ItemsList
+                items={state.itens}
+                onDelete={actions.removerItem}
+                onAdjust={actions.ajustarQuantidade}
+                canDelete={state.canDeleteItems}
+              />
+            </div>
             <TotalDisplay subtotal={state.subtotal} impostos={state.impostos} total={state.total} />
 
+            {state.feedback && <p className="comanda-feedback" role="status">{state.feedback}</p>}
             {state.erro && <p className="comanda-error">{state.erro}</p>}
           </section>
 
           <section className="comanda-right-column">
-            <KeyboardToggle
-              active={state.tecladoAtivo}
-              onNumerico={actions.focarComanda}
-              onVirtual={actions.focarPesquisa}
-            />
+            <div className="comanda-keyboard-toolbar">
+              <KeyboardToggle
+                active={state.tecladoAtivo}
+                onNumerico={actions.focarComanda}
+                onVirtual={actions.focarPesquisa}
+              />
+              <button
+                type="button"
+                className="comanda-keyboard-collapse"
+                onClick={() => setIsKeyboardVisible((current) => !current)}
+                aria-label={isKeyboardVisible ? 'Ocultar teclado' : 'Mostrar teclado'}
+                title={isKeyboardVisible ? 'Ocultar teclado' : 'Mostrar teclado'}
+              >
+                {isKeyboardVisible ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </button>
+            </div>
 
-            {state.tecladoAtivo === 'NUMERICO' ? (
-              <NumericKeypad onKeyPress={handleComandaKeyPress} />
-            ) : (
-              <VirtualKeyboard onKeyPress={actions.handleKeyPress} />
+            {isKeyboardVisible && (
+              state.tecladoAtivo === 'NUMERICO' ? (
+                <NumericKeypad onKeyPress={handleComandaKeyPress} />
+              ) : (
+                <VirtualKeyboard onKeyPress={actions.handleKeyPress} />
+              )
             )}
 
-            <NextComandaButton onClick={actions.finalizeComanda} disabled={!state.canFinalize} />
+            <NextComandaButton
+              onClick={isComandaOpen ? actions.finalizeComanda : actions.focarPesquisa}
+              disabled={isComandaOpen ? !state.canFinalize : !state.canOpen}
+              label={isComandaOpen ? 'LIBERAR BALANCA' : 'ABRIR COMANDA'}
+              helperText={isComandaOpen
+                ? 'A comanda permanece aberta para novos consumos e para o caixa.'
+                : 'Informe o numero acima para iniciar o atendimento.'}
+            />
           </section>
         </div>
       </div>

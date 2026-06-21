@@ -43,8 +43,12 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 	- campo principal com foco continuo para leitor/teclado
 	- Enter abre atendimento por numero de comanda
 	- indicador visual de `Comanda ativa`
-- Integracao balanca -> caixa e caixa -> balanca via cache local compartilhado de itens de comanda:
-	- chave central: `pdv.comandas.itens.v1`
+- Itens e pesagens de comanda agora persistem no backend junto ao snapshot da comanda:
+	- endpoints: `GET/PUT /api/v1/comandas/:numero/items`
+	- endpoints: `GET /api/v1/comandas/:numero/pesagens` e `POST /api/v1/comandas/:numero/pesagem`
+	- cliente frontend: `src/shared/infrastructure/api/comandaApi.ts`
+- Integracao balanca -> caixa e caixa -> balanca usa backend como fonte principal e cache local como contingencia:
+	- chave de fallback: `pdv.comandas.itens.v1`
 	- utilitario dedicado: `src/shared/infrastructure/storage/comandaCache.ts`
 - No caixa, card `Comandas abertas` abre lista de comandas abertas (origem balanca + caixa), com selecao direta da comanda.
 - Em `Comandas abertas`, cada comanda possui acao `Cancelar` com confirmacao.
@@ -54,6 +58,14 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Em `Mais opcoes`, foi adicionada a acao `Limpar cache de comandas` com confirmacao.
 - No `Fechar caixa` (fim de expediente), comandas fechadas/canceladas sao arquivadas no backend e removidas do cache local.
 - Cadastro/edicao de produtos recebeu layout com mais respiro: foto e categorias em paineis separados, preview de imagem contido e grid com espacamento maior.
+- Tela de balancas recebeu fluxo contextual por etapa:
+	- antes de abrir: instrucao direta, teclado numerico, produtos bloqueados e CTA `ABRIR COMANDA`
+	- comanda aberta: titulo com numero, busca habilitada, teclado de busca e CTA `LIBERAR BALANCA`
+	- itens lancados: feedback de adicao, lista touch ampliada e total em destaque
+	- categorias, produtos e itens podem ser expandidos em uma janela operacional compacta; produtos usam lista rolavel com contador e a janela e restaurada pelo botao ou pela tecla `Esc`
+- Feedback offline foi consolidado no header com pendencias de sincronizacao e acao de nova tentativa.
+- Imposto automatico de 10% foi removido da balanca; acrescimos so aparecem quando explicitamente configurados.
+- Perfis `COMANDA_A/B` agora veem navegacao reduzida ao terminal de balanca.
 - Regra de consistencia no header do caixa:
 	- se nao houver comandas abertas, `Comanda ativa` e limpa e exibida como `Sem comanda`.
 
@@ -198,7 +210,7 @@ npm run dev
 	- proxima comanda limpa numero sem sugestao
 - Painel de peso unificado (automatico/manual).
 - Bloqueio visual de categorias no grid.
-- Backend com estado de comanda ativa e eventos de peso via websocket.
+- Backend com estado de comanda ativa, itens/pesagens persistidos no snapshot e eventos de peso via websocket.
 - RBAC e perfis operacionais integrados nas rotas.
 - Base de persistencia local Dexie e sincronizacao offline/online.
 - Pipeline CI com build/test e artifact dist no Actions.
@@ -208,22 +220,25 @@ npm run dev
 	- PRONTA_PARA_CAIXA -> ENCERRADA
 	- ENCERRADA -> FINALIZADA
 	- FINALIZADA -> ARQUIVADA
-- Persistencia backend-side do estado da comanda em arquivo (`backend/data/comandas-state.json`) com hidratacao no startup.
+- Persistencia backend-side do estado da comanda, itens e pesagens em PostgreSQL quando disponivel, com fallback em arquivo (`backend/data/comandas-state.json`) e hidratacao no startup.
 - Trilha de auditoria append-only de eventos/transicoes (`backend/data/comandas-audit.jsonl`).
 - Lock de comanda no backend com erros de conflito/ownership e eventos de auditoria (`LOCK_ACQUIRED`, `LOCK_RENEWED`, `LOCK_RELEASED`).
-- Integracao da tela `/comanda` com acquire/renew/release do lock e exibicao de status operacional.
+- Integracao da tela `/comanda` com acquire/renew/release do lock, exibicao de status operacional, salvamento backend de itens e registro de pesagem por item lancado.
 - Caixa ligado ao cadastro real de produtos (sem mock), com nome, preco, descricao e ID no card/carrinho.
 - Upload local de foto no cadastro com preview e compressao client-side.
 - Controle operacional no caixa para marcar produto como indisponivel ou oculto, persistindo no cadastro.
 - Cards do caixa ajustados para tamanho menor e consistente, com menu operacional compacto e labels alinhados ao produto.
 - Cadastro/edicao de produtos ajustado com mais espacamento entre cards, painel de foto proprio e painel de categorias separado.
+- Layout da balanca ajustado para alvos touch de 48px, categorias com estado ativo forte, teclado recolhivel, lista de itens legivel, total financeiro ampliado e area operacional expansivel.
+- Exclusao de item na balanca respeita regra de perfil: somente ADMIN, GERENTE e CAIXA.
 
 ## O que falta desenvolver
 - Persistir a maquina de estados em banco relacional (PostgreSQL) para substituir armazenamento em arquivo local.
 - Evoluir lock operacional para politica final de timeout/expiracao alinhada por loja e por terminal.
 - Leitura de codigo de barras da comanda e fallback explicito de digitacao na tela da balanca.
 - Completar familia de endpoints da especificacao (`/api/v1/comandas`, `/api/v1/pesagens`, `/api/v1/pagamentos`, `/api/v1/relatorios`) com contratos finais.
-- Persistencia backend completa para comandas, pesagens, itens complementares e pagamentos (auditoria basica append-only ja ativa em arquivo).
+- Persistencia backend normalizada para comandas, pesagens, itens complementares e pagamentos (itens/pesagens ja persistem no snapshot; falta schema relacional final e pagamentos).
+- Evoluir persistencia de comandas para tabelas relacionais normalizadas (`comandas`, `comanda_items`, `pesagens`) em vez de snapshot JSONB.
 - Integracao fim-a-fim com caixa para encerramento formal da comanda no fluxo da propria comanda.
 - Regras de timeout e abandono de comanda (2h alerta, 4h politica opcional).
 - Relatorios de discrepancia balanca x caixa e reconciliacao operacional.
@@ -244,7 +259,7 @@ npm run dev
 - Trechos truncados/corrompidos no texto-base (Secao 6 PA-05 e Secao 9) precisam saneamento antes de virarem criterio tecnico fechado.
 
 ## Recomendacoes prioritarias
-- Prioridade alta: persistir modelo de estado da comanda com transicoes auditaveis no backend.
+- Prioridade alta: evoluir snapshot backend de comanda/itens/pesagens para schema PostgreSQL relacional com contratos finais.
 - Prioridade alta: fechar politica final de timeout/expiracao para lock por comanda em duas balancas.
 - Prioridade alta: entregar identificacao por codigo de barras da comanda com fallback manual.
 - Prioridade media: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.

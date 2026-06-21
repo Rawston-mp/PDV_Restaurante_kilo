@@ -11,7 +11,7 @@ export function NumericKeypad({ onKeyPress }: NumericKeypadProps) {
       <div className="numeric-keypad-grid">
         {keys.map((key) => (
           <button key={key} type="button" onClick={() => onKeyPress(key)}>
-            {key === 'Clear' ? 'Limpar' : key === 'Backspace' ? 'Voltar' : key}
+            {key === 'Clear' ? 'Limpar' : key === 'Backspace' ? 'Apagar' : key}
           </button>
         ))}
         <button type="button" className="is-enter" onClick={() => onKeyPress('Enter')}>

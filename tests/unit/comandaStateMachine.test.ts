@@ -69,6 +69,8 @@ describe('ComandaStateMachineService', () => {
           createdAt: '2026-06-10T00:00:00.000Z',
           updatedAt: '2026-06-10T00:00:00.000Z',
           lock: null,
+          items: [],
+          pesagens: [],
           transitions: [
             {
               from: 'ABERTA',
@@ -146,5 +148,58 @@ describe('ComandaStateMachineService', () => {
         stationId: 'BALANCA_B'
       })
     ).toThrow('Lock da comanda pertence a outra estacao.');
+  });
+  it('persiste itens da comanda no snapshot backend', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('301');
+    service.setItems('301', [
+      {
+        id: 'item-1',
+        nome: 'SELF SERVICE',
+        precoUnitario: 59.9,
+        quantidade: 0.452,
+        peso: 0.452,
+        categoriaId: 'Por quilo',
+        subtotal: 27.07,
+        porUnidade: false
+      }
+    ]);
+
+    const snapshot = service.snapshot();
+    const comanda = snapshot.comandas.find((record) => record.numero === '301');
+
+    expect(comanda?.items).toHaveLength(1);
+    expect(comanda?.items[0]).toMatchObject({
+      id: 'item-1',
+      nome: 'SELF SERVICE',
+      peso: 0.452,
+      subtotal: 27.07
+    });
+  });
+
+  it('registra pesagem vinculada ao item e coloca a comanda em uso na balanca', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('302');
+    const result = service.recordPesagem('302', {
+      peso: 0.452,
+      origem: 'sensor',
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A',
+      itemId: 'item-1',
+      productName: 'SELF SERVICE',
+      reason: 'item_lancado'
+    });
+
+    expect(result.comanda.status).toBe('EM_USO_BALANCA');
+    expect(result.comanda.pesagens).toHaveLength(1);
+    expect(result.pesagem).toMatchObject({
+      peso: 0.452,
+      origem: 'sensor',
+      owner: 'COMANDA_A',
+      stationId: 'BALANCA_A',
+      itemId: 'item-1'
+    });
   });
 });

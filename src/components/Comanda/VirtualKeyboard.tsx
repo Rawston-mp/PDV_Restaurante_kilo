@@ -1,3 +1,5 @@
+import { CornerDownLeft, Delete, Space } from 'lucide-react';
+
 type VirtualKeyboardProps = {
   onKeyPress: (key: string) => void;
 };
@@ -11,7 +13,7 @@ const rows = [
 export function VirtualKeyboard({ onKeyPress }: VirtualKeyboardProps) {
   return (
     <section className="comanda-panel">
-      <p className="panel-label">Teclado virtual</p>
+      <p className="panel-label">Teclado de busca</p>
       <div className="virtual-keyboard-grid">
         {rows.map((row, index) => (
           <div key={`row-${index}`} className="virtual-row">
@@ -23,11 +25,20 @@ export function VirtualKeyboard({ onKeyPress }: VirtualKeyboardProps) {
           </div>
         ))}
         <div className="virtual-row-actions">
+          <button type="button" className="is-clear" onClick={() => onKeyPress('Clear')}>
+            Limpar
+          </button>
+          <button type="button" className="is-space" onClick={() => onKeyPress(' ')}>
+            <Space size={18} />
+            Espaco
+          </button>
           <button type="button" className="is-backspace" onClick={() => onKeyPress('Backspace')}>
-            VOLTAR
+            <Delete size={18} />
+            Apagar
           </button>
           <button type="button" className="is-enter" onClick={() => onKeyPress('Enter')}>
-            ENTER
+            <CornerDownLeft size={18} />
+            Enter
           </button>
         </div>
       </div>

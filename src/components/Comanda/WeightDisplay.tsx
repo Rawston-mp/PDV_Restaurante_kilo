@@ -1,6 +1,8 @@
 type WeightDisplayProps = {
   value: number;
   manualValue: number | null;
+  isConnected: boolean;
+  isComandaOpen: boolean;
   isEditing: boolean;
   draftValue: string;
   error: string | null;
@@ -15,6 +17,8 @@ type WeightDisplayProps = {
 export function WeightDisplay({
   value,
   manualValue,
+  isConnected,
+  isComandaOpen,
   isEditing,
   draftValue,
   error,
@@ -25,12 +29,20 @@ export function WeightDisplay({
   onCancel,
   onClearManual
 }: WeightDisplayProps) {
+  const modeLabel = manualValue !== null
+    ? 'Manual'
+    : !isComandaOpen
+      ? 'Aguardando comanda'
+      : isConnected
+        ? 'Sensor ativo'
+        : 'Sensor offline';
+
   return (
     <section className="comanda-panel weight-panel">
       <div className="weight-panel-head">
         <p className="panel-label">Peso atual</p>
         <small className={manualValue !== null ? 'weight-panel-mode is-manual' : 'weight-panel-mode'}>
-          {manualValue !== null ? 'Manual' : 'Sensor'}
+          {modeLabel}
         </small>
       </div>
 
@@ -65,7 +77,12 @@ export function WeightDisplay({
           autoFocus
         />
       ) : (
-        <button type="button" className="panel-value-button panel-value panel-value-warning" onClick={onStartEdit}>
+        <button
+          type="button"
+          className="panel-value-button panel-value panel-value-warning"
+          onClick={onStartEdit}
+          disabled={!isComandaOpen}
+        >
           {value.toFixed(3)} kg
         </button>
       )}
@@ -77,7 +94,13 @@ export function WeightDisplay({
         </div>
       ) : (
         <div className="weight-panel-status">
-          <small>Clique no peso para informar manualmente.</small>
+          <small>
+            {!isComandaOpen
+              ? 'Abra uma comanda para iniciar a pesagem.'
+              : isConnected
+                ? 'Sensor pronto. Clique para informar manualmente.'
+                : 'Sensor sem conexao. Use o peso manual se necessario.'}
+          </small>
           {manualValue !== null && (
             <button type="button" className="button-muted" onClick={onClearManual}>Voltar ao sensor</button>
           )}

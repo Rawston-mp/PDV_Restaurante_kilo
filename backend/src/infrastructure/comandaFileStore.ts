@@ -10,7 +10,7 @@ import type {
 } from '../domain/comandaStateMachine';
 
 export type ComandaAuditEvent = {
-  action: 'OPEN_COMANDA' | 'TRANSITION' | 'LOCK_ACQUIRED' | 'LOCK_RENEWED' | 'LOCK_RELEASED' | 'LOCK_EXPIRED';
+  action: 'OPEN_COMANDA' | 'TRANSITION' | 'LOCK_ACQUIRED' | 'LOCK_RENEWED' | 'LOCK_RELEASED' | 'LOCK_EXPIRED' | 'ITEMS_SYNCED' | 'ITEM_ADDED' | 'PESAGEM_RECORDED';
   numero: string;
   fromStatus?: ComandaStatus;
   toStatus?: ComandaStatus;
@@ -19,6 +19,10 @@ export type ComandaAuditEvent = {
   lockOwner?: ComandaLockOwner;
   lockStationId?: ComandaLockStationId;
   lockExpiresAt?: string;
+  itemId?: string;
+  itemCount?: number;
+  peso?: number;
+  origem?: string;
 };
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
