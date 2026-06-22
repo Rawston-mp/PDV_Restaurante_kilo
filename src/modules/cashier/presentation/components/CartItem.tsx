@@ -14,6 +14,9 @@ export type CashierCartItem = {
   cfop?: string;
   taxSituationCode?: string;
   fiscalType?: string;
+  aliqIcms?: string;
+  aliqPis?: string;
+  aliqCofins?: string;
   imageUrl?: string;
 };
 

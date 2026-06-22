@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import '@/modules/cashier/caixa.css';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock3, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
@@ -120,6 +120,19 @@ const formatLaunchDateTime = (date: Date) =>
     minute: '2-digit'
   });
 
+const parseTaxRate = (value?: string) => {
+  const trimmed = value?.replace('%', '').trim();
+  if (!trimmed) {
+    return 0;
+  }
+
+  const normalized = trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : trimmed;
+  const rate = Number(normalized);
+  return Number.isFinite(rate) && rate >= 0 ? rate : 0;
+};
+
 const sortComandasByNumero = (items: ActiveComandaEntry[]) =>
   [...items].sort((a, b) => {
     const numeroA = Number(a.numero);
@@ -183,6 +196,9 @@ const mapComandaItemsToCashierCart = (items: ItemComanda[], catalog: CashierProd
       cfop: matchedProduct?.cfop,
       taxSituationCode: matchedProduct?.taxSituationCode,
       fiscalType: matchedProduct?.fiscalType,
+      aliqIcms: matchedProduct?.aliqIcms,
+      aliqPis: matchedProduct?.aliqPis,
+      aliqCofins: matchedProduct?.aliqCofins,
       imageUrl: matchedProduct?.imageUrl
     };
   });
@@ -236,7 +252,7 @@ export function CashierPage() {
   const [cashCloseInitialSection, setCashCloseInitialSection] = useState<CashCloseSection>('INICIO');
   const [query, setQuery]                   = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
-  const [comandaNumber, setComandaNumber]   = useState('113942');
+  const [comandaNumber, setComandaNumber]   = useState('');
   const [cartItems, setCartItems]           = useState<CashierCartItem[]>([]);
   const [openComandasCount, setOpenComandasCount] = useState(0);
   const [closedComandasCount, setClosedComandasCount] = useState(0);
@@ -245,6 +261,8 @@ export function CashierPage() {
   const [notice, setNotice] = useState<CashierNotice | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingCashierAction | null>(null);
   const [isCancelSelectionMode, setIsCancelSelectionMode] = useState(false);
+  const comandaLoadRequestRef = useRef(0);
+  const skipNextCartSyncRef = useRef(false);
   const hasActiveComanda = Boolean(comandaNumber.trim()) && openComandas.some((entry) => entry.numero === comandaNumber.trim());
   const activeComandaLabel = hasActiveComanda ? comandaNumber.trim() : 'Sem comanda';
 
@@ -379,14 +397,27 @@ export function CashierPage() {
       return;
     }
 
-    setComandaNumber(trimmed);
+    const requestId = ++comandaLoadRequestRef.current;
+    let loadedItems: ItemComanda[];
+    let loadedFromBackend = false;
 
     try {
-      const backendItems = await fetchComandaItemsFromBackend(trimmed);
-      setCartItems(mapComandaItemsToCashierCart(backendItems, catalogProducts));
-      upsertComandaItems(trimmed, backendItems);
+      loadedItems = await fetchComandaItemsFromBackend(trimmed);
+      loadedFromBackend = true;
     } catch {
-      setCartItems(mapComandaItemsToCashierCart(readComandaItems(trimmed), catalogProducts));
+      loadedItems = readComandaItems(trimmed);
+    }
+
+    if (requestId !== comandaLoadRequestRef.current) {
+      return;
+    }
+
+    skipNextCartSyncRef.current = true;
+    setComandaNumber(trimmed);
+    setCartItems(mapComandaItemsToCashierCart(loadedItems, catalogProducts));
+    upsertComandaItems(trimmed, loadedItems);
+
+    if (!loadedFromBackend) {
       showNotice(`Comanda #${trimmed} carregada do cache local. Backend indisponível para itens.`, 'warning');
     }
 
@@ -469,6 +500,9 @@ export function CashierPage() {
         cfop: product.cfop,
         fiscalType: product.fiscalType,
         taxSituationCode: product.taxSituationCode,
+        aliqIcms: product.aliqIcms,
+        aliqPis: product.aliqPis,
+        aliqCofins: product.aliqCofins,
         imageUrl: product.imageUrl
       })),
     [products]
@@ -670,6 +704,11 @@ export function CashierPage() {
   }, [activeCategory, query, catalogProducts]);
 
   useEffect(() => {
+    if (skipNextCartSyncRef.current) {
+      skipNextCartSyncRef.current = false;
+      return;
+    }
+
     const numero = comandaNumber.trim();
     persistCashierItemsToComanda(numero, cartItems);
 
@@ -738,6 +777,22 @@ export function CashierPage() {
       ...item,
       total: item.quantity * item.unitPrice
     }));
+    const discountFactor = subtotal > 0 ? payableTotal / subtotal : 0;
+    const chargedTaxes = receiptItems.reduce((sum, item) => {
+      const combinedRate = parseTaxRate(item.aliqIcms) + parseTaxRate(item.aliqPis) + parseTaxRate(item.aliqCofins);
+      return sum + item.total * discountFactor * (combinedRate / 100);
+    }, 0);
+    const taxSectionHtml = documentMode === 'NFCE'
+      ? `
+          <div class="section">
+            <div class="section-title">Impostos</div>
+            <div class="row totals">
+              <span>Impostos cobrados</span>
+              <strong>${escapeHtml(chargedTaxes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong>
+            </div>
+          </div>
+        `
+      : '';
 
     opened.document.write(`
       <html>
@@ -797,8 +852,7 @@ export function CashierPage() {
               font-weight: 700;
               margin-bottom: 2px;
             }
-            .item-meta,
-            .item-fiscal {
+            .item-meta {
               font-size: 11px;
               color: #6b7280;
               margin-bottom: 2px;
@@ -836,27 +890,13 @@ export function CashierPage() {
                     <div class="item">
                       <div class="item-name">${escapeHtml(item.name)}</div>
                       <div class="item-meta">${formatQuantity(item.quantity, item.unit)} ${item.unit === 'KG' ? 'kg' : 'un'} · ${escapeHtml(item.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</div>
-                      <div class="item-fiscal">ID ${escapeHtml(item.productCode ?? '--')} · NCM ${escapeHtml(item.ncm ?? '--')} · CFOP ${escapeHtml(item.cfop ?? '--')}</div>
-                      <div class="item-fiscal">${escapeHtml(item.fiscalType ?? 'Fiscal não informado')} · CST ${escapeHtml(item.taxSituationCode ?? '--')} · EAN ${escapeHtml(item.barcode ?? '--')}</div>
                     </div>
                   `
                 )
                 .join('')}
             </div>
 
-            <div class="section">
-              <div class="section-title">Resumo fiscal</div>
-              ${cartItems
-                .map(
-                  (item) => `
-                    <div class="row">
-                      <span>${escapeHtml(item.name)}</span>
-                      <strong>${escapeHtml(item.productCode ?? '--')} · ${escapeHtml(item.taxSituationCode ?? '--')}</strong>
-                    </div>
-                  `
-                )
-                .join('')}
-            </div>
+            ${taxSectionHtml}
 
             <div class="section">
               <div class="section-title">Pagamentos</div>
@@ -916,6 +956,9 @@ export function CashierPage() {
         cfop: product.cfop,
         taxSituationCode: product.taxSituationCode,
         fiscalType: product.fiscalType,
+        aliqIcms: product.aliqIcms,
+        aliqPis: product.aliqPis,
+        aliqCofins: product.aliqCofins,
         imageUrl: product.imageUrl,
       }];
     });
