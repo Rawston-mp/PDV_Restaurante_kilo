@@ -31,6 +31,8 @@ const defaultDataDir = join(currentDir, '..', '..', 'data');
 export class ComandaFileStore {
   private readonly stateFilePath: string;
   private readonly auditFilePath: string;
+  private stateWriteQueue: Promise<void> = Promise.resolve();
+  private auditWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(dataDir = defaultDataDir) {
     this.stateFilePath = join(dataDir, 'comandas-state.json');
@@ -57,16 +59,30 @@ export class ComandaFileStore {
     }
   }
 
-  async saveState(snapshot: ComandaStateSnapshot) {
-    await fs.mkdir(dirname(this.stateFilePath), { recursive: true });
-    const tempPath = `${this.stateFilePath}.tmp`;
+  saveState(snapshot: ComandaStateSnapshot) {
+    const serializedSnapshot = JSON.stringify(snapshot, null, 2);
+    this.stateWriteQueue = this.stateWriteQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await fs.mkdir(dirname(this.stateFilePath), { recursive: true });
+        const tempPath = `${this.stateFilePath}.tmp`;
 
-    await fs.writeFile(tempPath, JSON.stringify(snapshot, null, 2), 'utf-8');
-    await fs.rename(tempPath, this.stateFilePath);
+        await fs.writeFile(tempPath, serializedSnapshot, 'utf-8');
+        await fs.rename(tempPath, this.stateFilePath);
+      });
+
+    return this.stateWriteQueue;
   }
 
-  async appendAudit(event: ComandaAuditEvent) {
-    await fs.mkdir(dirname(this.auditFilePath), { recursive: true });
-    await fs.appendFile(this.auditFilePath, `${JSON.stringify(event)}\n`, 'utf-8');
+  appendAudit(event: ComandaAuditEvent) {
+    const serializedEvent = `${JSON.stringify(event)}\n`;
+    this.auditWriteQueue = this.auditWriteQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await fs.mkdir(dirname(this.auditFilePath), { recursive: true });
+        await fs.appendFile(this.auditFilePath, serializedEvent, 'utf-8');
+      });
+
+    return this.auditWriteQueue;
   }
 }

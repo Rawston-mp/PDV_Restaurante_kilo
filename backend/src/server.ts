@@ -159,8 +159,28 @@ const resolveComandaMutationError = (error: unknown, fallbackMessage: string) =>
   };
 };
 
-const persistComandas = async () => {
-  await comandaStore.saveState(comandaService.snapshot());
+let persistenceQueue: Promise<void> = Promise.resolve();
+let auditQueue: Promise<void> = Promise.resolve();
+
+const logPersistenceFailure = (operation: string, error: unknown) => {
+  console.error(`[persistencia] Falha em ${operation}:`, error);
+};
+
+const persistComandas = () => {
+  const snapshot = comandaService.snapshot();
+  persistenceQueue = persistenceQueue
+    .then(() => comandaStore.saveState(snapshot))
+    .catch((error) => logPersistenceFailure('salvar estado das comandas', error));
+
+  return persistenceQueue;
+};
+
+const appendComandaAudit = (event: Parameters<ComandaStore['appendAudit']>[0]) => {
+  auditQueue = auditQueue
+    .then(() => comandaStore.appendAudit(event))
+    .catch((error) => logPersistenceFailure('registrar auditoria da comanda', error));
+
+  return auditQueue;
 };
 
 const appendTransitionAudit = async (
@@ -170,7 +190,7 @@ const appendTransitionAudit = async (
   at: string,
   reason?: string
 ) => {
-  await comandaStore.appendAudit({
+  await appendComandaAudit({
     action: 'TRANSITION',
     numero,
     fromStatus,
@@ -265,7 +285,7 @@ app.post('/comandas/abrir', (req, res) => {
     const comanda = comandaService.open(numero);
 
     void persistComandas();
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'OPEN_COMANDA',
       numero: comanda.numero,
       toStatus: comanda.status,
@@ -302,7 +322,7 @@ app.post('/api/v1/comandas', (req, res) => {
   try {
     const comanda = comandaService.open(numero);
     void persistComandas();
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'OPEN_COMANDA',
       numero: comanda.numero,
       toStatus: comanda.status,
@@ -358,7 +378,7 @@ app.put('/api/v1/comandas/:numero/items', (req, res) => {
     const reason = parseOptionalText(req.body?.reason) ?? 'items_sync';
     const comanda = comandaService.setItems(req.params.numero, items, reason);
 
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'ITEMS_SYNCED',
       numero: comanda.numero,
       toStatus: comanda.status,
@@ -383,7 +403,7 @@ app.post('/api/v1/comandas/:numero/items', (req, res) => {
     const comanda = comandaService.addItem(req.params.numero, rawItem as ComandaItemRecord, reason);
     const item = comanda.items[0];
 
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'ITEM_ADDED',
       numero: comanda.numero,
       toStatus: comanda.status,
@@ -485,7 +505,7 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
         }
       }
 
-      void comandaStore.appendAudit({
+      void appendComandaAudit({
         action: 'PESAGEM_RECORDED',
         numero: comanda.numero,
         toStatus: comanda.status,
@@ -545,7 +565,7 @@ app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
     });
 
     if (result.expiredPreviousLock) {
-      void comandaStore.appendAudit({
+      void appendComandaAudit({
         action: 'LOCK_EXPIRED',
         numero: result.comanda.numero,
         at: result.comanda.updatedAt,
@@ -553,7 +573,7 @@ app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
       });
     }
 
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'LOCK_ACQUIRED',
       numero: result.comanda.numero,
       toStatus: result.comanda.status,
@@ -595,7 +615,7 @@ app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
       ttlSeconds: parsePositiveNumber(req.body?.ttlSeconds)
     });
 
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'LOCK_RENEWED',
       numero: result.comanda.numero,
       toStatus: result.comanda.status,
@@ -636,7 +656,7 @@ app.post('/api/v1/comandas/:numero/lock/release', (req, res) => {
       stationId
     });
 
-    void comandaStore.appendAudit({
+    void appendComandaAudit({
       action: 'LOCK_RELEASED',
       numero: comanda.numero,
       toStatus: comanda.status,

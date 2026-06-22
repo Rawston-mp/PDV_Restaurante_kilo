@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { WS_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type UseWebSocketOptions<T> = {
   url?: string;
@@ -19,7 +20,7 @@ export function useWebSocket<T>({
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
-  const endpoint = useMemo(() => url ?? import.meta.env.VITE_WS_URL ?? 'http://localhost:3001', [url]);
+  const endpoint = useMemo(() => url ?? WS_BASE_URL, [url]);
 
   useEffect(() => {
     if (!enabled) {

@@ -129,6 +129,10 @@ Desenvolvimento:
 npm run dev
 ```
 
+Esse comando inicia o frontend em `http://localhost:5173` e o backend em `http://localhost:3001`. Para iniciar somente a interface, use `npm run frontend:dev`.
+
+Em outro computador da mesma rede, abra `http://IP_DO_SERVIDOR:5173`. Sem variáveis de ambiente específicas, a interface usa automaticamente esse mesmo IP para acessar a API e o WebSocket na porta `3001`.
+
 Testes:
 
 ```bash
