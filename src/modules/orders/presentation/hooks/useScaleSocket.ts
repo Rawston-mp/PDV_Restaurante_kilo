@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 
 import { saveWeightHistoryLocal } from '@/modules/orders/infrastructure/local/comandaPersistence';
 import { applyWeightFilter } from '@/modules/orders/presentation/utils/weightFilter';
+import { WS_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type PesoSensorPayload = {
   peso: number;
@@ -29,7 +30,7 @@ export function useScaleSocket(enabled = true, comandaAtiva = false) {
       return;
     }
 
-    const socket = io(import.meta.env.VITE_WS_URL ?? 'http://localhost:3001', {
+    const socket = io(WS_BASE_URL, {
       transports: ['websocket']
     });
 

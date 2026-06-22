@@ -1,6 +1,7 @@
 import type { ItemComanda } from '@/types/comanda';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_BASE = API_BASE_URL;
 
 type ComandaItemsResponse = {
   ok?: boolean;

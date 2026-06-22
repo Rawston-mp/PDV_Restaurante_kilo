@@ -16,6 +16,7 @@ import {
   saveComandaItemsToBackend
 } from '@/shared/infrastructure/api/comandaApi';
 import { readComandaCache, writeComandaCache } from '@/shared/infrastructure/storage/comandaCache';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ProdutoCatalogo = {
   id: string;
@@ -59,7 +60,7 @@ type AcquireLockResponse = {
   lock?: LockData;
 };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_BASE = API_BASE_URL;
 const LOCK_TTL_SECONDS = 120;
 
 type PersistedComandaSnapshot = {

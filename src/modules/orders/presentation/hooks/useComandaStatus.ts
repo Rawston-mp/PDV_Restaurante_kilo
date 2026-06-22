@@ -4,12 +4,13 @@ import {
   loadComandaAtivaLocal,
   saveComandaAtivaLocal
 } from '@/modules/orders/infrastructure/local/comandaPersistence';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ComandaStatusResponse = {
   comandaAtiva: boolean;
 };
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const apiBaseUrl = API_BASE_URL;
 
 async function requestStatus(path: string, method: 'GET' | 'POST') {
   const response = await fetch(`${apiBaseUrl}${path}`, {

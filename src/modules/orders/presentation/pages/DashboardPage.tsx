@@ -106,7 +106,7 @@ const triggerCsvDownload = (filename: string, content: string) => {
 };
 
 export function DashboardPage() {
-  const { orders, reload: reloadOrders } = useOrdersQuery();
+  const { orders, reload: reloadOrders, closedSalesCount, closedBudgetsCount } = useOrdersQuery();
   const { cashMovements, reload: reloadCashMovements } = useCashMovementsQuery();
   const { convenios } = useConveniosQuery();
   const { createCashMovement, saving: savingCashMovement } = useCreateCashMovement();
@@ -456,7 +456,9 @@ export function DashboardPage() {
         </div>
         <div className="dashboard-hero-actions">
           <button type="button" onClick={onSync}>Sincronizar pedidos</button>
-          <span className="dashboard-hero-pill">{orders.length} pedidos monitorados</span>
+          <span className="dashboard-hero-pill">
+            {closedSalesCount} {closedSalesCount === 1 ? 'venda fechada' : 'vendas fechadas'} · {closedBudgetsCount} {closedBudgetsCount === 1 ? 'orçamento' : 'orçamentos'}
+          </span>
         </div>
       </header>
 
@@ -464,7 +466,7 @@ export function DashboardPage() {
         <article className="card dashboard-kpi-card dashboard-kpi-card-accent">
           <span>Vendas do dia</span>
           <strong>{currencyFormatter.format(dashboard.todaySales)}</strong>
-          <small>Total dos pedidos criados hoje</small>
+          <small>Total das vendas fiscais fechadas hoje</small>
         </article>
         <article className="card dashboard-kpi-card">
           <span>Saldo do dia</span>
@@ -645,7 +647,7 @@ export function DashboardPage() {
                 <div key={item.status} className="dashboard-status-row">
                   <div className="dashboard-status-row-labels">
                     <strong>{item.label}</strong>
-                    <span>{item.value} pedidos</span>
+                    <span>{item.value} {item.value === 1 ? 'pedido' : 'pedidos'}</span>
                   </div>
                   <div className="dashboard-status-track">
                     <div className={`dashboard-status-fill dashboard-status-${item.status.toLowerCase()}`} style={{ width: `${percentage}%` }} />

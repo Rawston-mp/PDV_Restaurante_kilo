@@ -22,6 +22,7 @@ import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/t
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import type { ItemComanda } from '@/types/comanda';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 import {
   fetchComandaItemsFromBackend,
   saveComandaItemsToBackend
@@ -81,7 +82,7 @@ type PendingCashierAction =
       description: string;
     };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const API_BASE = API_BASE_URL;
 const NON_OPEN_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
 const COUNTABLE_CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA'];
 const NOTICE_TONE_CLASSES: Record<CashierNotice['tone'], string> = {
