@@ -1,5 +1,6 @@
 node_modules/
 dist/
+backend/data/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
