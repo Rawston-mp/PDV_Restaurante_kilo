@@ -130,19 +130,19 @@ export function ComandaScreen() {
     }
 
     const roundedPeso = Number(nextPeso.toFixed(3));
-    actions.setPesoManual(roundedPeso);
     setPesoManualDraft(roundedPeso.toFixed(3));
     setPesoManualError(null);
     setIsPesoManualEditing(false);
 
-    if (!inserirNaComanda) {
-      return;
+    if (inserirNaComanda) {
+      const produtoAlvo = selecionarProdutoParaLancamento();
+      if (produtoAlvo) {
+        actions.selecionarProdutoComPesoManual(produtoAlvo, roundedPeso);
+        return;
+      }
     }
 
-    const produtoAlvo = selecionarProdutoParaLancamento();
-    if (produtoAlvo) {
-      actions.selecionarProduto(produtoAlvo);
-    }
+    actions.setPesoManual(roundedPeso);
   };
 
   const handleNumpadPesoManual = (key: string) => {

@@ -45,6 +45,33 @@ describe('ComandaStateMachineService', () => {
     expect(service.getActive()).toBeNull();
   });
 
+  it('fecha várias comandas de forma atômica no mesmo pagamento', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('110');
+    service.markEmUsoBalanca('110');
+    service.open('111');
+
+    const closed = service.closeMany(['110', '111'], 'FECHADA_VENDA', 'pagamento_conjunto');
+
+    expect(closed.map((comanda) => comanda.status)).toEqual(['FECHADA_VENDA', 'FECHADA_VENDA']);
+    expect(service.get('110')?.status).toBe('FECHADA_VENDA');
+    expect(service.get('111')?.status).toBe('FECHADA_VENDA');
+  });
+
+  it('não fecha nenhuma comanda do grupo quando uma delas é inválida', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('112');
+    service.open('113');
+    service.transition('113', 'CANCELADA', 'cancelamento_teste');
+
+    expect(() => service.closeMany(['112', '113'], 'FECHADA_VENDA')).toThrow(
+      'Comanda #113 em status CANCELADA não pode ser fechada como FECHADA_VENDA.'
+    );
+    expect(service.get('112')?.status).toBe('ABERTA');
+  });
+
   it('permite cancelar uma comanda aberta e impede nova pesagem após cancelamento', () => {
     const service = new ComandaStateMachineService();
 

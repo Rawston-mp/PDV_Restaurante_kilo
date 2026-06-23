@@ -441,6 +441,57 @@ app.get('/api/v1/comandas', (_req, res) => {
   res.status(200).json({ ok: true, comandas: comandaService.getAll() });
 });
 
+app.post('/api/v1/comandas/close-batch', (req, res) => {
+  const numeros = Array.isArray(req.body?.numeros)
+    ? req.body.numeros.map(parseNumero).filter(Boolean)
+    : [];
+  const documentMode = parseNumero(req.body?.documentMode).toUpperCase();
+  const targetStatus = documentMode === 'ORCAMENTO'
+    ? 'FECHADA_ORCAMENTO'
+    : documentMode === 'NFCE'
+      ? 'FECHADA_VENDA'
+      : null;
+
+  if (numeros.length === 0 || !targetStatus) {
+    res.status(400).json({
+      ok: false,
+      message: 'Informe as comandas e o modo de documento (NFCE ou ORCAMENTO).'
+    });
+    return;
+  }
+
+  try {
+    const beforeByNumero = new Map(
+      numeros.map((numero) => [numero, comandaService.get(numero)])
+    );
+    const comandas = comandaService.closeMany(
+      numeros,
+      targetStatus,
+      parseNumero(req.body?.reason) || 'fechamento_comandas_unidas_caixa'
+    );
+
+    void persistComandas();
+    void Promise.all(comandas.flatMap((comanda) => {
+      const before = beforeByNumero.get(comanda.numero);
+      const previousTransitionCount = before?.transitions.length ?? 0;
+      return comanda.transitions.slice(previousTransitionCount).map((transition) => appendTransitionAudit(
+        comanda.numero,
+        transition.from,
+        transition.to,
+        transition.at,
+        transition.reason
+      ));
+    }));
+
+    res.status(200).json({ ok: true, comandas });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao fechar comandas em lote.'
+    });
+  }
+});
+
 app.put('/api/v1/comandas/:numero/status', (req, res) => {
   const nextStatus = parseStatus(req.body?.status);
   if (!nextStatus) {

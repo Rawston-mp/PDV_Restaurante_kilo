@@ -18,73 +18,68 @@ export type CashierCartItem = {
   aliqPis?: string;
   aliqCofins?: string;
   imageUrl?: string;
+  sourceComandaNumber?: string;
+  sourceItemId?: string;
+  catalogProductId?: string;
 };
 
 type CartItemProps = {
   item: CashierCartItem;
+  showSource?: boolean;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
 };
 
-export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemProps) {
+export function CartItem({ item, showSource = false, onIncrement, onDecrement, onRemove }: CartItemProps) {
   const total = item.quantity * item.unitPrice;
   const isKg = item.unit === 'KG';
+  const formattedQuantity = item.quantity.toLocaleString('pt-BR', {
+    minimumFractionDigits: isKg ? 3 : 0,
+    maximumFractionDigits: isKg ? 3 : 0,
+  });
 
   return (
-    <li className="flex items-center gap-3 py-3 px-4 border-b border-slate-100">
-      <div className="h-14 w-14 shrink-0 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
-        {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200" />
-        )}
+    <li className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200 px-3 py-2">
+      <div className="flex-1 min-w-0">
+        <p className="truncate text-sm font-bold text-slate-900">{item.name}</p>
+        <p className="mt-0.5 truncate text-xs font-medium text-sky-700">
+          {showSource && item.sourceComandaNumber ? `Comanda #${item.sourceComandaNumber} · ` : ''}
+          {formattedQuantity} {isKg ? 'kg' : 'un'} · {formatBRL(item.unitPrice)} / {isKg ? 'kg' : 'un'}
+        </p>
       </div>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-base font-semibold text-slate-800 truncate">{item.name}</p>
-        {item.description ? <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{item.description}</p> : null}
-        <p className="text-sm text-slate-500 mt-0.5">{formatBRL(item.unitPrice)}</p>
-        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
-          ID {item.productCode ?? '--'}
-        </p>
-
-        <div className="mt-1.5 inline-flex items-center rounded-lg border border-slate-200 overflow-hidden">
+      <div className="flex shrink-0 items-center gap-1.5">
+        <p className="min-w-[72px] text-right text-base font-black text-slate-900">{formatBRL(total)}</p>
+        <div className="inline-flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => onDecrement(item.id)}
             aria-label={`Diminuir ${item.name}`}
-            className="h-12 w-12 text-slate-500 hover:bg-slate-100 transition-colors"
+            title="Diminuir quantidade"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-slate-300 text-slate-600 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
           >
-            <Minus size={14} className="mx-auto" />
+            <Minus size={17} />
           </button>
-          <span className="h-12 min-w-[48px] px-2 flex items-center justify-center text-sm font-semibold text-slate-700 border-x border-slate-200">
-            {item.quantity.toLocaleString('pt-BR', {
-              minimumFractionDigits: isKg ? 3 : 0,
-              maximumFractionDigits: isKg ? 3 : 0,
-            })}
-          </span>
           <button
             type="button"
             onClick={() => onIncrement(item.id)}
             aria-label={`Aumentar ${item.name}`}
-            className="h-12 w-12 text-sky-600 hover:bg-sky-50 transition-colors"
+            title="Aumentar quantidade"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-sky-300 text-sky-700 transition-colors hover:bg-sky-50"
           >
-            <Plus size={14} className="mx-auto" />
+            <Plus size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            aria-label={`Remover ${item.name}`}
+            title="Remover item"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-red-300 bg-red-50 text-red-700 transition-colors hover:bg-red-100"
+          >
+            <Trash2 size={16} />
           </button>
         </div>
-      </div>
-
-      <div className="min-w-[100px] text-right">
-        <p className="text-xl font-bold text-slate-800">{formatBRL(total)}</p>
-        <button
-          type="button"
-          onClick={() => onRemove(item.id)}
-          aria-label={`Remover ${item.name}`}
-          className="mt-1 inline-flex h-12 w-12 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-        >
-          <Trash2 size={16} />
-        </button>
       </div>
     </li>
   );

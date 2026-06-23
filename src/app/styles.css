@@ -2841,6 +2841,11 @@ body {
     padding-right: 0.2rem;
 }
 
+.comanda-workspace.is-expanded .comanda-items-panel .comanda-items {
+    max-height: none;
+    height: 100%;
+}
+
 .comanda-items-panel .comanda-items::-webkit-scrollbar {
     width: 8px;
 }

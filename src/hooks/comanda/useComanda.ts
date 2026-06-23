@@ -169,11 +169,6 @@ const isPorQuiloCategoryName = (value: string) => {
   return normalized === 'por quilo' || normalized === 'por kilo';
 };
 
-const isSelServiceProduct = (value: string) => {
-  const normalized = normalizeSearchText(value);
-  return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
-};
-
 export function useComanda(taxaImposto = 0) {
   const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
@@ -195,7 +190,7 @@ export function useComanda(taxaImposto = 0) {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
-  const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
+  const { pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
   const activeComandaRef = useRef<string | null>(null);
   const lastSyncNumeroRef = useRef<string | null>(null);
   const pendingPesagensRef = useRef<Array<{
@@ -642,16 +637,16 @@ export function useComanda(taxaImposto = 0) {
     return true;
   };
 
-  const adicionarProduto = (produto: ProdutoCatalogo) => {
+  const adicionarProduto = (produto: ProdutoCatalogo, pesoManualInformado?: number) => {
     if (!isComandaAberta) {
       setErro('Abra a comanda (Enter no número) antes de adicionar itens.');
       return;
     }
 
-    let pesoLido = Number(pesoAtual.toFixed(3));
-    if (!produto.porUnidade && isSelServiceProduct(produto.nome) && pesoSensor > 0) {
-      pesoLido = Number(pesoSensor.toFixed(3));
-    }
+    const possuiPesoManualInformado = typeof pesoManualInformado === 'number'
+      && Number.isFinite(pesoManualInformado)
+      && pesoManualInformado > 0;
+    const pesoLido = Number((possuiPesoManualInformado ? pesoManualInformado : pesoAtual).toFixed(3));
 
     const quantidade = produto.porUnidade ? 1 : pesoLido;
     if (!produto.porUnidade && quantidade <= 0) {
@@ -676,7 +671,11 @@ export function useComanda(taxaImposto = 0) {
     if (comandaAtivaId) {
       persistItensNoBackend(comandaAtivaId, nextItems, 'item_added');
       if (!produto.porUnidade) {
-        registrarPesagemNoBackend(comandaAtivaId, novoItem, pesoManual !== null ? 'manual' : 'sensor');
+        registrarPesagemNoBackend(
+          comandaAtivaId,
+          novoItem,
+          possuiPesoManualInformado || pesoManual !== null ? 'manual' : 'sensor'
+        );
       }
     }
     setPesquisa('');
@@ -684,7 +683,7 @@ export function useComanda(taxaImposto = 0) {
     setFeedback(`${produto.nome} adicionado.`);
     setPrecoAtual(produto.precoUnitario);
 
-    if (!produto.porUnidade && pesoManual !== null) {
+    if (!produto.porUnidade && (possuiPesoManualInformado || pesoManual !== null)) {
       setPesoManual(null);
     }
   };
@@ -889,6 +888,7 @@ export function useComanda(taxaImposto = 0) {
     focarPesquisa,
     selecionarCategoria,
     selecionarProduto: adicionarProduto,
+    selecionarProdutoComPesoManual: (produto: ProdutoCatalogo, peso: number) => adicionarProduto(produto, peso),
     removerItem,
     ajustarQuantidade,
     finalizeComanda,
