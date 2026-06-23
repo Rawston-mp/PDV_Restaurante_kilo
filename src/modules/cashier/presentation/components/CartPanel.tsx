@@ -5,6 +5,7 @@ import { formatBRL } from '../../types';
 type CartPanelProps = {
   items: CashierCartItem[];
   comandaNumber: string;
+  joinedComandaNumbers?: string[];
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
@@ -16,6 +17,7 @@ type CartPanelProps = {
 export function CartPanel({
   items,
   comandaNumber,
+  joinedComandaNumbers = [],
   onIncrement,
   onDecrement,
   onRemove,
@@ -25,19 +27,20 @@ export function CartPanel({
 }: CartPanelProps) {
   const subtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
   const totalItems = items.reduce((acc, i) => acc + (i.unit === 'KG' ? 1 : i.quantity), 0);
+  const checkoutNumbers = [comandaNumber, ...joinedComandaNumbers].filter(Boolean);
 
   return (
     <div className="flex flex-col h-full bg-white">
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-5 py-5 border-b border-slate-200 bg-white">
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={24} className="text-sky-600" />
-          <span className="text-2xl font-bold text-slate-800">
+          <ShoppingCart size={21} className="text-sky-600" />
+          <span className="text-xl font-bold text-slate-800">
             Carrinho
           </span>
         </div>
-        <span className="text-xs font-semibold bg-sky-100 text-sky-700 px-3 py-1 rounded-full">
+        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">
           {totalItems} {totalItems === 1 ? 'item' : 'itens'}
         </span>
       </header>
@@ -55,6 +58,7 @@ export function CartPanel({
               <CartItem
                 key={item.id}
                 item={item}
+                showSource={checkoutNumbers.length > 1}
                 onIncrement={onIncrement}
                 onDecrement={onDecrement}
                 onRemove={onRemove}
@@ -66,7 +70,11 @@ export function CartPanel({
 
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="border-t border-slate-200 px-5 pt-4 pb-5 space-y-2.5">
-        <div className="text-sm text-slate-500 mb-1">Atendimento #{comandaNumber}</div>
+        <div className="mb-1 text-sm text-slate-500">
+          {checkoutNumbers.length > 1
+            ? `Comandas ${checkoutNumbers.map((numero) => `#${numero}`).join(' + ')}`
+            : `Atendimento #${comandaNumber}`}
+        </div>
         <div className="flex justify-between text-xl text-slate-500">
           <span>Subtotal</span>
           <span>{formatBRL(subtotal)}</span>

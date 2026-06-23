@@ -486,6 +486,60 @@ export class ComandaStateMachineService {
     return updated;
   }
 
+  closeMany(
+    numeros: string[],
+    targetStatus: Extract<ComandaStatus, 'FECHADA_ORCAMENTO' | 'FECHADA_VENDA'>,
+    reason?: string
+  ) {
+    const normalizedNumbers = [...new Set(numeros.map((numero) => numero.trim()).filter(Boolean))];
+    if (normalizedNumbers.length === 0) {
+      throw new Error('Informe ao menos uma comanda para fechamento.');
+    }
+
+    const plans = normalizedNumbers.map((numero) => {
+      const record = this.get(numero);
+      if (!record) {
+        throw new Error(`Comanda #${numero} não encontrada.`);
+      }
+
+      let transitions: ComandaStatus[];
+      switch (record.status) {
+        case 'ABERTA':
+        case 'EM_USO_BALANCA':
+          transitions = ['PRONTA_PARA_CAIXA', 'EM_FECHAMENTO', targetStatus];
+          break;
+        case 'PRONTA_PARA_CAIXA':
+          transitions = ['EM_FECHAMENTO', targetStatus];
+          break;
+        case 'EM_FECHAMENTO':
+          transitions = [targetStatus];
+          break;
+        case targetStatus:
+          transitions = [];
+          break;
+        default:
+          throw new Error(`Comanda #${numero} em status ${record.status} não pode ser fechada como ${targetStatus}.`);
+      }
+
+      let currentStatus: ComandaStatus = record.status;
+      for (const nextStatus of transitions) {
+        if (!canTransition(currentStatus, nextStatus)) {
+          throw new Error(`Transição inválida para a comanda #${numero}: ${currentStatus} -> ${nextStatus}.`);
+        }
+        currentStatus = nextStatus;
+      }
+
+      return { numero, transitions };
+    });
+
+    return plans.map((plan) => {
+      for (const status of plan.transitions) {
+        this.transition(plan.numero, status, reason);
+      }
+      return this.get(plan.numero)!;
+    });
+  }
+
   markEmUsoBalanca(numero: string, reason = 'peso_recebido') {
     const existing = this.get(numero);
     if (!existing) {
