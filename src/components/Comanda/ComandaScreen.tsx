@@ -264,6 +264,7 @@ export function ComandaScreen() {
                 onClearManual={limparPesoManual}
               />
               <PriceDisplay value={state.precoAtual} />
+              <TotalDisplay total={state.total} />
             </div>
 
             <div className={`comanda-workspace${isWorkspaceExpanded ? ' is-expanded' : ''}`}>
@@ -336,7 +337,6 @@ export function ComandaScreen() {
                 canDelete={state.canDeleteItems}
               />
             </div>
-            <TotalDisplay subtotal={state.subtotal} impostos={state.impostos} total={state.total} />
 
             {state.feedback && <p className="comanda-feedback" role="status">{state.feedback}</p>}
             {state.erro && <p className="comanda-error">{state.erro}</p>}
