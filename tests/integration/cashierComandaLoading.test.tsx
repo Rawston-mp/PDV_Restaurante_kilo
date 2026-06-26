@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CashierPage } from '@/modules/cashier/presentation/pages/CashierPage';
@@ -244,6 +244,153 @@ describe('Carregamento da comanda no caixa', () => {
         const body = JSON.parse(String(options.body)) as { reason?: string };
         return body.reason === 'caixa_leave_open';
       })).toBe(true);
+    });
+  });
+
+  it('fecha pelo recebimento com dinheiro usando Enter duas vezes', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comanda: { numero: '1', status: 'PRONTA_PARA_CAIXA' }
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          items: [{
+            id: 'item-1',
+            nome: 'Gelatina',
+            precoUnitario: 3,
+            quantidade: 1,
+            categoriaId: 'Sobremesa',
+            subtotal: 3,
+            porUnidade: true
+          }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/close-batch') && method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, comandas: [] }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'open').mockReturnValue(null);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Gelatina')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Receber' }));
+
+    const orcamentoButton = await screen.findByRole('button', { name: /Orçamento F2/i });
+    expect(orcamentoButton.className).toContain('border-orange-400');
+    const orcamentoBadge = screen.getByLabelText('Documento selecionado: Orçamento');
+    expect(orcamentoBadge.className).toContain('text-red-700');
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const paymentsPanel = (await screen.findByText('Pagamentos')).closest('div');
+    expect(paymentsPanel).toBeTruthy();
+    expect(within(paymentsPanel as HTMLElement).getByText('Dinheiro')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    await waitFor(() => {
+      const batchClose = fetchMock.mock.calls.find(([request, options]) => {
+        const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+        return url.endsWith('/api/v1/comandas/close-batch') && options?.method === 'POST';
+      });
+      expect(batchClose).toBeTruthy();
+      const body = JSON.parse(String(batchClose?.[1]?.body)) as { documentMode?: string };
+      expect(body.documentMode).toBe('ORCAMENTO');
+    });
+  });
+
+  it('abre o recebimento em NFC-e pelo atalho F3', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comanda: { numero: '1', status: 'PRONTA_PARA_CAIXA' }
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          items: [{
+            id: 'item-1',
+            nome: 'Self-Service',
+            precoUnitario: 59.9,
+            quantidade: 0.5,
+            categoriaId: 'Por quilo',
+            subtotal: 29.95,
+            porUnidade: false,
+            peso: 0.5
+          }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/close-batch') && method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, comandas: [] }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'open').mockReturnValue(null);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Self-Service')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'F3' });
+
+    const nfceButton = await screen.findByRole('button', { name: /NFC-e F3/i });
+    expect(nfceButton.className).toContain('border-emerald-400');
+    const fiscalBadge = screen.getByLabelText('Documento selecionado: Fiscal');
+    expect(fiscalBadge.className).toContain('text-emerald-700');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar pagamento' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar e Fechar' }));
+
+    await waitFor(() => {
+      const batchClose = fetchMock.mock.calls.find(([request, options]) => {
+        const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+        return url.endsWith('/api/v1/comandas/close-batch') && options?.method === 'POST';
+      });
+      expect(batchClose).toBeTruthy();
+      const body = JSON.parse(String(batchClose?.[1]?.body)) as { documentMode?: string };
+      expect(body.documentMode).toBe('NFCE');
     });
   });
 
@@ -643,8 +790,9 @@ describe('Carregamento da comanda no caixa', () => {
         return url.endsWith('/api/v1/comandas/close-batch') && options?.method === 'POST';
       });
       expect(batchClose).toBeTruthy();
-      const body = JSON.parse(String(batchClose?.[1]?.body)) as { numeros: string[] };
+      const body = JSON.parse(String(batchClose?.[1]?.body)) as { numeros: string[]; documentMode?: string };
       expect(body.numeros).toEqual(['1', '2', '3']);
+      expect(body.documentMode).toBe('ORCAMENTO');
     });
   });
 });

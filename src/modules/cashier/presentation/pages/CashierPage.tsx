@@ -317,6 +317,7 @@ export function CashierPage() {
   const [query, setQuery]                   = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [comandaNumber, setComandaNumber]   = useState('');
+  const [paymentDocumentMode, setPaymentDocumentMode] = useState<PaymentDocumentMode>('ORCAMENTO');
   const [cartItems, setCartItems]           = useState<CashierCartItem[]>([]);
   const [openComandasCount, setOpenComandasCount] = useState(0);
   const [closedComandasCount, setClosedComandasCount] = useState(0);
@@ -402,12 +403,13 @@ export function CashierPage() {
     focusProductSearchInput();
   };
 
-  const openPayment = () => {
+  const openPayment = (documentMode: PaymentDocumentMode = 'ORCAMENTO') => {
     if (cartItems.length === 0) {
       showNotice('Adicione ao menos um produto antes de receber o pagamento.', 'warning');
       return;
     }
 
+    setPaymentDocumentMode(documentMode);
     setIsJoinMode(false);
     setIsCashierKeyboardVisible(false);
     setView('payment');
@@ -1045,7 +1047,13 @@ export function CashierPage() {
 
       if (event.key === 'F2') {
         event.preventDefault();
-        openPayment();
+        openPayment('ORCAMENTO');
+        return;
+      }
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        openPayment('NFCE');
         return;
       }
 
@@ -1790,7 +1798,13 @@ export function CashierPage() {
             items={cartItems}
           />
         ) : view === 'payment' ? (
-          <PaymentPanel total={subtotal} items={cartItems} onConfirm={handlePaymentConfirm} onBack={() => setView('pos')} />
+          <PaymentPanel
+            total={subtotal}
+            items={cartItems}
+            initialDocumentMode={paymentDocumentMode}
+            onConfirm={handlePaymentConfirm}
+            onBack={() => setView('pos')}
+          />
         ) : (
           <>
             {/* ── SmartInput ─────────────────────────────────────── */}
@@ -1853,7 +1867,7 @@ export function CashierPage() {
             onRemove={requestRemoveItem}
             onRefreshComanda={refreshCurrentComanda}
             isComandaSyncing={isComandaItemsSyncing}
-            onReceive={openPayment}
+            onReceive={() => openPayment('ORCAMENTO')}
             onCashClose={() => {
               setCashCloseInitialTab('MENU');
               setCashCloseInitialSection('INICIO');
