@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { type CashierCartItem } from './CartItem';
@@ -20,6 +20,7 @@ export type PaymentConfirmPayload = {
 type PaymentPanelProps = {
   total: number;
   items: CashierCartItem[];
+  initialDocumentMode?: PaymentDocumentMode;
   onConfirm: (payload: PaymentConfirmPayload) => Promise<void> | void;
   onBack: () => void;
 };
@@ -49,11 +50,23 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
   );
 }
 
-export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelProps) {
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return target.isContentEditable
+    || target instanceof HTMLInputElement
+    || target instanceof HTMLSelectElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLButtonElement;
+}
+
+export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', onConfirm, onBack }: PaymentPanelProps) {
   const { clients } = useClientsQuery();
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
-  const [documentMode, setDocumentMode] = useState<PaymentDocumentMode>('NFCE');
+  const [documentMode, setDocumentMode] = useState<PaymentDocumentMode>(initialDocumentMode);
   const [inputRaw, setInputRaw] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [selectedFiadoClientId, setSelectedFiadoClientId] = useState('');
@@ -65,10 +78,23 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
     [clients]
   );
 
+  useEffect(() => {
+    setDocumentMode(initialDocumentMode);
+  }, [initialDocumentMode]);
+
   const payableTotal = Math.max(0, total - discountAmount);
   const totalPaid = entries.reduce((sum, entry) => sum + entry.amount, 0);
   const remaining = Math.max(0, payableTotal - totalPaid);
   const change = totalPaid > payableTotal ? totalPaid - payableTotal : 0;
+  const documentModeBadge = documentMode === 'NFCE'
+    ? {
+        label: 'Fiscal',
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      }
+    : {
+        label: 'Orçamento',
+        className: 'border-red-200 bg-red-50 text-red-700'
+      };
   const fiscalSummary = items.map((item) => ({
     id: item.id,
     name: item.name,
@@ -116,17 +142,22 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
   const handleAddPayment = () => {
     if (selectedMethod === 'DESCONTO') {
       const amount = parseAmount(inputRaw, 0);
-      if (amount <= 0) return;
+      if (amount <= 0) return false;
       setDiscountAmount((current) => Math.min(total, current + amount));
       setInputRaw('');
-      return;
+      return true;
+    }
+
+    if (selectedMethod === 'FIADO') {
+      return false;
     }
 
     const amount = parseAmount(inputRaw, remaining);
-    if (amount <= 0) return;
+    if (amount <= 0) return false;
     const label = PAYMENT_METHODS.find((method) => method.method === selectedMethod)?.label ?? selectedMethod;
     setEntries((prev) => [...prev, { method: selectedMethod, label, amount }]);
     setInputRaw('');
+    return true;
   };
 
   const handleRemoveEntry = (index: number) => {
@@ -158,6 +189,39 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
 
   const canConfirm = selectedMethod !== 'FIADO' && totalPaid >= payableTotal && (entries.length > 0 || payableTotal === 0);
 
+  const handleConfirmAndClose = () => {
+    if (!canConfirm) {
+      return false;
+    }
+
+    void onConfirm({ payments: entries, discountAmount, documentMode });
+    return true;
+  };
+
+  useEffect(() => {
+    const handlePaymentEnter = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.ctrlKey || event.altKey || event.metaKey) {
+        return;
+      }
+
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (canConfirm) {
+        handleConfirmAndClose();
+        return;
+      }
+
+      handleAddPayment();
+    };
+
+    window.addEventListener('keydown', handlePaymentEnter);
+    return () => window.removeEventListener('keydown', handlePaymentEnter);
+  }, [canConfirm, discountAmount, documentMode, entries, handleAddPayment, inputRaw, onConfirm, remaining, selectedMethod, total]);
+
   return (
     <div className="flex flex-col h-full bg-slate-50">
       <header className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
@@ -170,7 +234,15 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1">
-          <h2 className="font-bold text-slate-800 text-base">Recebimento</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="font-bold text-slate-800 text-base">Recebimento</h2>
+            <span
+              aria-label={`Documento selecionado: ${documentModeBadge.label}`}
+              className={`inline-flex min-h-6 items-center rounded-full border px-2 text-[11px] font-black uppercase tracking-wide ${documentModeBadge.className}`}
+            >
+              {documentModeBadge.label}
+            </span>
+          </div>
           <p className="text-xs text-slate-500">Total da compra: {formatBRL(total)}</p>
         </div>
         <span className="text-xl font-extrabold text-orange-500">{formatBRL(remaining)}</span>
@@ -210,14 +282,14 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
                 onClick={() => setDocumentMode('NFCE')}
                 className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'NFCE' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                NFC-e
+                NFC-e <span className="ml-1 text-[11px] font-black opacity-70">F3</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDocumentMode('ORCAMENTO')}
                 className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'ORCAMENTO' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                Orçamento
+                Orçamento <span className="ml-1 text-[11px] font-black opacity-70">F2</span>
               </button>
             </div>
           </div>
@@ -400,7 +472,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack }: PaymentPanelPr
         <button
           type="button"
           disabled={!canConfirm}
-          onClick={() => onConfirm({ payments: entries, discountAmount, documentMode })}
+          onClick={handleConfirmAndClose}
           className="
             w-full h-14 rounded-xl flex items-center justify-center gap-2
             bg-emerald-500 hover:bg-emerald-600
