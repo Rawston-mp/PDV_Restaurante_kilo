@@ -2,7 +2,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CashierPage } from '@/modules/cashier/presentation/pages/CashierPage';
+import type { Product } from '@/modules/products/domain/entities/Product';
 import type { ItemComanda } from '@/types/comanda';
+import { COMANDA_CANCELLED_STORAGE_KEY } from '@/shared/infrastructure/storage/comandaCache';
+
+const productsQueryMock = vi.hoisted(() => ({
+  products: [] as Product[]
+}));
 
 vi.mock('@/modules/auth/presentation/providers/AuthProvider', () => ({
   useAuth: () => ({
@@ -12,7 +18,7 @@ vi.mock('@/modules/auth/presentation/providers/AuthProvider', () => ({
 }));
 
 vi.mock('@/modules/products/presentation/hooks/useProductsQuery', () => ({
-  useProductsQuery: () => ({ products: [], setProducts: vi.fn() })
+  useProductsQuery: () => ({ products: productsQueryMock.products, setProducts: vi.fn() })
 }));
 
 vi.mock('@/modules/clients/presentation/hooks/useClientsQuery', () => ({
@@ -24,6 +30,7 @@ describe('Carregamento da comanda no caixa', () => {
 
   beforeEach(() => {
     storage.clear();
+    productsQueryMock.products = [];
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: {
@@ -107,7 +114,7 @@ describe('Carregamento da comanda no caixa', () => {
 
   });
 
-  it('sai da comanda com Ctrl+C sem fechar ou cancelar o atendimento', async () => {
+  it('sai da comanda com Ctrl+X sem fechar ou cancelar o atendimento', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const method = init?.method ?? 'GET';
@@ -146,11 +153,12 @@ describe('Carregamento da comanda no caixa', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(await screen.findByText('Self-Service')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Manter comanda aberta' })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: 'F2' });
     expect(await screen.findByText('Forma de Pagamento')).toBeTruthy();
 
-    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'x', ctrlKey: true });
 
     expect(await screen.findByText('Sem comanda')).toBeTruthy();
     expect(screen.queryByText('Self-Service')).toBeNull();
@@ -172,6 +180,384 @@ describe('Carregamento da comanda no caixa', () => {
       const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
       return url.endsWith('/api/v1/comandas/1/status') && options?.method === 'PUT';
     })).toBe(false);
+  });
+
+  it('mantém a comanda aberta pelo botão do cabeçalho', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comanda: { numero: '1', status: 'PRONTA_PARA_CAIXA' }
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          items: [{
+            id: 'item-1',
+            nome: 'Gelatina',
+            precoUnitario: 3,
+            quantidade: 1,
+            categoriaId: 'Sobremesa',
+            subtotal: 3,
+            porUnidade: true
+          }]
+        }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Gelatina')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manter comanda aberta' }));
+
+    expect(await screen.findByText('Sem comanda')).toBeTruthy();
+    expect(screen.queryByText('Gelatina')).toBeNull();
+    expect(screen.getByText('Comanda #1 mantida aberta para continuar o atendimento.')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([request, options]) => {
+        const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+        if (!url.endsWith('/api/v1/comandas/1/items') || options?.method !== 'PUT') {
+          return false;
+        }
+
+        const body = JSON.parse(String(options.body)) as { reason?: string };
+        return body.reason === 'caixa_leave_open';
+      })).toBe(true);
+    });
+  });
+
+  it('abre o teclado virtual do caixa com Ctrl+C e esconde com Esc', () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, comandas: [] }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    expect(screen.queryByRole('region', { name: 'Teclado virtual do caixa' })).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+
+    expect(screen.getByRole('region', { name: 'Teclado virtual do caixa' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    expect(input.value).toBe('1');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(screen.queryByRole('region', { name: 'Teclado virtual do caixa' })).toBeNull();
+  });
+
+  it('adiciona produto pesquisado pelo teclado virtual sem trocar a comanda aberta', async () => {
+    productsQueryMock.products = [{
+      id: 'product-gelatina',
+      productCode: '43',
+      name: 'Gelatina',
+      category: 'Sobremesa',
+      price: 3,
+      byWeight: false,
+      stock: 10,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z')
+    }];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, items: [] }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const comandaInput = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(comandaInput, { target: { value: '1' } });
+    fireEvent.keyDown(comandaInput, { key: 'Enter' });
+
+    expect(await screen.findByText('#1')).toBeTruthy();
+    expect(await screen.findByText('Gelatina')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+    expect(screen.getByRole('region', { name: 'Teclado virtual do caixa' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Adicionar' }).length).toBeGreaterThan(0);
+
+    const productInput = screen.getByPlaceholderText('Digite para buscar produto e pressione Enter para adicionar') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'G' }));
+    fireEvent.click(screen.getByRole('button', { name: 'E' }));
+    fireEvent.click(screen.getByRole('button', { name: 'L' }));
+    expect(productInput.value).toBe('gel');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Adicionar' })[0]);
+
+    expect(await screen.findByRole('button', { name: 'Aumentar Gelatina' })).toBeTruthy();
+    expect(screen.getByText('#1')).toBeTruthy();
+    expect(screen.queryByText('Sem comanda')).toBeNull();
+    expect(fetchMock.mock.calls.some(([request]) => {
+      const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+      return url.endsWith('/api/v1/comandas/43/items') || url.endsWith('/api/v1/comandas/gel/items');
+    })).toBe(false);
+  });
+
+  it('não traz de volta item excluído ao atualizar comanda durante sincronização', async () => {
+    let backendItems: ItemComanda[] = [
+      {
+        id: 'item-1',
+        nome: 'Self-Service',
+        precoUnitario: 59.9,
+        quantidade: 0.5,
+        categoriaId: 'Por quilo',
+        subtotal: 29.95,
+        porUnidade: false,
+        peso: 0.5
+      },
+      {
+        id: 'item-2',
+        nome: 'Gelatina',
+        precoUnitario: 3,
+        quantidade: 1,
+        categoriaId: 'Sobremesa',
+        subtotal: 3,
+        porUnidade: true
+      }
+    ];
+    let pendingPutItems: ItemComanda[] | null = null;
+    let releasePut: (() => void) | undefined;
+    const putRelease = new Promise<void>((resolve) => {
+      releasePut = resolve;
+    });
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, items: backendItems }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'PUT') {
+        const body = JSON.parse(String(init?.body)) as { items: ItemComanda[] };
+        pendingPutItems = body.items;
+        return putRelease.then(() => {
+          backendItems = pendingPutItems ?? backendItems;
+          return new Response(JSON.stringify({ ok: true, items: backendItems }), { status: 200 });
+        });
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter');
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Self-Service')).toBeTruthy();
+    expect(await screen.findByText('Gelatina')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover Gelatina' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => {
+      expect(pendingPutItems?.map((item) => item.nome)).toEqual(['Self-Service']);
+    });
+    expect(screen.queryByText('Gelatina')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Salvando comanda...' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvando comanda...' }));
+    expect(screen.queryByText('Gelatina')).toBeNull();
+
+    await act(async () => {
+      releasePut?.();
+      await putRelease;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Atualizar comanda' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar comanda' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Gelatina')).toBeNull();
+      expect(screen.getByText('Self-Service')).toBeTruthy();
+    });
+  });
+
+  it('bloqueia reabertura de comanda cancelada localmente mesmo se o backend ainda devolver itens', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [{ numero: '1', status: 'PRONTA_PARA_CAIXA' }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comanda: { numero: '1', status: 'PRONTA_PARA_CAIXA' }
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          items: [{
+            id: 'item-1',
+            nome: 'Filé de Frango',
+            precoUnitario: 29.5,
+            quantidade: 1,
+            categoriaId: 'Por quilo',
+            subtotal: 29.5,
+            porUnidade: true
+          }]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/status') && method === 'PUT') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: false }), { status: 500 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Filé de Frango')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'F8' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }));
+
+    expect(await screen.findByText('Comanda #1 cancelada localmente. Confirme a sincronização quando o backend voltar.')).toBeTruthy();
+    expect(screen.getByText('Sem comanda')).toBeTruthy();
+    expect(screen.queryByText('Filé de Frango')).toBeNull();
+
+    const inputAfterCancel = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(inputAfterCancel, { target: { value: '1' } });
+    fireEvent.keyDown(inputAfterCancel, { key: 'Enter' });
+
+    expect(await screen.findByText('Comanda #1 está cancelada localmente e não pode ser aberta no caixa.')).toBeTruthy();
+    expect(screen.queryByText('Filé de Frango')).toBeNull();
+    expect(screen.getByText('Sem comanda')).toBeTruthy();
+  });
+
+  it('permite abrir comanda reaproveitada quando o backend tem movimentação mais recente que o cancelamento local', async () => {
+    storage.set(COMANDA_CANCELLED_STORAGE_KEY, JSON.stringify({
+      '1': {
+        cancelledAt: '2026-06-25T20:00:00.000Z',
+        reason: 'cancelada_localmente_no_caixa'
+      }
+    }));
+
+    const freshComanda = {
+      numero: '1',
+      status: 'PRONTA_PARA_CAIXA',
+      updatedAt: '2026-06-25T20:05:00.000Z'
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comandas: [freshComanda]
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          comanda: freshComanda
+        }), { status: 200 }));
+      }
+
+      if (url.endsWith('/api/v1/comandas/1/items') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          items: [{
+            id: 'item-1',
+            nome: 'Gelatina',
+            precoUnitario: 3,
+            quantidade: 1,
+            categoriaId: 'Sobremesa',
+            subtotal: 3,
+            porUnidade: true
+          }]
+        }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CashierPage />);
+
+    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('Gelatina')).toBeTruthy();
+    expect(screen.queryByText('Comanda #1 está cancelada localmente e não pode ser aberta no caixa.')).toBeNull();
+    expect(screen.getByText('#1')).toBeTruthy();
   });
 
   it('junta várias comandas com Ctrl+U preservando a origem dos itens', async () => {

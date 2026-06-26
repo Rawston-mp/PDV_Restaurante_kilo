@@ -15,7 +15,11 @@ import {
   registerComandaPesagemInBackend,
   saveComandaItemsToBackend
 } from '@/shared/infrastructure/api/comandaApi';
-import { readComandaCache, writeComandaCache } from '@/shared/infrastructure/storage/comandaCache';
+import {
+  readComandaCache,
+  unmarkComandaLocallyCancelled,
+  writeComandaCache
+} from '@/shared/infrastructure/storage/comandaCache';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ProdutoCatalogo = {
@@ -58,6 +62,28 @@ type BackendError = {
 type AcquireLockResponse = {
   ok: boolean;
   lock?: LockData;
+};
+
+type BackendComandaStatus =
+  | 'ABERTA'
+  | 'EM_USO_BALANCA'
+  | 'PRONTA_PARA_CAIXA'
+  | 'EM_FECHAMENTO'
+  | 'FECHADA_ORCAMENTO'
+  | 'FECHADA_VENDA'
+  | 'CANCELADA'
+  | 'ARQUIVADA';
+
+type BackendComandaResponse = {
+  ok?: boolean;
+  comanda?: {
+    numero: string;
+    status: BackendComandaStatus;
+  };
+};
+
+type OpenComandaResponse = BackendComandaResponse & {
+  reused?: boolean;
 };
 
 const API_BASE = API_BASE_URL;
@@ -284,7 +310,7 @@ export function useComanda(taxaImposto = 0) {
     }));
   }, [comandaAtivaId, dataAberturaAtual, itens]);
 
-  const requestOpenComanda = async (numero: string) => {
+  const requestOpenComanda = async (numero: string): Promise<OpenComandaResponse> => {
     const response = await fetch(`${API_BASE}/api/v1/comandas`, {
       method: 'POST',
       headers: {
@@ -296,9 +322,51 @@ export function useComanda(taxaImposto = 0) {
     if (!response.ok) {
       throw await parseError(response);
     }
+
+    return await response.json().catch(() => ({ ok: true, reused: false })) as OpenComandaResponse;
+  };
+
+  const markComandaReadyForCashier = async (numero: string) => {
+    const statusResponse = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}`);
+    if (!statusResponse.ok) {
+      throw await parseError(statusResponse);
+    }
+
+    const payload = (await statusResponse.json().catch(() => null)) as BackendComandaResponse | null;
+    const currentStatus = payload?.comanda?.status;
+    if (currentStatus === 'PRONTA_PARA_CAIXA') {
+      return;
+    }
+
+    if (currentStatus === 'EM_FECHAMENTO'
+      || currentStatus === 'FECHADA_ORCAMENTO'
+      || currentStatus === 'FECHADA_VENDA'
+      || currentStatus === 'CANCELADA'
+      || currentStatus === 'ARQUIVADA') {
+      throw {
+        status: 409,
+        message: `Comanda em status ${currentStatus} não pode ser liberada para o caixa.`
+      } satisfies BackendError;
+    }
+
+    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        status: 'PRONTA_PARA_CAIXA',
+        reason: 'liberada_na_balanca'
+      })
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
   };
 
   const persistItensNoBackend = (numero: string, nextItems: ItemComanda[], reason: string) => {
+    unmarkComandaLocallyCancelled(numero);
     lastSyncNumeroRef.current = numero;
     setIsSyncing(true);
     void saveComandaItemsToBackend(numero, nextItems, reason)
@@ -548,10 +616,12 @@ export function useComanda(taxaImposto = 0) {
 
     const comandaAnterior = comandaAtivaId && comandaAtivaId !== nextId ? comandaAtivaId : null;
     let openedOffline = false;
+    let openedReusedBackend = false;
     let backendItems: ItemComanda[] | null = null;
 
     try {
-      await requestOpenComanda(nextId);
+      const openResult = await requestOpenComanda(nextId);
+      openedReusedBackend = Boolean(openResult.reused);
       setIsOfflineMode(false);
       if (lockContext) {
         await acquireLock(nextId);
@@ -592,13 +662,13 @@ export function useComanda(taxaImposto = 0) {
         }
       : null;
 
-    const snapshotDestino = comandasAbertas[nextId];
+    const snapshotDestino = openedReusedBackend ? undefined : comandasAbertas[nextId];
     const shouldHydrateBackendFromLocal =
       backendItems !== null && backendItems.length === 0 && Boolean(snapshotDestino?.itens.length);
     const nextItems = backendItems !== null
       ? (backendItems.length > 0 || !snapshotDestino ? backendItems : snapshotDestino.itens)
       : snapshotDestino?.itens ?? [];
-    const nextDataAbertura = snapshotDestino?.dataAbertura ?? new Date();
+    const nextDataAbertura = openedReusedBackend ? new Date() : snapshotDestino?.dataAbertura ?? new Date();
 
     setComandasAbertas((prev) => {
       const next = comandaAtivaId
@@ -631,6 +701,9 @@ export function useComanda(taxaImposto = 0) {
 
     setComandaAtivaId(nextId);
     lastSyncNumeroRef.current = nextId;
+    if (!openedOffline) {
+      unmarkComandaLocallyCancelled(nextId);
+    }
     setErro(null);
     setFeedback(openedOffline ? `Comanda #${nextId} aberta em modo local.` : `Comanda #${nextId} aberta.`);
 
@@ -755,9 +828,28 @@ export function useComanda(taxaImposto = 0) {
     toggleToNumerico();
 
     if (activeNumero) {
-      void releaseLock(activeNumero).catch((backendError: BackendError) => {
-        setErro(backendError.message || 'Falha ao liberar lock da comanda encerrada.');
-      });
+      unmarkComandaLocallyCancelled(activeNumero);
+      lastSyncNumeroRef.current = activeNumero;
+
+      void (async () => {
+        try {
+          await markComandaReadyForCashier(activeNumero);
+          setIsOfflineMode(false);
+          setPendingSyncCount(0);
+        } catch (backendError) {
+          const typedError = backendError as BackendError;
+          setIsOfflineMode(true);
+          setPendingSyncCount((current) => Math.max(1, current + 1));
+          setErro(typedError.message || 'Comanda liberada localmente, mas ainda não foi preparada no backend para o caixa.');
+        }
+
+        try {
+          await releaseLock(activeNumero);
+        } catch (backendError) {
+          const typedError = backendError as BackendError;
+          setErro(typedError.message || 'Falha ao liberar lock da comanda encerrada.');
+        }
+      })();
     }
   };
 

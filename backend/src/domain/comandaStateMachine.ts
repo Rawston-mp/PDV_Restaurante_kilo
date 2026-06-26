@@ -248,6 +248,9 @@ const normalizeStatus = (status: ComandaStatus | LegacyComandaStatus): ComandaSt
 const isInactiveStatus = (status: ComandaStatus) =>
   status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'CANCELADA' || status === 'ARQUIVADA';
 
+const isReusableClosedStatus = (status: ComandaStatus) =>
+  status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'ARQUIVADA';
+
 const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   if (!lock) {
     return null;
@@ -386,12 +389,30 @@ export class ComandaStateMachineService {
 
     const existing = this.comandas.get(normalized);
     if (existing) {
-      if (existing.status === 'ARQUIVADA') {
-        throw new Error('A comanda arquivada não pode ser reaberta.');
-      }
+      if (isReusableClosedStatus(existing.status)) {
+        const openedAt = nowIso();
+        const reopened: ComandaRecord = {
+          numero: normalized,
+          status: 'ABERTA',
+          createdAt: openedAt,
+          updatedAt: openedAt,
+          lock: null,
+          transitions: [
+            ...existing.transitions,
+            {
+              from: existing.status,
+              to: 'ABERTA',
+              at: openedAt,
+              reason: 'reutilizacao_cartao_fisico'
+            }
+          ],
+          items: [],
+          pesagens: []
+        };
 
-      if (existing.status === 'FECHADA_ORCAMENTO' || existing.status === 'FECHADA_VENDA') {
-        throw new Error('A comanda fechada não pode receber novos itens.');
+        this.comandas.set(normalized, reopened);
+        this.activeComandaNumero = normalized;
+        return reopened;
       }
 
       if (existing.status === 'CANCELADA') {

@@ -59,6 +59,58 @@ describe('ComandaStateMachineService', () => {
     expect(service.get('111')?.status).toBe('FECHADA_VENDA');
   });
 
+  it('reutiliza comanda fechada no caixa como novo ciclo limpo na balança', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('120');
+    service.setItems('120', [{
+      id: 'item-1',
+      nome: 'Self-Service',
+      precoUnitario: 59.9,
+      quantidade: 0.5,
+      peso: 0.5,
+      categoriaId: 'Por quilo',
+      subtotal: 29.95,
+      porUnidade: false
+    }]);
+    service.recordPesagem('120', {
+      peso: 0.5,
+      origem: 'sensor',
+      reason: 'teste_pesagem'
+    });
+
+    service.closeMany(['120'], 'FECHADA_VENDA', 'pagamento_caixa');
+
+    const reopened = service.open('120');
+
+    expect(reopened.status).toBe('ABERTA');
+    expect(reopened.items).toHaveLength(0);
+    expect(reopened.pesagens).toHaveLength(0);
+    expect(reopened.transitions.at(-1)).toMatchObject({
+      from: 'FECHADA_VENDA',
+      to: 'ABERTA',
+      reason: 'reutilizacao_cartao_fisico'
+    });
+    expect(service.getActive()?.numero).toBe('120');
+  });
+
+  it('reutiliza comanda arquivada como novo ciclo operacional', () => {
+    const service = new ComandaStateMachineService();
+
+    service.open('121');
+    service.closeMany(['121'], 'FECHADA_ORCAMENTO', 'orcamento_caixa');
+    service.transition('121', 'ARQUIVADA', 'fechamento_caixa');
+
+    const reopened = service.open('121');
+
+    expect(reopened.status).toBe('ABERTA');
+    expect(reopened.items).toEqual([]);
+    expect(reopened.transitions.at(-1)).toMatchObject({
+      from: 'ARQUIVADA',
+      to: 'ABERTA'
+    });
+  });
+
   it('não fecha nenhuma comanda do grupo quando uma delas é inválida', () => {
     const service = new ComandaStateMachineService();
 

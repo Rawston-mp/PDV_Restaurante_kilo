@@ -5,7 +5,7 @@
 
 import '@/modules/cashier/caixa.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, LogOut, UserRound } from 'lucide-react';
+import { Clock3, CornerUpLeft, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
@@ -18,6 +18,7 @@ import { ProductGrid } from '@/modules/cashier/presentation/components/ProductGr
 import { CartPanel } from '@/modules/cashier/presentation/components/CartPanel';
 import { PaymentPanel, type PaymentConfirmPayload } from '@/modules/cashier/presentation/components/PaymentPanel';
 import { CashRegisterClose } from '@/modules/cashier/presentation/components/CashRegisterClose';
+import { CashierVirtualKeyboard } from '@/modules/cashier/presentation/components/CashierVirtualKeyboard';
 import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/types';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
@@ -29,9 +30,14 @@ import {
 } from '@/shared/infrastructure/api/comandaApi';
 import {
   clearComandaCache,
+  isComandaLocallyCancelled,
+  listLocallyCancelledComandaNumbers,
   listOpenComandaNumbers,
+  markComandaLocallyCancelled,
+  readCancelledComandas,
   readComandaItems,
   removeComandaCacheEntry,
+  unmarkComandaLocallyCancelled,
   upsertComandaItems
 } from '@/shared/infrastructure/storage/comandaCache';
 
@@ -56,6 +62,7 @@ type HeaderComandaStatus =
 type HeaderComandaRecord = {
   numero: string;
   status: HeaderComandaStatus;
+  updatedAt?: string;
 };
 
 type ActiveComandaEntry = {
@@ -163,11 +170,38 @@ const readLocalOpenComandas = (): ActiveComandaEntry[] => {
   }));
 };
 
+const isBackendComandaNewerThanLocalCancel = (comanda: HeaderComandaRecord) => {
+  const cancelledSnapshot = readCancelledComandas()[comanda.numero.trim()];
+  if (!cancelledSnapshot) {
+    return false;
+  }
+
+  const backendUpdatedAt = Date.parse(comanda.updatedAt ?? '');
+  const locallyCancelledAt = Date.parse(cancelledSnapshot.cancelledAt);
+
+  return Number.isFinite(backendUpdatedAt)
+    && Number.isFinite(locallyCancelledAt)
+    && backendUpdatedAt > locallyCancelledAt;
+};
+
+const shouldSkipBackendComandaAsLocallyCancelled = (comanda: HeaderComandaRecord) => {
+  if (!isComandaLocallyCancelled(comanda.numero)) {
+    return false;
+  }
+
+  if (isBackendComandaNewerThanLocalCancel(comanda)) {
+    unmarkComandaLocallyCancelled(comanda.numero);
+    return false;
+  }
+
+  return true;
+};
+
 const mergeOpenComandas = (backendComandas: HeaderComandaRecord[]) => {
   const entries = new Map<string, ActiveComandaEntry>();
 
   for (const comanda of backendComandas) {
-    if (NON_OPEN_COMANDA_STATUSES.includes(comanda.status)) {
+    if (NON_OPEN_COMANDA_STATUSES.includes(comanda.status) || shouldSkipBackendComandaAsLocallyCancelled(comanda)) {
       continue;
     }
 
@@ -185,6 +219,16 @@ const mergeOpenComandas = (backendComandas: HeaderComandaRecord[]) => {
   }
 
   return sortComandasByNumero([...entries.values()]);
+};
+
+const fetchComandaHeader = async (numero: string): Promise<HeaderComandaRecord | null> => {
+  const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}`);
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null) as { comanda?: HeaderComandaRecord } | null;
+  return payload?.comanda ?? null;
 };
 
 const mapComandaItemsToCashierCart = (
@@ -280,12 +324,16 @@ export function CashierPage() {
   const [joinedComandaNumbers, setJoinedComandaNumbers] = useState<string[]>([]);
   const [isJoinMode, setIsJoinMode] = useState(false);
   const [isJoiningComandas, setIsJoiningComandas] = useState(false);
+  const [isCashierKeyboardVisible, setIsCashierKeyboardVisible] = useState(false);
+  const [isComandaItemsSyncing, setIsComandaItemsSyncing] = useState(false);
+  const [hasUnsyncedItemChanges, setHasUnsyncedItemChanges] = useState(false);
   const [isOpenComandasPanelOpen, setIsOpenComandasPanelOpen] = useState(false);
   const [notice, setNotice] = useState<CashierNotice | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingCashierAction | null>(null);
   const [isCancelSelectionMode, setIsCancelSelectionMode] = useState(false);
   const comandaLoadRequestRef = useRef(0);
   const skipNextCartSyncRef = useRef(false);
+  const pendingCartSyncRef = useRef<Promise<boolean> | null>(null);
   const hasActiveComanda = Boolean(comandaNumber.trim()) && openComandas.some((entry) => entry.numero === comandaNumber.trim());
   const activeComandaLabel = hasActiveComanda ? comandaNumber.trim() : 'Sem comanda';
   const joinCandidates = openComandas.filter((entry) => (
@@ -294,6 +342,51 @@ export function CashierPage() {
 
   const showNotice = (message: string, tone: CashierNotice['tone'] = 'info') => {
     setNotice({ message, tone });
+  };
+
+  const persistCashierCartSnapshot = (
+    nextCartItems: CashierCartItem[],
+    reason: string,
+    options: { notifyOnFailure?: boolean } = {}
+  ) => {
+    const numero = comandaNumber.trim();
+    if (!numero) {
+      return Promise.resolve(true);
+    }
+
+    const groups = groupCashierItemsByComanda(numero, joinedComandaNumbers, nextCartItems);
+    const syncPromise = Promise.all(
+      groups.map(async (group) => {
+        const items = mapCashierCartToComandaItems(group.items);
+        upsertComandaItems(group.numero, items);
+
+        try {
+          await saveComandaItemsToBackend(group.numero, items, reason);
+          return true;
+        } catch {
+          return false;
+        }
+      })
+    ).then((results) => results.every(Boolean));
+
+    pendingCartSyncRef.current = syncPromise;
+    setIsComandaItemsSyncing(true);
+
+    void syncPromise.then((synced) => {
+      if (pendingCartSyncRef.current !== syncPromise) {
+        return;
+      }
+
+      pendingCartSyncRef.current = null;
+      setIsComandaItemsSyncing(false);
+      setHasUnsyncedItemChanges(!synced);
+
+      if (!synced && options.notifyOnFailure) {
+        showNotice('Alteração salva localmente. Backend indisponível para sincronizar a comanda.', 'warning');
+      }
+    });
+
+    return syncPromise;
   };
 
   const focusProductSearchInput = () => {
@@ -316,6 +409,7 @@ export function CashierPage() {
     }
 
     setIsJoinMode(false);
+    setIsCashierKeyboardVisible(false);
     setView('payment');
   };
 
@@ -427,6 +521,7 @@ export function CashierPage() {
       backendCancelled = false;
     }
 
+    markComandaLocallyCancelled(trimmed, backendCancelled ? 'cancelada_no_caixa' : 'cancelada_localmente_no_caixa');
     removeComandaCacheEntry(trimmed);
     setCartItems((currentItems) => (
       comandaNumber.trim() === trimmed
@@ -500,7 +595,10 @@ export function CashierPage() {
     }
 
     if (action.kind === 'REMOVE_ITEM') {
-      setCartItems((currentItems) => currentItems.filter((item) => item.id !== action.itemId));
+      const nextCartItems = cartItems.filter((item) => item.id !== action.itemId);
+      skipNextCartSyncRef.current = true;
+      setCartItems(nextCartItems);
+      void persistCashierCartSnapshot(nextCartItems, 'caixa_item_removed', { notifyOnFailure: true });
       showNotice(`Produto "${action.itemName}" excluído da comanda.`, 'success');
       return;
     }
@@ -531,8 +629,37 @@ export function CashierPage() {
     }
 
     const requestId = ++comandaLoadRequestRef.current;
+    let backendComanda: HeaderComandaRecord | null = null;
+
+    try {
+      backendComanda = await fetchComandaHeader(trimmed);
+    } catch {
+      backendComanda = null;
+    }
+
+    if (isComandaLocallyCancelled(trimmed)
+      && (!backendComanda || shouldSkipBackendComandaAsLocallyCancelled(backendComanda))) {
+      setQuery('');
+      focusProductSearchInput();
+      showNotice(`Comanda #${trimmed} está cancelada localmente e não pode ser aberta no caixa.`, 'warning');
+      return;
+    }
+
     let loadedItems: ItemComanda[];
     let loadedFromBackend = false;
+
+    const status = backendComanda?.status;
+    if (status && NON_OPEN_COMANDA_STATUSES.includes(status)) {
+      removeComandaCacheEntry(trimmed);
+      if (status === 'CANCELADA') {
+        markComandaLocallyCancelled(trimmed, 'cancelada_no_backend');
+      }
+
+      setQuery('');
+      focusProductSearchInput();
+      showNotice(`Comanda #${trimmed} está ${status.toLowerCase().replaceAll('_', ' ')} e não pode ser aberta no caixa.`, 'warning');
+      return;
+    }
 
     try {
       loadedItems = await fetchComandaItemsFromBackend(trimmed);
@@ -582,6 +709,24 @@ export function CashierPage() {
       return;
     }
 
+    const trimmedValue = rawValue.trim();
+    if (comandaNumber.trim()) {
+      if (!trimmedValue) {
+        return;
+      }
+
+      const productToAdd = filteredProducts[0];
+      if (!productToAdd) {
+        showNotice(`Nenhum produto encontrado para "${trimmedValue}".`, 'warning');
+        return;
+      }
+
+      addProduct(productToAdd);
+      setQuery('');
+      focusProductSearchInput();
+      return;
+    }
+
     const comandaFromInput = extractComandaNumber(rawValue);
     if (!comandaFromInput) {
       return;
@@ -590,22 +735,82 @@ export function CashierPage() {
     void loadComandaIntoCashier(comandaFromInput);
   };
 
+  const handleCashierVirtualKeyboardKeyPress = (key: string) => {
+    if (key === 'Clear') {
+      setQuery('');
+      focusProductSearchInput();
+      return;
+    }
+
+    if (key === 'Backspace') {
+      setQuery((current) => current.slice(0, -1));
+      focusProductSearchInput();
+      return;
+    }
+
+    if (key === 'Enter') {
+      handleSmartInputSubmit(query);
+      focusProductSearchInput();
+      return;
+    }
+
+    setQuery((current) => `${current}${key}`);
+    focusProductSearchInput();
+  };
+
   const refreshCurrentComanda = () => {
     const currentNumber = comandaNumber.trim();
     if (!currentNumber) {
       return;
     }
 
-    void loadComandaIntoCashier(currentNumber);
+    void (async () => {
+      const pendingSync = pendingCartSyncRef.current;
+      if (pendingSync) {
+        const synced = await pendingSync;
+        if (!synced) {
+          skipNextCartSyncRef.current = true;
+          setCartItems(mapComandaItemsToCashierCart(readComandaItems(currentNumber), catalogProducts, currentNumber));
+          showNotice('A comanda possui alterações locais pendentes. Sincronize antes de atualizar pelo backend.', 'warning');
+          return;
+        }
+      }
+
+      if (hasUnsyncedItemChanges) {
+        skipNextCartSyncRef.current = true;
+        setCartItems(mapComandaItemsToCashierCart(readComandaItems(currentNumber), catalogProducts, currentNumber));
+        showNotice('A comanda possui alterações locais pendentes. Sincronize antes de atualizar pelo backend.', 'warning');
+        return;
+      }
+
+      void loadComandaIntoCashier(currentNumber);
+    })();
   };
 
   const leaveCurrentComandaOpen = () => {
     const currentNumber = comandaNumber.trim();
     if (!currentNumber) {
+      showNotice('Nenhuma comanda ativa para manter aberta.', 'warning');
+      focusProductSearchInput();
       return;
     }
 
     const groupedItems = groupCashierItemsByComanda(currentNumber, joinedComandaNumbers, cartItems);
+    const returnedComandas = groupedItems.map<ActiveComandaEntry>((group) => {
+      const existingEntry = openComandas.find((entry) => entry.numero === group.numero);
+      return {
+        numero: group.numero,
+        origem: existingEntry?.origem ?? 'CAIXA',
+        status: existingEntry?.status ?? 'PRONTA_PARA_CAIXA'
+      };
+    });
+    const nextOpenComandas = sortComandasByNumero([
+      ...new Map([
+        ...openComandas.map((entry) => [entry.numero, entry] as const),
+        ...returnedComandas.map((entry) => [entry.numero, entry] as const)
+      ]).values()
+    ]);
+
     for (const group of groupedItems) {
       const items = mapCashierCartToComandaItems(group.items);
       upsertComandaItems(group.numero, items);
@@ -626,6 +831,12 @@ export function CashierPage() {
     setPendingAction(null);
     setIsOpenComandasPanelOpen(false);
     setIsCancelSelectionMode(false);
+    setIsCashierKeyboardVisible(false);
+    setOpenComandas(nextOpenComandas);
+    setOpenComandasCount(nextOpenComandas.length);
+    void refreshComandaIndicators().catch(() => {
+      // Os indicadores locais ja foram atualizados; o backend pode estar temporariamente indisponivel.
+    });
     focusProductSearchInput();
     const involvedNumbers = [currentNumber, ...joinedComandaNumbers];
     showNotice(
@@ -709,10 +920,20 @@ export function CashierPage() {
 
     const mergedOpenComandas = mergeOpenComandas(payload.comandas);
     const totalOpen = mergedOpenComandas.length;
-    const totalClosed = payload.comandas.filter((comanda) => COUNTABLE_CLOSED_COMANDA_STATUSES.includes(comanda.status)).length;
+    const backendClosedNumbers = new Set(
+      payload.comandas
+        .filter((comanda) => COUNTABLE_CLOSED_COMANDA_STATUSES.includes(comanda.status))
+        .map((comanda) => comanda.numero)
+    );
+    const localCancelledNumbers = listLocallyCancelledComandaNumbers()
+      .filter((numero) => !backendClosedNumbers.has(numero));
+    const totalClosed = backendClosedNumbers.size + localCancelledNumbers.length;
 
     for (const closedComanda of payload.comandas.filter((comanda) => NON_OPEN_COMANDA_STATUSES.includes(comanda.status))) {
       removeComandaCacheEntry(closedComanda.numero);
+      if (closedComanda.status === 'CANCELADA') {
+        markComandaLocallyCancelled(closedComanda.numero, 'cancelada_no_backend');
+      }
     }
 
     setOpenComandas(mergedOpenComandas);
@@ -815,6 +1036,13 @@ export function CashierPage() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isCashierKeyboardVisible) {
+        event.preventDefault();
+        setIsCashierKeyboardVisible(false);
+        focusProductSearchInput();
+        return;
+      }
+
       if (event.key === 'F2') {
         event.preventDefault();
         openPayment();
@@ -824,6 +1052,12 @@ export function CashierPage() {
       if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'u') {
         event.preventDefault();
         openJoinComandasPanel();
+        return;
+      }
+
+      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'x') {
+        event.preventDefault();
+        leaveCurrentComandaOpen();
         return;
       }
 
@@ -856,9 +1090,14 @@ export function CashierPage() {
         return;
       }
 
-      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'c' && comandaNumber.trim()) {
+      if (event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'c') {
         event.preventDefault();
-        leaveCurrentComandaOpen();
+        if (view !== 'pos') {
+          setView('pos');
+        }
+
+        setIsCashierKeyboardVisible(true);
+        focusProductSearchInput();
         return;
       }
 
@@ -909,13 +1148,7 @@ export function CashierPage() {
       return;
     }
 
-    for (const group of groupCashierItemsByComanda(numero, joinedComandaNumbers, cartItems)) {
-      const items = mapCashierCartToComandaItems(group.items);
-      upsertComandaItems(group.numero, items);
-      void saveComandaItemsToBackend(group.numero, items, 'caixa_items_sync').catch(() => {
-        // O cache local continua como contingencia para queda temporaria.
-      });
-    }
+    void persistCashierCartSnapshot(cartItems, 'caixa_items_sync');
   }, [cartItems, comandaNumber, joinedComandaNumbers]);
 
   useEffect(() => {
@@ -1438,9 +1671,26 @@ export function CashierPage() {
                 </div>
               )}
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500">Comandas fechadas</p>
-              <p className="text-4xl font-black text-sky-600 leading-none">{closedComandasCount.toLocaleString('pt-BR')}</p>
+            <div className="flex items-start gap-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Comandas fechadas</p>
+                <p className="text-4xl font-black text-sky-600 leading-none">{closedComandasCount.toLocaleString('pt-BR')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={leaveCurrentComandaOpen}
+                disabled={!hasActiveComanda}
+                aria-label="Manter comanda aberta"
+                title="Manter comanda aberta (Ctrl+X)"
+                className="
+                  inline-flex h-11 w-11 items-center justify-center rounded-xl border border-sky-200
+                  bg-sky-50 text-sky-700 shadow-sm transition-colors
+                  hover:border-sky-300 hover:bg-sky-100
+                  disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300
+                "
+              >
+                <CornerUpLeft size={18} aria-hidden="true" />
+              </button>
             </div>
           </div>
         </div>
@@ -1519,7 +1769,7 @@ export function CashierPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── LEFT 60%: busca + categorias + grid ────────────────────────────── */}
-      <main className={`${view === 'cashclose' ? 'w-full' : 'w-[60%]'} bg-slate-50/80 flex flex-col overflow-hidden ${view === 'cashclose' ? '' : 'border-r border-slate-200'}`}>
+      <main className={`${view === 'cashclose' ? 'w-full' : 'w-[60%]'} relative bg-slate-50/80 flex flex-col overflow-hidden ${view === 'cashclose' ? '' : 'border-r border-slate-200'}`}>
 
         {view === 'cashclose' ? (
           <CashRegisterClose
@@ -1552,9 +1802,22 @@ export function CashierPage() {
                 keepFocused
                 placeholder={isJoinMode
                   ? `Juntar com a #${comandaNumber}: digite ou leia outra comanda e pressione Enter`
+                  : comandaNumber.trim()
+                    ? 'Digite para buscar produto e pressione Enter para adicionar'
                   : 'Digite ou leia a comanda (número/código) e pressione Enter'}
               />
             </div>
+
+            {isCashierKeyboardVisible && (
+              <CashierVirtualKeyboard
+                onKeyPress={handleCashierVirtualKeyboardKeyPress}
+                enterLabel={comandaNumber.trim() && !isJoinMode ? 'Adicionar' : 'Enter'}
+                onClose={() => {
+                  setIsCashierKeyboardVisible(false);
+                  focusProductSearchInput();
+                }}
+              />
+            )}
 
             {/* ── CategoryTabs ───────────────────────────────────── */}
             <div className="px-5 pb-3 shrink-0">
@@ -1589,6 +1852,7 @@ export function CashierPage() {
             onDecrement={decrementItem}
             onRemove={requestRemoveItem}
             onRefreshComanda={refreshCurrentComanda}
+            isComandaSyncing={isComandaItemsSyncing}
             onReceive={openPayment}
             onCashClose={() => {
               setCashCloseInitialTab('MENU');
