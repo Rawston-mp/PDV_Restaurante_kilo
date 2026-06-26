@@ -52,6 +52,8 @@ const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
 const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
 
 const parseNumero = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+const isReusableClosedComandaStatus = (status?: string) =>
+  status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'ARQUIVADA';
 
 const parseLockOwner = (value: unknown): ComandaLockOwner | null => {
   if (typeof value !== 'string') {
@@ -282,7 +284,9 @@ app.post('/comandas/abrir', (req, res) => {
   const numero = parseNumero(req.body?.numero) || 'LEGACY_MAIN';
 
   try {
+    const before = comandaService.get(numero);
     const comanda = comandaService.open(numero);
+    const reused = isReusableClosedComandaStatus(before?.status);
 
     void persistComandas();
     void appendComandaAudit({
@@ -296,7 +300,8 @@ app.post('/comandas/abrir', (req, res) => {
       ok: true,
       comandaAtiva: true,
       comandaNumero: comanda.numero,
-      status: comanda.status
+      status: comanda.status,
+      reused
     });
   } catch (error) {
     res.status(400).json({
@@ -320,7 +325,9 @@ app.post('/api/v1/comandas', (req, res) => {
   }
 
   try {
+    const before = comandaService.get(numero);
     const comanda = comandaService.open(numero);
+    const reused = isReusableClosedComandaStatus(before?.status);
     void persistComandas();
     void appendComandaAudit({
       action: 'OPEN_COMANDA',
@@ -331,7 +338,8 @@ app.post('/api/v1/comandas', (req, res) => {
 
     res.status(201).json({
       ok: true,
-      comanda
+      comanda,
+      reused
     });
   } catch (error) {
     res.status(400).json({

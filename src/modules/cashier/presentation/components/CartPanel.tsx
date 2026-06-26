@@ -10,6 +10,7 @@ type CartPanelProps = {
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
   onRefreshComanda: () => void;
+  isComandaSyncing?: boolean;
   onReceive: () => void;
   onCashClose: () => void;
 };
@@ -22,6 +23,7 @@ export function CartPanel({
   onDecrement,
   onRemove,
   onRefreshComanda,
+  isComandaSyncing = false,
   onReceive,
   onCashClose,
 }: CartPanelProps) {
@@ -90,14 +92,16 @@ export function CartPanel({
         <button
           type="button"
           onClick={onRefreshComanda}
+          disabled={isComandaSyncing}
           className="
             w-full h-11 rounded-xl
             border border-slate-300 bg-slate-50 hover:bg-slate-100
+            disabled:cursor-wait disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400
             text-slate-700 text-sm font-semibold
             transition-colors duration-150
           "
         >
-          Atualizar comanda
+          {isComandaSyncing ? 'Salvando comanda...' : 'Atualizar comanda'}
         </button>
 
         <button
