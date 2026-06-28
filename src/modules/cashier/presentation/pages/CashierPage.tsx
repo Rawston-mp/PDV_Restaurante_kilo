@@ -288,7 +288,8 @@ const groupCashierItemsByComanda = (
   }));
 };
 
-const extractComandaNumber = (raw: string) => {
+const extractComandaNumber = (raw: string, options: { allowBareNumber?: boolean } = {}) => {
+  const { allowBareNumber = true } = options;
   const input = raw.trim();
   if (!input) {
     return null;
@@ -300,7 +301,7 @@ const extractComandaNumber = (raw: string) => {
   }
 
   const digitsOnly = input.match(/^\d{1,12}$/);
-  if (digitsOnly) {
+  if (allowBareNumber && digitsOnly) {
     return digitsOnly[0];
   }
 
@@ -712,17 +713,24 @@ export function CashierPage() {
     }
 
     const trimmedValue = rawValue.trim();
-    if (comandaNumber.trim()) {
-      if (!trimmedValue) {
-        return;
-      }
+    if (!trimmedValue) {
+      return;
+    }
 
-      const productToAdd = filteredProducts[0];
-      if (!productToAdd) {
-        showNotice(`Nenhum produto encontrado para "${trimmedValue}".`, 'warning');
-        return;
-      }
+    const explicitComandaFromInput = extractComandaNumber(rawValue, { allowBareNumber: false });
+    if (!comandaNumber.trim() && explicitComandaFromInput) {
+      void loadComandaIntoCashier(explicitComandaFromInput);
+      return;
+    }
 
+    const normalizedInput = normalizeSearchText(trimmedValue);
+    const visibleProducts = catalogProducts.filter((product) => !product.isHidden);
+    const exactProduct = visibleProducts.find((product) => {
+      const exactFields = [product.productCode, product.barcode, product.name].filter(Boolean);
+      return exactFields.some((field) => normalizeSearchText(String(field)) === normalizedInput);
+    });
+    const productToAdd = exactProduct ?? (!/^\d{1,12}$/.test(trimmedValue) ? filteredProducts[0] : undefined);
+    if (productToAdd) {
       addProduct(productToAdd);
       setQuery('');
       focusProductSearchInput();
@@ -730,11 +738,12 @@ export function CashierPage() {
     }
 
     const comandaFromInput = extractComandaNumber(rawValue);
-    if (!comandaFromInput) {
+    if (comandaFromInput && !comandaNumber.trim()) {
+      void loadComandaIntoCashier(comandaFromInput);
       return;
     }
 
-    void loadComandaIntoCashier(comandaFromInput);
+    showNotice(`Nenhum produto encontrado para "${trimmedValue}".`, 'warning');
   };
 
   const handleCashierVirtualKeyboardKeyPress = (key: string) => {
@@ -1218,6 +1227,10 @@ export function CashierPage() {
       total: item.quantity * item.unitPrice
     }));
     const receiptComandaNumbers = [...new Set([comandaNumber.trim(), ...joinedComandaNumbers].filter(Boolean))];
+    const receiptIdentificationLabel = receiptComandaNumbers.length > 1 ? 'Comandas' : 'Atendimento';
+    const receiptIdentificationValue = receiptComandaNumbers.length > 0
+      ? receiptComandaNumbers.map((numero) => `#${numero}`).join(' + ')
+      : 'Venda avulsa';
     const discountFactor = subtotal > 0 ? payableTotal / subtotal : 0;
     const chargedTaxes = receiptItems.reduce((sum, item) => {
       const combinedRate = parseTaxRate(item.aliqIcms) + parseTaxRate(item.aliqPis) + parseTaxRate(item.aliqCofins);
@@ -1319,7 +1332,7 @@ export function CashierPage() {
 
             <div class="section">
               <div class="section-title">Identificação</div>
-              <div class="row"><span>${receiptComandaNumbers.length > 1 ? 'Comandas' : 'Atendimento'}</span><strong>${escapeHtml(receiptComandaNumbers.map((numero) => `#${numero}`).join(' + '))}</strong></div>
+              <div class="row"><span>${receiptIdentificationLabel}</span><strong>${escapeHtml(receiptIdentificationValue)}</strong></div>
               <div class="row"><span>Operador</span><strong>${escapeHtml(user?.name ?? 'Não autenticado')}</strong></div>
             </div>
 
@@ -1488,8 +1501,13 @@ export function CashierPage() {
   const closeComandaAtCashier = async (documentMode: PaymentDocumentMode) => {
     const numero = comandaNumber.trim();
     if (!numero) {
-      showNotice('Informe ou selecione uma comanda antes de fechar o pagamento.', 'error');
-      return false;
+      showNotice(
+        documentMode === 'ORCAMENTO'
+          ? 'Venda avulsa fechada como orçamento não fiscal.'
+          : 'Venda avulsa fechada como venda NFC-e.',
+        'success'
+      );
+      return true;
     }
 
     const numeros = [...new Set([numero, ...joinedComandaNumbers].filter(Boolean))];
@@ -1547,7 +1565,7 @@ export function CashierPage() {
     const currentComandaNumber = [comandaNumber.trim(), ...joinedComandaNumbers]
       .filter(Boolean)
       .map((numero) => `#${numero}`)
-      .join(' + ');
+      .join(' + ') || 'avulso';
     const payableTotal = Math.max(0, subtotal - discountAmount);
     const isFiadoFlow = Boolean(fiadoClientId) || payments.some((payment) => payment.method === 'FIADO');
     const finalDocumentMode: PaymentDocumentMode = isFiadoFlow ? 'ORCAMENTO' : documentMode;
@@ -1650,7 +1668,7 @@ export function CashierPage() {
                             <button
                               type="button"
                               onClick={() => {
-                                handleSmartInputSubmit(entry.numero);
+                                void loadComandaIntoCashier(entry.numero);
                                 setIsOpenComandasPanelOpen(false);
                               }}
                               className="flex flex-1 items-center justify-between text-left hover:text-sky-700"
@@ -1818,7 +1836,7 @@ export function CashierPage() {
                   ? `Juntar com a #${comandaNumber}: digite ou leia outra comanda e pressione Enter`
                   : comandaNumber.trim()
                     ? 'Digite para buscar produto e pressione Enter para adicionar'
-                  : 'Digite ou leia a comanda (número/código) e pressione Enter'}
+                    : 'Digite produto, código ou comanda e pressione Enter'}
               />
             </div>
 
