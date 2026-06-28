@@ -251,7 +251,7 @@ const isFilled = (value: string) => value.trim().length > 0;
 export function ProductsPage() {
   const { products, setProducts, reload } = useProductsQuery();
   const { createProduct, saving } = useCreateProduct();
-  const { user } = useAuth();
+  const { can } = useAuth();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -295,7 +295,7 @@ export function ProductsPage() {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const canEditOrDelete = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
+  const canEditOrDelete = can('products:manage');
   const isNewCadastro = editingProductId === null;
 
   const getNumericInputValue = (value: number) => {

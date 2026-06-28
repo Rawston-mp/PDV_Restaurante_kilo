@@ -1,4 +1,5 @@
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { DashboardPage } from '@/modules/orders/presentation/pages/DashboardPage';
 import { NewOrderPage } from '@/modules/orders/presentation/pages/NewOrderPage';
@@ -17,10 +18,17 @@ const FLUSH_ROUTES = ['/caixa', '/comanda'];
 export function App() {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isScaleTerminal = user?.role === 'COMANDA_A' || user?.role === 'COMANDA_B';
   const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
-  const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
+  const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
+
+  useEffect(() => {
+    if (isScaleTerminal && !location.pathname.startsWith('/comanda')) {
+      navigate('/comanda', { replace: true });
+    }
+  }, [isScaleTerminal, location.pathname, navigate]);
 
   return (
     <div className="layout">
@@ -84,7 +92,7 @@ export function App() {
           <Route
             path="/cadastro"
             element={
-              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA']}>
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE']}>
                 <CadastroPage />
               </RequireRole>
             }

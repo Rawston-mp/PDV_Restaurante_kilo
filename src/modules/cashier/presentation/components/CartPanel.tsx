@@ -29,7 +29,12 @@ export function CartPanel({
 }: CartPanelProps) {
   const subtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
   const totalItems = items.reduce((acc, i) => acc + (i.unit === 'KG' ? 1 : i.quantity), 0);
-  const checkoutNumbers = [comandaNumber, ...joinedComandaNumbers].filter(Boolean);
+  const checkoutNumbers = [comandaNumber.trim(), ...joinedComandaNumbers.map((numero) => numero.trim())].filter(Boolean);
+  const attendanceLabel = checkoutNumbers.length > 1
+    ? `Comandas ${checkoutNumbers.map((numero) => `#${numero}`).join(' + ')}`
+    : checkoutNumbers.length === 1
+      ? `Atendimento #${checkoutNumbers[0]}`
+      : 'Venda avulsa';
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -73,9 +78,7 @@ export function CartPanel({
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="border-t border-slate-200 px-5 pt-4 pb-5 space-y-2.5">
         <div className="mb-1 text-sm text-slate-500">
-          {checkoutNumbers.length > 1
-            ? `Comandas ${checkoutNumbers.map((numero) => `#${numero}`).join(' + ')}`
-            : `Atendimento #${comandaNumber}`}
+          {attendanceLabel}
         </div>
         <div className="flex justify-between text-xl text-slate-500">
           <span>Subtotal</span>
@@ -89,20 +92,22 @@ export function CartPanel({
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={onRefreshComanda}
-          disabled={isComandaSyncing}
-          className="
-            w-full h-11 rounded-xl
-            border border-slate-300 bg-slate-50 hover:bg-slate-100
-            disabled:cursor-wait disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400
-            text-slate-700 text-sm font-semibold
-            transition-colors duration-150
-          "
-        >
-          {isComandaSyncing ? 'Salvando comanda...' : 'Atualizar comanda'}
-        </button>
+        {checkoutNumbers.length > 0 && (
+          <button
+            type="button"
+            onClick={onRefreshComanda}
+            disabled={isComandaSyncing}
+            className="
+              w-full h-11 rounded-xl
+              border border-slate-300 bg-slate-50 hover:bg-slate-100
+              disabled:cursor-wait disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400
+              text-slate-700 text-sm font-semibold
+              transition-colors duration-150
+            "
+          >
+            {isComandaSyncing ? 'Salvando comanda...' : 'Atualizar comanda'}
+          </button>
+        )}
 
         <button
           type="button"

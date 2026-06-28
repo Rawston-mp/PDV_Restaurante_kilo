@@ -75,7 +75,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter');
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter');
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -148,7 +148,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter');
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter');
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -222,7 +222,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -292,7 +292,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -368,7 +368,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -409,7 +409,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     expect(screen.queryByRole('region', { name: 'Teclado virtual do caixa' })).toBeNull();
 
     fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
@@ -421,6 +421,64 @@ describe('Carregamento da comanda no caixa', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(screen.queryByRole('region', { name: 'Teclado virtual do caixa' })).toBeNull();
+  });
+
+  it('permite venda avulsa no caixa sem abrir comanda', async () => {
+    productsQueryMock.products = [{
+      id: 'product-gelatina',
+      productCode: '43',
+      name: 'Gelatina',
+      category: 'Sobremesa',
+      price: 3,
+      byWeight: false,
+      stock: 10,
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z')
+    }];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+
+      if (url.endsWith('/api/v1/comandas') && method === 'GET') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, comandas: [] }), { status: 200 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'open').mockReturnValue(null);
+
+    render(<CashierPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar Gelatina' }));
+
+    expect(await screen.findByRole('button', { name: 'Aumentar Gelatina' })).toBeTruthy();
+    expect(screen.getByText('Venda avulsa')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Atualizar comanda' })).toBeNull();
+
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'gel' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(await screen.findByText('2 un · R$ 3,00 / un')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Receber' }));
+    expect(await screen.findByText('Forma de Pagamento')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const paymentsPanel = (await screen.findByText('Pagamentos')).closest('div');
+    expect(paymentsPanel).toBeTruthy();
+    expect(within(paymentsPanel as HTMLElement).getByText('Dinheiro')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    expect(await screen.findByText('Venda avulsa fechada como orçamento não fiscal.')).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([request, options]) => {
+      const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
+      return url.endsWith('/api/v1/comandas/close-batch') && options?.method === 'POST';
+    })).toBe(false);
   });
 
   it('adiciona produto pesquisado pelo teclado virtual sem trocar a comanda aberta', async () => {
@@ -458,7 +516,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const comandaInput = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const comandaInput = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(comandaInput, { target: { value: '1' } });
     fireEvent.keyDown(comandaInput, { key: 'Enter' });
 
@@ -544,7 +602,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter');
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter');
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -624,7 +682,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -636,7 +694,7 @@ describe('Carregamento da comanda no caixa', () => {
     expect(screen.getByText('Sem comanda')).toBeTruthy();
     expect(screen.queryByText('Filé de Frango')).toBeNull();
 
-    const inputAfterCancel = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const inputAfterCancel = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(inputAfterCancel, { target: { value: '1' } });
     fireEvent.keyDown(inputAfterCancel, { key: 'Enter' });
 
@@ -698,7 +756,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -747,7 +805,7 @@ describe('Carregamento da comanda no caixa', () => {
 
     render(<CashierPage />);
 
-    const input = screen.getByPlaceholderText('Digite ou leia a comanda (número/código) e pressione Enter');
+    const input = screen.getByPlaceholderText('Digite produto, código ou comanda e pressione Enter');
     fireEvent.change(input, { target: { value: '1' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(await screen.findByText('Self-Service')).toBeTruthy();
