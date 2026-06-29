@@ -19,7 +19,7 @@ describe('Cashier access', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByLabelText('Perfil'), { target: { value: 'CAIXA' } });
+    fireEvent.change(screen.getByLabelText('Usuário'), { target: { value: 'CAIXA' } });
     fireEvent.change(screen.getByLabelText('Senha'), { target: { value: '2025' } });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
@@ -37,7 +37,7 @@ describe('Cashier access', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByLabelText('Perfil'), { target: { value: 'CAIXA' } });
+    fireEvent.change(screen.getByLabelText('Usuário'), { target: { value: 'CAIXA' } });
     fireEvent.change(screen.getByLabelText('Senha'), { target: { value: '2025' } });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 

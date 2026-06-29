@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
+import {
+  readStoreSettings,
+  roleCanAccessStore,
+  type StoreSettings
+} from '@/modules/admin/infrastructure/local/platformSettings';
 
 const roleLabel: Record<Role, string> = {
   ADMIN: 'Admin',
@@ -12,18 +17,43 @@ const roleLabel: Record<Role, string> = {
   COMANDA_B: 'Balança B'
 };
 
+const getStoreDisplayName = (store: StoreSettings) => store.tradeName || store.name;
+
 export function AuthAccessPanel() {
   const { user, signInWithPassword, signOut, availableRoles } = useAuth();
 
   const [role, setRole] = useState<Role>('CAIXA');
+  const [stores, setStores] = useState<StoreSettings[]>(readStoreSettings);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const accessibleStores = useMemo(
+    () => stores.filter((store) => roleCanAccessStore(role, store)),
+    [role, stores]
+  );
+  const selectedStore = accessibleStores.find((store) => store.id === selectedStoreId) ?? null;
+
+  useEffect(() => {
+    if (!user) {
+      setStores(readStoreSettings());
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedStore && accessibleStores.some((store) => store.id === selectedStore.id)) {
+      return;
+    }
+
+    const firstStore = accessibleStores[0];
+    setSelectedStoreId(firstStore?.id ?? '');
+  }, [accessibleStores, selectedStore]);
+
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    const result = signInWithPassword(role, password);
+    const result = signInWithPassword(role, password, selectedStoreId);
     setMessage(result.message);
 
     if (result.success) {
@@ -37,7 +67,7 @@ export function AuthAccessPanel() {
         <p className="auth-sidebar-label">Usuário logado</p>
         <strong>{user.name}</strong>
         <span>{roleLabel[user.role]}</span>
-        <span>Logado em: {roleLabel[user.role]}</span>
+        <span>Loja: {user.storeName ?? 'Sem loja'}</span>
 
         <button
           type="button"
@@ -64,12 +94,40 @@ export function AuthAccessPanel() {
 
         <div className="auth-panel-header">
           <strong>Acessar o sistema</strong>
-          <span>Selecione seu perfil e informe o PIN</span>
+          <span>Selecione a loja, o usuário e informe o PIN</span>
         </div>
 
-        <form onSubmit={onSubmit} className="auth-form">
-          <label htmlFor="role">Perfil</label>
-          <select id="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
+        <form onSubmit={onSubmit} className="auth-form" autoComplete="off">
+          <label htmlFor="store-select">Loja</label>
+          <select
+            id="store-select"
+            value={selectedStoreId}
+            onChange={(event) => {
+              setSelectedStoreId(event.target.value);
+              setMessage(null);
+            }}
+            disabled={accessibleStores.length === 0}
+          >
+            {accessibleStores.length === 0 ? (
+              <option value="">Nenhuma loja vinculada</option>
+            ) : (
+              accessibleStores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {getStoreDisplayName(store)}
+                </option>
+              ))
+            )}
+          </select>
+
+          <label htmlFor="role">Usuário</label>
+          <select
+            id="role"
+            value={role}
+            onChange={(event) => {
+              setRole(event.target.value as Role);
+              setSelectedStoreId('');
+            }}
+          >
             {availableRoles.map((option) => (
               <option key={option} value={option}>
                 {roleLabel[option]}
@@ -85,6 +143,7 @@ export function AuthAccessPanel() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Digite o PIN"
+              autoComplete="new-password"
               required
             />
             <button
@@ -98,7 +157,7 @@ export function AuthAccessPanel() {
             </button>
           </div>
 
-          <button type="submit" className="auth-submit">Entrar</button>
+          <button type="submit" className="auth-submit" disabled={!selectedStoreId}>Entrar</button>
         </form>
 
         {message && <p className="auth-message">{message}</p>}

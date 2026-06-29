@@ -1701,8 +1701,9 @@ body {
 
 .admin-grid {
     display: grid;
-    grid-template-columns: minmax(320px, 420px) 1fr;
+    grid-template-columns: 1fr;
     gap: 1rem;
+    align-items: start;
 }
 
 .admin-kpis h3,
@@ -1715,6 +1716,7 @@ body {
     padding: 0;
     list-style: none;
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 0.6rem;
 }
 
@@ -1753,6 +1755,296 @@ body {
     background: #f0f9ff;
     color: #0c4a6e;
     padding: 0.65rem 0.75rem;
+}
+
+.admin-config-card {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 1rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.admin-config-header,
+.admin-config-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.admin-config-header>div,
+.admin-config-section-title>div {
+    min-width: 0;
+}
+
+.admin-config-header h3,
+.admin-config-section h4 {
+    margin: 0;
+}
+
+.admin-config-header>span {
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 0.32rem 0.62rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.admin-config-toolbar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.65rem;
+    align-items: end;
+}
+
+.admin-config-toolbar label {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.82rem;
+    color: #475569;
+    min-width: 0;
+}
+
+.admin-config-toolbar input,
+.admin-config-toolbar select,
+.admin-config-form input,
+.admin-config-form select {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+}
+
+.admin-store-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.admin-store-pills button {
+    min-height: 36px;
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border-radius: 999px;
+    padding: 0.38rem 0.7rem;
+}
+
+.admin-store-pills button.is-selected {
+    border-color: #0f766e;
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+.admin-config-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-config-section {
+    display: grid;
+    gap: 0.7rem;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 0.85rem;
+    min-width: 0;
+}
+
+.admin-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.admin-config-grid input,
+.admin-config-grid select {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+}
+
+.admin-address-grid {
+    grid-template-columns: minmax(100px, 0.7fr) minmax(220px, 1.5fr) minmax(90px, 0.55fr) minmax(150px, 1fr);
+}
+
+.admin-config-grid label {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.82rem;
+    color: #334155;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.admin-inline-check {
+    display: inline-flex !important;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.45rem !important;
+    min-height: 38px;
+}
+
+.admin-inline-check input {
+    width: auto !important;
+    min-height: auto !important;
+}
+
+.admin-role-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    gap: 0.45rem 0.7rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    padding: 0.75rem;
+    background: #f8fbff;
+}
+
+.admin-role-grid label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #1f2937;
+    font-size: 0.88rem;
+}
+
+.admin-help-text {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.admin-status-badge {
+    border-radius: 999px;
+    padding: 0.26rem 0.56rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.admin-status-badge.is-ativo {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.admin-status-badge.is-inativo {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.admin-status-badge.is-erro {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.admin-test-row {
+    display: grid;
+    grid-template-columns: minmax(180px, auto) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.admin-test-row span {
+    color: #475569;
+    font-size: 0.82rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-peripheral-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border-color: #bfdbfe;
+}
+
+.admin-peripheral-toolbar {
+    grid-template-columns: minmax(220px, 360px) auto minmax(0, 1fr);
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 0.75rem;
+}
+
+.admin-peripheral-toolbar button {
+    min-width: 180px;
+    justify-self: start;
+}
+
+.admin-peripheral-section {
+    border: 1px solid #dbeafe;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 0.9rem;
+}
+
+.admin-add-peripheral-button {
+    min-width: 170px;
+}
+
+.admin-scale-list {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.admin-scale-item {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    padding: 0.8rem;
+    min-width: 0;
+}
+
+.admin-scale-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.admin-scale-item-header>div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+.admin-scale-item-header strong {
+    color: #0f172a;
+}
+
+.admin-scale-item-header span:not(.admin-status-badge) {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.admin-peripheral-grid {
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.admin-scale-grid {
+    grid-template-columns: minmax(170px, 0.9fr) repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.admin-peripheral-grid .admin-inline-check {
+    align-self: end;
+    min-height: 38px;
+    border: 1px dashed #bfdbfe;
+    border-radius: 10px;
+    background: #f8fbff;
+    padding: 0.5rem 0.6rem;
+}
+
+.admin-peripheral-test-row {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.7rem;
 }
 
 .admin-pin-form {
@@ -1817,6 +2109,47 @@ body {
     border-color: rgba(239, 68, 68, 0.5);
     background: #fee2e2;
     color: #991b1b;
+}
+
+.admin-fiscal-settings {
+    grid-column: 1 / -1;
+    border-color: #fed7aa;
+    background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+}
+
+.admin-fiscal-section {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+    background: #fffaf5;
+    padding: 0.9rem;
+}
+
+.admin-fiscal-section h4 {
+    margin: 0;
+    color: #c2410c;
+}
+
+.admin-fiscal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-fiscal-grid label {
+    display: grid;
+    gap: 0.28rem;
+    color: #7c2d12;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.admin-fiscal-grid input,
+.admin-fiscal-grid select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
 }
 
 .admin-table-wrap {
@@ -2010,6 +2343,12 @@ body {
     background: linear-gradient(120deg, #10b981 0%, #14b8a6 100%);
     font-size: 1.12rem;
     font-weight: 700;
+}
+
+.auth-submit:disabled {
+    cursor: not-allowed;
+    background: #334155;
+    color: #94a3b8;
 }
 
 .auth-logout {
@@ -3736,6 +4075,13 @@ body {
     .admin-audit-filters {
         grid-template-columns: 1fr;
     }
+    .admin-address-grid,
+    .admin-role-grid {
+        grid-template-columns: 1fr;
+    }
+    .admin-test-row {
+        grid-template-columns: 1fr;
+    }
     .suppliers-row-3,
     .suppliers-row-2-wide,
     .suppliers-row-address-top,
@@ -3831,6 +4177,28 @@ body {
     }
     .sensitive-modal-actions {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .admin-config-toolbar,
+    .admin-config-grid,
+    .admin-fiscal-grid,
+    .admin-address-grid,
+    .admin-role-grid,
+    .admin-peripheral-toolbar,
+    .admin-test-row {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-config-header,
+    .admin-config-section-title {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .admin-peripheral-toolbar button {
+        width: 100%;
     }
 }
 

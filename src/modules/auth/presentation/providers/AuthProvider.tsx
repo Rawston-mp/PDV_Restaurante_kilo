@@ -11,6 +11,11 @@ import {
   verifySensitivePin,
   type PinKind
 } from '@/modules/auth/infrastructure/local/pinPolicy';
+import {
+  findStoreSettingById,
+  getStoreSettingsForRole,
+  roleCanAccessStore
+} from '@/modules/admin/infrastructure/local/platformSettings';
 import { logInfo, logWarn } from '@/shared/infrastructure/logging/structuredLogger';
 
 export type SensitiveAction = 'CLOSE_COMANDA' | 'CANCEL_ORDER';
@@ -26,7 +31,7 @@ type ChangePinInput = {
 type AuthContextValue = {
   user: User | null;
   signInAs: (user: User) => void;
-  signInWithPassword: (role: Role, password: string) => { success: boolean; message: string };
+  signInWithPassword: (role: Role, password: string, storeId?: string) => { success: boolean; message: string };
   confirmSensitiveAction: (
     action: SensitiveAction,
     password: string
@@ -55,6 +60,8 @@ const roleNames: Record<Role, string> = {
   COMANDA_A: 'Balança A',
   COMANDA_B: 'Balança B'
 };
+
+const getStoreDisplayName = (store: { name: string; tradeName?: string }) => store.tradeName || store.name;
 
 const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];
 
@@ -125,12 +132,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser);
         persistUser(nextUser);
       },
-      signInWithPassword: (role: Role, password: string) => {
+      signInWithPassword: (role: Role, password: string, storeId?: string) => {
+        const selectedStore = storeId ? findStoreSettingById(storeId) : getStoreSettingsForRole(role)[0] ?? null;
+
+        if (!selectedStore) {
+          logWarn({
+            event: 'AUTH_LOGIN_DENIED',
+            module: 'auth',
+            details: { role, reason: 'STORE_NOT_FOUND' }
+          });
+
+          return {
+            success: false,
+            message: 'Selecione uma loja ativa para acessar o sistema.'
+          };
+        }
+
+        if (!roleCanAccessStore(role, selectedStore)) {
+          logWarn({
+            event: 'AUTH_LOGIN_DENIED',
+            module: 'auth',
+            details: { role, storeId: selectedStore.id, reason: 'STORE_ROLE_NOT_LINKED' }
+          });
+
+          return {
+            success: false,
+            message: `Perfil ${roleNames[role]} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
+          };
+        }
+
         if (!verifyLoginPin(role, password)) {
           logWarn({
             event: 'AUTH_LOGIN_DENIED',
             module: 'auth',
-            details: { role }
+            details: { role, storeId: selectedStore.id }
           });
 
           return {
@@ -142,7 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nextUser: User = {
           id: `u-${role.toLowerCase()}`,
           name: roleNames[role],
-          role
+          role,
+          storeId: selectedStore.id,
+          storeName: getStoreDisplayName(selectedStore)
         };
 
         setUser(nextUser);
@@ -151,12 +188,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logInfo({
           event: 'AUTH_LOGIN_SUCCESS',
           module: 'auth',
-          details: { role }
+          details: { role, storeId: selectedStore.id }
         });
 
         return {
           success: true,
-          message: `Acesso liberado: ${roleNames[role]}.`
+          message: `Acesso liberado: ${roleNames[role]} em ${getStoreDisplayName(selectedStore)}.`
         };
       },
       confirmSensitiveAction: (action: SensitiveAction, password: string) => {

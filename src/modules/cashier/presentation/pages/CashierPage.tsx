@@ -1212,7 +1212,12 @@ export function CashierPage() {
 
   const subtotal = cartItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
-  const printReceipt = (payments: PaymentEntry[], discountAmount = 0, documentMode: PaymentDocumentMode = 'NFCE') => {
+  const printReceipt = (
+    payments: PaymentEntry[],
+    discountAmount = 0,
+    documentMode: PaymentDocumentMode = 'NFCE',
+    customerDocument = ''
+  ) => {
     const opened = window.open('', '_blank', 'width=420,height=720');
     if (!opened) {
       return;
@@ -1231,6 +1236,10 @@ export function CashierPage() {
     const receiptIdentificationValue = receiptComandaNumbers.length > 0
       ? receiptComandaNumbers.map((numero) => `#${numero}`).join(' + ')
       : 'Venda avulsa';
+    const customerDocumentDigits = customerDocument.replace(/\D/g, '');
+    const customerDocumentHtml = documentMode === 'NFCE' && customerDocumentDigits
+      ? `<div class="row"><span>CPF/CNPJ cliente</span><strong>${escapeHtml(customerDocumentDigits)}</strong></div>`
+      : '';
     const discountFactor = subtotal > 0 ? payableTotal / subtotal : 0;
     const chargedTaxes = receiptItems.reduce((sum, item) => {
       const combinedRate = parseTaxRate(item.aliqIcms) + parseTaxRate(item.aliqPis) + parseTaxRate(item.aliqCofins);
@@ -1334,6 +1343,7 @@ export function CashierPage() {
               <div class="section-title">Identificação</div>
               <div class="row"><span>${receiptIdentificationLabel}</span><strong>${escapeHtml(receiptIdentificationValue)}</strong></div>
               <div class="row"><span>Operador</span><strong>${escapeHtml(user?.name ?? 'Não autenticado')}</strong></div>
+              ${customerDocumentHtml}
             </div>
 
             <div class="section">
@@ -1498,7 +1508,7 @@ export function CashierPage() {
     }
   };
 
-  const closeComandaAtCashier = async (documentMode: PaymentDocumentMode) => {
+  const closeComandaAtCashier = async (documentMode: PaymentDocumentMode, customerDocument = '') => {
     const numero = comandaNumber.trim();
     if (!numero) {
       showNotice(
@@ -1527,6 +1537,7 @@ export function CashierPage() {
       body: JSON.stringify({
         numeros,
         documentMode,
+        customerDocument: documentMode === 'NFCE' ? customerDocument.replace(/\D/g, '') : undefined,
         reason: numeros.length > 1 ? 'fechamento_comandas_unidas_caixa' : 'fechamento_caixa'
       })
     }).catch(() => null);
@@ -1561,7 +1572,7 @@ export function CashierPage() {
     return true;
   };
 
-  const handlePaymentConfirm = async ({ payments, fiadoClientId, discountAmount, documentMode }: PaymentConfirmPayload) => {
+  const handlePaymentConfirm = async ({ payments, fiadoClientId, discountAmount, documentMode, customerDocument }: PaymentConfirmPayload) => {
     const currentComandaNumber = [comandaNumber.trim(), ...joinedComandaNumbers]
       .filter(Boolean)
       .map((numero) => `#${numero}`)
@@ -1570,7 +1581,7 @@ export function CashierPage() {
     const isFiadoFlow = Boolean(fiadoClientId) || payments.some((payment) => payment.method === 'FIADO');
     const finalDocumentMode: PaymentDocumentMode = isFiadoFlow ? 'ORCAMENTO' : documentMode;
 
-    const closed = await closeComandaAtCashier(finalDocumentMode);
+    const closed = await closeComandaAtCashier(finalDocumentMode, customerDocument);
     if (!closed) {
       return;
     }
@@ -1621,7 +1632,7 @@ export function CashierPage() {
       return;
     }
 
-    printReceipt(payments, discountAmount, documentMode);
+    printReceipt(payments, discountAmount, finalDocumentMode, customerDocument);
     setCartItems([]);
     setComandaNumber('');
     setJoinedComandaNumbers([]);

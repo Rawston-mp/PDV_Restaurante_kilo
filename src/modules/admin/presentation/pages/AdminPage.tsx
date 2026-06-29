@@ -9,6 +9,8 @@ import {
   listSensitiveAuditEvents,
   type SensitiveAuditEvent
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
+import { StoreSettingsPanel } from '@/modules/admin/presentation/components/StoreSettingsPanel';
+import { PeripheralSettingsPanel } from '@/modules/admin/presentation/components/PeripheralSettingsPanel';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
@@ -33,6 +35,13 @@ const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLO
 const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
+const cnaeOptions = [
+  { value: '5611-2/01', label: '5611-2/01 - Restaurantes e similares' },
+  { value: '5611-2/02', label: '5611-2/02 - Lanchonetes, casas de chá, de sucos' },
+  { value: '5612-1/00', label: '5612-1/00 - Serviços ambulantes de alimentação' },
+  { value: '5620-1/01', label: '5620-1/01 - Fornecimento de alimentos preparados' },
+  { value: '5620-1/02', label: '5620-1/02 - Serviços de alimentação para eventos' }
+];
 
 const parseLegacyProductCode = (productName: string) => {
   const [firstChunk] = productName.split(' - ');
@@ -69,10 +78,20 @@ export function AdminPage() {
   const [certificateAlias, setCertificateAlias] = useState('');
   const [certificateCompanyName, setCertificateCompanyName] = useState('');
   const [certificateCnpj, setCertificateCnpj] = useState('');
+  const [certificateStateRegistration, setCertificateStateRegistration] = useState('');
+  const [certificateCnae, setCertificateCnae] = useState('');
+  const [certificateTaxRegime, setCertificateTaxRegime] = useState('');
+  const [certificateAddressLine1, setCertificateAddressLine1] = useState('');
+  const [certificateAddressLine2, setCertificateAddressLine2] = useState('');
+  const [certificateCityUf, setCertificateCityUf] = useState('');
   const [certificateModel, setCertificateModel] = useState<CertificateModel>('A1');
   const [certificateUf, setCertificateUf] = useState<string>('SP');
   const [certificateCscId, setCertificateCscId] = useState('');
   const [certificateCscCode, setCertificateCscCode] = useState('');
+  const [certificateNfceEnvironment, setCertificateNfceEnvironment] = useState<'HOMOLOGACAO' | 'PRODUCAO'>('HOMOLOGACAO');
+  const [certificateNfceSerie, setCertificateNfceSerie] = useState('1');
+  const [certificateNfceNextNumber, setCertificateNfceNextNumber] = useState('1');
+  const [certificateAccountingEmail, setCertificateAccountingEmail] = useState('');
   const [certificatePassword, setCertificatePassword] = useState('');
   const [certificateFileName, setCertificateFileName] = useState('');
   const [certificateFileSize, setCertificateFileSize] = useState<number | null>(null);
@@ -108,10 +127,20 @@ export function AdminPage() {
       setCertificateAlias(parsedSettings.alias);
       setCertificateCompanyName(parsedSettings.companyName);
       setCertificateCnpj(parsedSettings.cnpj);
+      setCertificateStateRegistration(parsedSettings.stateRegistration ?? '');
+      setCertificateCnae(parsedSettings.cnae ?? '');
+      setCertificateTaxRegime(parsedSettings.taxRegime ?? '');
+      setCertificateAddressLine1(parsedSettings.addressLine1 ?? '');
+      setCertificateAddressLine2(parsedSettings.addressLine2 ?? '');
+      setCertificateCityUf(parsedSettings.cityUf ?? '');
       setCertificateModel(parsedSettings.model);
       setCertificateUf(parsedSettings.uf);
       setCertificateCscId(parsedSettings.cscId);
       setCertificateCscCode(parsedSettings.cscCode);
+      setCertificateNfceEnvironment(parsedSettings.nfceEnvironment ?? 'HOMOLOGACAO');
+      setCertificateNfceSerie(parsedSettings.nfceSerie ?? '1');
+      setCertificateNfceNextNumber(parsedSettings.nfceNextNumber ?? '1');
+      setCertificateAccountingEmail(parsedSettings.accountingEmail ?? '');
       setCertificateFileName(parsedSettings.fileName);
       setCertificateFileSize(parsedSettings.fileSize);
       setCertificateFileExtension(parsedSettings.fileExtension);
@@ -216,10 +245,20 @@ export function AdminPage() {
     setCertificateAlias('');
     setCertificateCompanyName('');
     setCertificateCnpj('');
+    setCertificateStateRegistration('');
+    setCertificateCnae('');
+    setCertificateTaxRegime('');
+    setCertificateAddressLine1('');
+    setCertificateAddressLine2('');
+    setCertificateCityUf('');
     setCertificateModel('A1');
     setCertificateUf('SP');
     setCertificateCscId('');
     setCertificateCscCode('');
+    setCertificateNfceEnvironment('HOMOLOGACAO');
+    setCertificateNfceSerie('1');
+    setCertificateNfceNextNumber('1');
+    setCertificateAccountingEmail('');
     setCertificatePassword('');
     setCertificateFileName('');
     setCertificateFileSize(null);
@@ -267,8 +306,28 @@ export function AdminPage() {
       return;
     }
 
+    if (!certificateCompanyName.trim()) {
+      setCertificateFormError('Informe a razão social da empresa.');
+      return;
+    }
+
     if (!isValidCnpjFormat(certificateCnpj)) {
       setCertificateFormError('CNPJ inválido. Informe 14 dígitos válidos.');
+      return;
+    }
+
+    if (!certificateStateRegistration.trim()) {
+      setCertificateFormError('Informe a inscrição estadual.');
+      return;
+    }
+
+    if (!certificateCnae.trim()) {
+      setCertificateFormError('Selecione o CNAE principal.');
+      return;
+    }
+
+    if (!certificateTaxRegime.trim()) {
+      setCertificateFormError('Selecione o regime tributário.');
       return;
     }
 
@@ -295,10 +354,20 @@ export function AdminPage() {
       alias: certificateAlias,
       companyName: certificateCompanyName,
       cnpj: certificateCnpj,
+      stateRegistration: certificateStateRegistration,
+      cnae: certificateCnae,
+      taxRegime: certificateTaxRegime,
+      addressLine1: certificateAddressLine1,
+      addressLine2: certificateAddressLine2,
+      cityUf: certificateCityUf,
       model: certificateModel,
       uf: certificateUf,
       cscId: certificateCscId,
       cscCode: certificateCscCode,
+      nfceEnvironment: certificateNfceEnvironment,
+      nfceSerie: certificateNfceSerie,
+      nfceNextNumber: certificateNfceNextNumber,
+      accountingEmail: certificateAccountingEmail,
       fileName: certificateFileName,
       fileSize: certificateFileSize ?? 0,
       fileExtension: certificateFileExtension,
@@ -498,6 +567,10 @@ export function AdminPage() {
           </form>
         </article>
 
+        <StoreSettingsPanel />
+
+        <PeripheralSettingsPanel />
+
         <article className="card admin-audit">
           <h3>Auditoria de ações sensíveis</h3>
           <div className="admin-audit-filters">
@@ -608,71 +681,197 @@ export function AdminPage() {
           </section>
         </article>
 
-        <article className="card admin-certificate">
-          <h3>Certificado digital (NFC-e)</h3>
-          <p className="admin-subtitle">Configuração fiscal centralizada no painel Admin.</p>
+        <article className="card admin-certificate admin-fiscal-settings">
+          <h3>Configurações Fiscais NFC-e</h3>
+          <p className="admin-subtitle">Configure dados fiscais, certificado digital e parâmetros para emissão de NFC-e.</p>
 
           <form onSubmit={onSaveCertificateSettings} className="admin-certificate-form">
-            <div className="admin-audit-filters">
-              <input
-                value={certificateAlias}
-                onChange={(e) => setCertificateAlias(e.target.value)}
-                placeholder="Apelido da configuração"
-              />
-              <input
-                value={certificateCompanyName}
-                onChange={(e) => setCertificateCompanyName(e.target.value)}
-                placeholder="Razão social"
-              />
-              <input
-                value={certificateCnpj}
-                onChange={(e) => setCertificateCnpj(e.target.value)}
-                placeholder="CNPJ (14 dígitos)"
-              />
-              <select value={certificateModel} onChange={(e) => setCertificateModel(e.target.value as CertificateModel)}>
-                {CERTIFICATE_MODEL_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    Modelo {option}
-                  </option>
-                ))}
-              </select>
-              <select value={certificateUf} onChange={(e) => setCertificateUf(e.target.value)}>
-                {BR_UF_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    UF {option}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="password"
-                value={certificatePassword}
-                onChange={(e) => setCertificatePassword(e.target.value)}
-                placeholder="Senha do certificado"
-              />
-              <input
-                value={certificateCscId}
-                onChange={(e) => setCertificateCscId(e.target.value)}
-                placeholder={`CSC ID${isCscRequired ? ' (obrigatório)' : ''}`}
-              />
-              <input
-                value={certificateCscCode}
-                onChange={(e) => setCertificateCscCode(e.target.value)}
-                placeholder={`CSC${isCscRequired ? ' (obrigatório)' : ''}`}
-              />
-              <input
-                type="date"
-                value={certificateExpirationDate}
-                onChange={(e) => setCertificateExpirationDate(e.target.value)}
-              />
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={certificateRenewAlertDays}
-                onChange={(e) => setCertificateRenewAlertDays(e.target.value)}
-                placeholder="Alerta de renovação (dias)"
-              />
-            </div>
+            <section className="admin-fiscal-section">
+              <h4>Dados da Empresa para NFC-e</h4>
+              <div className="admin-fiscal-grid">
+                <label>
+                  Razão Social *
+                  <input
+                    value={certificateCompanyName}
+                    onChange={(e) => setCertificateCompanyName(e.target.value)}
+                    placeholder="PDVTouch Restaurante"
+                  />
+                </label>
+                <label>
+                  CNPJ *
+                  <input
+                    value={certificateCnpj}
+                    onChange={(e) => setCertificateCnpj(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </label>
+                <label>
+                  Inscrição Estadual *
+                  <input
+                    value={certificateStateRegistration}
+                    onChange={(e) => setCertificateStateRegistration(e.target.value)}
+                    placeholder="000.000.000.000"
+                  />
+                </label>
+                <label>
+                  CNAE Principal *
+                  <select value={certificateCnae} onChange={(e) => setCertificateCnae(e.target.value)}>
+                    <option value="">Selecione o CNAE</option>
+                    {cnaeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Regime Tributário *
+                  <select value={certificateTaxRegime} onChange={(e) => setCertificateTaxRegime(e.target.value)}>
+                    <option value="">Selecione o regime</option>
+                    <option value="SIMPLES_NACIONAL">Simples Nacional</option>
+                    <option value="LUCRO_REAL_PRESUMIDO">Lucro Real/Presumido</option>
+                    <option value="MEI">Microempreendedor Individual</option>
+                  </select>
+                </label>
+                <label>
+                  Endereço Linha 1
+                  <input
+                    value={certificateAddressLine1}
+                    onChange={(e) => setCertificateAddressLine1(e.target.value)}
+                    placeholder="Rua Exemplo, 123 - Centro"
+                  />
+                </label>
+                <label>
+                  Endereço Linha 2
+                  <input
+                    value={certificateAddressLine2}
+                    onChange={(e) => setCertificateAddressLine2(e.target.value)}
+                    placeholder="Complemento, bairro"
+                  />
+                </label>
+                <label>
+                  Cidade/UF
+                  <input
+                    value={certificateCityUf}
+                    onChange={(e) => setCertificateCityUf(e.target.value)}
+                    placeholder="São Paulo/SP"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="admin-fiscal-section">
+              <h4>Certificado Digital</h4>
+              <div className="admin-fiscal-grid">
+                <label>
+                  Apelido da configuração
+                  <input
+                    value={certificateAlias}
+                    onChange={(e) => setCertificateAlias(e.target.value)}
+                    placeholder="Certificado A1 principal"
+                  />
+                </label>
+                <label>
+                  Modelo
+                  <select value={certificateModel} onChange={(e) => setCertificateModel(e.target.value as CertificateModel)}>
+                    {CERTIFICATE_MODEL_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        Modelo {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  UF
+                  <select value={certificateUf} onChange={(e) => setCertificateUf(e.target.value)}>
+                    {BR_UF_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        UF {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Senha do certificado
+                  <input
+                    type="password"
+                    value={certificatePassword}
+                    onChange={(e) => setCertificatePassword(e.target.value)}
+                    placeholder="Senha do certificado"
+                  />
+                </label>
+                <label>
+                  Vencimento
+                  <input
+                    type="date"
+                    value={certificateExpirationDate}
+                    onChange={(e) => setCertificateExpirationDate(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Alerta renovação (dias)
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={certificateRenewAlertDays}
+                    onChange={(e) => setCertificateRenewAlertDays(e.target.value)}
+                    placeholder="20"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="admin-fiscal-section">
+              <h4>NFC-e</h4>
+              <div className="admin-fiscal-grid">
+                <label>
+                  Ambiente
+                  <select value={certificateNfceEnvironment} onChange={(e) => setCertificateNfceEnvironment(e.target.value as 'HOMOLOGACAO' | 'PRODUCAO')}>
+                    <option value="HOMOLOGACAO">Homologação</option>
+                    <option value="PRODUCAO">Produção</option>
+                  </select>
+                </label>
+                <label>
+                  Série NFC-e
+                  <input value={certificateNfceSerie} onChange={(e) => setCertificateNfceSerie(e.target.value)} inputMode="numeric" />
+                </label>
+                <label>
+                  Próximo número
+                  <input value={certificateNfceNextNumber} onChange={(e) => setCertificateNfceNextNumber(e.target.value)} inputMode="numeric" />
+                </label>
+                <label>
+                  CSC ID {isCscRequired ? '*' : ''}
+                  <input
+                    value={certificateCscId}
+                    onChange={(e) => setCertificateCscId(e.target.value)}
+                    placeholder={`CSC ID${isCscRequired ? ' obrigatório' : ''}`}
+                  />
+                </label>
+                <label>
+                  CSC {isCscRequired ? '*' : ''}
+                  <input
+                    value={certificateCscCode}
+                    onChange={(e) => setCertificateCscCode(e.target.value)}
+                    placeholder={`CSC${isCscRequired ? ' obrigatório' : ''}`}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="admin-fiscal-section">
+              <h4>Contábil</h4>
+              <div className="admin-fiscal-grid">
+                <label>
+                  E-mail contábil
+                  <input
+                    value={certificateAccountingEmail}
+                    onChange={(e) => setCertificateAccountingEmail(e.target.value)}
+                    placeholder="contabilidade@empresa.com.br"
+                  />
+                </label>
+              </div>
+            </section>
 
             <div className="products-certificate-source-buttons">
               <button type="button" onClick={() => openCertificateFilePicker('MAQUINA')}>

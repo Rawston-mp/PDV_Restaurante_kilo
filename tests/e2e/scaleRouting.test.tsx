@@ -27,7 +27,7 @@ describe('Scale routing', () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByLabelText('Perfil'), { target: { value: 'COMANDA_A' } });
+    fireEvent.change(screen.getByLabelText('Usuário'), { target: { value: 'COMANDA_A' } });
     fireEvent.change(screen.getByLabelText('Senha'), { target: { value: '1111' } });
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 

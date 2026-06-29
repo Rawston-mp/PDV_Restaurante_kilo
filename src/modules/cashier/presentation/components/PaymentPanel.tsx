@@ -14,6 +14,7 @@ export type PaymentConfirmPayload = {
   payments: PaymentEntry[];
   discountAmount: number;
   documentMode: PaymentDocumentMode;
+  customerDocument?: string;
   fiadoClientId?: string;
 };
 
@@ -67,6 +68,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
   const [documentMode, setDocumentMode] = useState<PaymentDocumentMode>(initialDocumentMode);
+  const [customerDocument, setCustomerDocument] = useState('');
   const [inputRaw, setInputRaw] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [selectedFiadoClientId, setSelectedFiadoClientId] = useState('');
@@ -86,6 +88,13 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
   const totalPaid = entries.reduce((sum, entry) => sum + entry.amount, 0);
   const remaining = Math.max(0, payableTotal - totalPaid);
   const change = totalPaid > payableTotal ? totalPaid - payableTotal : 0;
+  const customerDocumentDigits = customerDocument.replace(/\D/g, '');
+  const isCustomerDocumentValid = !customerDocumentDigits
+    || customerDocumentDigits.length === 11
+    || customerDocumentDigits.length === 14;
+  const customerDocumentError = documentMode === 'NFCE' && !isCustomerDocumentValid
+    ? 'CPF/CNPJ deve ter 11 ou 14 dígitos.'
+    : null;
   const documentModeBadge = documentMode === 'NFCE'
     ? {
         label: 'Fiscal',
@@ -187,14 +196,22 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
     }
   };
 
-  const canConfirm = selectedMethod !== 'FIADO' && totalPaid >= payableTotal && (entries.length > 0 || payableTotal === 0);
+  const canConfirm = selectedMethod !== 'FIADO'
+    && totalPaid >= payableTotal
+    && (entries.length > 0 || payableTotal === 0)
+    && !customerDocumentError;
 
   const handleConfirmAndClose = () => {
     if (!canConfirm) {
       return false;
     }
 
-    void onConfirm({ payments: entries, discountAmount, documentMode });
+    void onConfirm({
+      payments: entries,
+      discountAmount,
+      documentMode,
+      customerDocument: documentMode === 'NFCE' ? customerDocumentDigits : undefined
+    });
     return true;
   };
 
@@ -220,7 +237,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
 
     window.addEventListener('keydown', handlePaymentEnter);
     return () => window.removeEventListener('keydown', handlePaymentEnter);
-  }, [canConfirm, discountAmount, documentMode, entries, handleAddPayment, inputRaw, onConfirm, remaining, selectedMethod, total]);
+  }, [canConfirm, customerDocumentDigits, discountAmount, documentMode, entries, handleAddPayment, inputRaw, onConfirm, remaining, selectedMethod, total]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -292,6 +309,25 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
                 Orçamento <span className="ml-1 text-[11px] font-black opacity-70">F2</span>
               </button>
             </div>
+            {documentMode === 'NFCE' && (
+              <div className="mt-3">
+                <label htmlFor="nfce-customer-document" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  CPF/CNPJ do cliente
+                </label>
+                <input
+                  id="nfce-customer-document"
+                  value={customerDocument}
+                  onChange={(event) => setCustomerDocument(event.target.value)}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="Opcional, se o cliente solicitar"
+                  className={`min-h-[44px] w-full rounded-lg border px-3 text-sm outline-none ${customerDocumentError ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-700 focus:border-emerald-400'}`}
+                />
+                {customerDocumentError && (
+                  <p className="mt-1 text-xs font-semibold text-red-600">{customerDocumentError}</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mx-2 mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">

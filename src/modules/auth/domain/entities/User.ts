@@ -4,4 +4,6 @@ export type User = {
   id: string;
   name: string;
   role: Role;
+  storeId?: string;
+  storeName?: string;
 };
