@@ -18,6 +18,7 @@ import { useSuppliersQuery } from '@/modules/suppliers/presentation/hooks/useSup
 import { stockEntriesContainer } from '@/modules/stockEntries/infrastructure/container/stockEntriesContainer';
 import { useCreateStockEntry } from '@/modules/stockEntries/presentation/hooks/useCreateStockEntry';
 import { useStockEntriesQuery } from '@/modules/stockEntries/presentation/hooks/useStockEntriesQuery';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 
 const stateOptions = [
   'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT',
@@ -25,6 +26,9 @@ const stateOptions = [
 ];
 
 const employeeRoleOptions = ['GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B', 'ADMINISTRATIVO'];
+const getEmployeeRoleLabel = (role: string) => (
+  role === 'ADMINISTRATIVO' ? 'Administrativo' : getRoleLabel(role as Role)
+);
 const employeeGenderOptions = ['MASCULINO', 'FEMININO'] as const;
 const convenioPaymentMethodOptions = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
 const convenioCashFlowOptions = ['ENTRADA', 'SAIDA', 'AMBOS'] as const;
@@ -2779,7 +2783,7 @@ export function CadastroPage() {
                   >
                     {employeeRoleOptions.map((option) => (
                       <option key={option} value={option}>
-                        {option}
+                        {getEmployeeRoleLabel(option)}
                       </option>
                     ))}
                   </select>

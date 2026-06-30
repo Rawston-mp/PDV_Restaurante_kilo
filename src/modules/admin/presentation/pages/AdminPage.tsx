@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
-import type { Role } from '@/modules/auth/domain/types/Role';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import type { PinKind } from '@/modules/auth/infrastructure/local/pinPolicy';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
@@ -520,7 +520,7 @@ export function AdminPage() {
             <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
               {roleOptions.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {getRoleLabel(role)}
                 </option>
               ))}
             </select>
@@ -597,7 +597,7 @@ export function AdminPage() {
               <option value="ALL">Perfil: ALL</option>
               {roleOptions.map((role) => (
                 <option key={role} value={role}>
-                  Perfil: {role}
+                  Perfil: {getRoleLabel(role)}
                 </option>
               ))}
             </select>
@@ -633,7 +633,7 @@ export function AdminPage() {
                     <tr key={event.id}>
                       <td>{new Date(event.createdAt).toLocaleString('pt-BR')}</td>
                       <td>{event.action}</td>
-                      <td>{event.actorRole}</td>
+                      <td>{getRoleLabel(event.actorRole)}</td>
                       <td>{event.scaleId ?? '-'}</td>
                       <td>{event.outcome}</td>
                       <td>{event.reason ?? '-'}</td>

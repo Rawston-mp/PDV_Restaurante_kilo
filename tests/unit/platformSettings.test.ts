@@ -25,6 +25,9 @@ describe('platform settings locais', () => {
     expect(stores[0].name).toBe('Desenvolvimento');
     expect(stores[0].legalName).toBe('Desenvolvimento');
     expect(stores[0].tradeName).toBe('Desenvolvimento');
+    expect(stores[0].logoUrl).toBe('');
+    expect(stores[0].welcomeTitle).toBe('Bem-vindo ao PDV!');
+    expect(stores[0].welcomeSubtitle).toBe('Tudo pronto para você realizar ótimas vendas.');
     expect(roleCanAccessStore('ADMIN', stores[0])).toBe(true);
     expect(roleCanAccessStore('CAIXA', stores[0])).toBe(true);
     expect(STORE_SETTINGS_STORAGE_KEY).toBe('pdv.platform.stores');

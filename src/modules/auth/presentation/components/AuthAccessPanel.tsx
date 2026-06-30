@@ -1,21 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { Role } from '@/modules/auth/domain/types/Role';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
   readStoreSettings,
   roleCanAccessStore,
   type StoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
-
-const roleLabel: Record<Role, string> = {
-  ADMIN: 'Admin',
-  GERENTE: 'Gerente',
-  CAIXA: 'Caixa',
-  ATENDENTE: 'Atendente',
-  COMANDA_A: 'Balança A',
-  COMANDA_B: 'Balança B'
-};
 
 const getStoreDisplayName = (store: StoreSettings) => store.tradeName || store.name;
 
@@ -66,7 +57,7 @@ export function AuthAccessPanel() {
       <section className="auth-sidebar-status">
         <p className="auth-sidebar-label">Usuário logado</p>
         <strong>{user.name}</strong>
-        <span>{roleLabel[user.role]}</span>
+        <span>{getRoleLabel(user.role)}</span>
         <span>Loja: {user.storeName ?? 'Sem loja'}</span>
 
         <button
@@ -130,7 +121,7 @@ export function AuthAccessPanel() {
           >
             {availableRoles.map((option) => (
               <option key={option} value={option}>
-                {roleLabel[option]}
+                {getRoleLabel(option)}
               </option>
             ))}
           </select>

@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import type { User } from '@/modules/auth/domain/entities/User';
 import { hasPermission } from '@/modules/auth/domain/services/permissionPolicy';
 import type { Permission } from '@/modules/auth/domain/types/Permission';
-import type { Role } from '@/modules/auth/domain/types/Role';
+import { roleLabels, type Role } from '@/modules/auth/domain/types/Role';
 import {
   changeRolePin,
   getPinPolicySummary,
@@ -50,15 +50,6 @@ const storageKey = 'pdv.auth.user';
 const actionNameMap: Record<SensitiveAction, string> = {
   CLOSE_COMANDA: 'fechamento de comanda',
   CANCEL_ORDER: 'cancelamento de pedido'
-};
-
-const roleNames: Record<Role, string> = {
-  ADMIN: 'Administrador',
-  GERENTE: 'Gerente',
-  CAIXA: 'Caixa',
-  ATENDENTE: 'Atendente',
-  COMANDA_A: 'Balança A',
-  COMANDA_B: 'Balança B'
 };
 
 const getStoreDisplayName = (store: { name: string; tradeName?: string }) => store.tradeName || store.name;
@@ -157,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: `Perfil ${roleNames[role]} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
+            message: `Perfil ${roleLabels[role]} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
           };
         }
 
@@ -176,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const nextUser: User = {
           id: `u-${role.toLowerCase()}`,
-          name: roleNames[role],
+          name: roleLabels[role],
           role,
           storeId: selectedStore.id,
           storeName: getStoreDisplayName(selectedStore)
@@ -193,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          message: `Acesso liberado: ${roleNames[role]} em ${getStoreDisplayName(selectedStore)}.`
+          message: `Acesso liberado: ${roleLabels[role]} em ${getStoreDisplayName(selectedStore)}.`
         };
       },
       confirmSensitiveAction: (action: SensitiveAction, password: string) => {

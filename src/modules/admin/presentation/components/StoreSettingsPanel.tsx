@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ChangeEvent } from 'react';
 
 import type { Role } from '@/modules/auth/domain/types/Role';
 import {
@@ -26,6 +26,9 @@ const createBlankStore = (): StoreSettings => {
     name: '',
     legalName: '',
     tradeName: '',
+    logoUrl: '',
+    welcomeTitle: 'Bem-vindo ao PDV!',
+    welcomeSubtitle: 'Tudo pronto para você realizar ótimas vendas.',
     cnpj: '',
     stateRegistration: '',
     zipCode: '',
@@ -79,6 +82,30 @@ export function StoreSettingsPanel() {
       ...current,
       [field]: value
     }));
+  };
+
+  const onLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setMessage('Selecione um arquivo de imagem para o logo.');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage('O logo deve ter no máximo 2 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateField('logoUrl', String(reader.result ?? ''));
+      setMessage(`Logo ${file.name} carregado do computador.`);
+    };
+    reader.readAsDataURL(file);
   };
 
   const selectStore = (store: StoreSettings) => {
@@ -227,6 +254,19 @@ export function StoreSettingsPanel() {
             <label>
               Nome fantasia
               <input value={form.tradeName} onChange={(event) => updateField('tradeName', event.target.value)} />
+            </label>
+            <label>
+              Título da página inicial
+              <input value={form.welcomeTitle} onChange={(event) => updateField('welcomeTitle', event.target.value)} />
+            </label>
+            <label>
+              Subtítulo da página inicial
+              <input value={form.welcomeSubtitle} onChange={(event) => updateField('welcomeSubtitle', event.target.value)} />
+            </label>
+            <label>
+              Logo da loja
+              <input value={form.logoUrl} onChange={(event) => updateField('logoUrl', event.target.value)} placeholder="URL da imagem do logo" />
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onLogoFileChange} />
             </label>
             <label>
               CNPJ

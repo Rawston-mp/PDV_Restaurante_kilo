@@ -20,6 +20,9 @@ describe('Login multi-loja', () => {
         name: 'Loja Gerente',
         legalName: 'Loja Gerente LTDA',
         tradeName: 'Loja Gerente',
+        logoUrl: '',
+        welcomeTitle: 'Bem-vindo ao PDV!',
+        welcomeSubtitle: 'Tudo pronto para você realizar ótimas vendas.',
         cnpj: '',
         stateRegistration: '',
         zipCode: '',
@@ -42,14 +45,17 @@ describe('Login multi-loja', () => {
         name: 'Loja Caixa',
         legalName: 'Loja Caixa LTDA',
         tradeName: 'Loja Caixa',
-        cnpj: '',
+        logoUrl: 'https://example.com/logo-caixa.png',
+        welcomeTitle: 'Bem-vindo ao Caixa!',
+        welcomeSubtitle: 'Atendimento liberado para a loja selecionada.',
+        cnpj: '12345678000190',
         stateRegistration: '',
         zipCode: '',
-        address: '',
-        number: '',
+        address: 'Rua Caixa',
+        number: '100',
         complement: '',
-        district: '',
-        city: '',
+        district: 'Centro',
+        city: 'São Paulo',
         state: 'SP',
         foundingYear: '',
         responsibleName: '',
@@ -81,5 +87,10 @@ describe('Login multi-loja', () => {
 
     expect(await screen.findByText('Usuário logado')).toBeTruthy();
     expect(screen.getByText('Loja: Loja Caixa')).toBeTruthy();
+    expect(await screen.findByText('Bem-vindo ao Caixa!')).toBeTruthy();
+    expect(screen.getByText('Atendimento liberado para a loja selecionada.')).toBeTruthy();
+    expect(screen.getAllByText('Loja Caixa').length).toBeGreaterThan(0);
+    expect(screen.getByText('12.345.678/0001-90')).toBeTruthy();
+    expect(screen.getByText('Rua Caixa, 100 - Centro - São Paulo/SP')).toBeTruthy();
   });
 });

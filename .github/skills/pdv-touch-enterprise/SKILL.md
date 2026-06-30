@@ -161,8 +161,8 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - PINs exibidos atualmente na UI:
 	- `Admin`: login `9000`
 	- `Caixa`: login `2025`
-	- `Comanda A`: login `1111`
-	- `Comanda B`: login `2222`
+	- `Balança A`: login `1111`
+	- `Balança B`: login `2222`
 - PIN sensível exibido na UI:
 	- `Admin`: `9900`
 	- `Caixa`: `2200`
