@@ -113,6 +113,7 @@ export function CartPanel({
           type="button"
           disabled={items.length === 0}
           onClick={onReceive}
+          aria-label="Receber"
           className="
             mt-2 w-full h-14 rounded-2xl
             border border-sky-400

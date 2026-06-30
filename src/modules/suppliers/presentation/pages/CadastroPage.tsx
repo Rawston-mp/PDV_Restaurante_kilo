@@ -19,6 +19,16 @@ import { stockEntriesContainer } from '@/modules/stockEntries/infrastructure/con
 import { useCreateStockEntry } from '@/modules/stockEntries/presentation/hooks/useCreateStockEntry';
 import { useStockEntriesQuery } from '@/modules/stockEntries/presentation/hooks/useStockEntriesQuery';
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
+import {
+  formatCep as formatCepValue,
+  formatCpf as formatCpfValue,
+  formatCpfCnpj as formatCpfCnpjValue,
+  isValidCep,
+  isValidCpf,
+  isValidCpfCnpj,
+  normalizeCep
+} from '@/shared/domain/services/documentValidation';
+import { lookupCepAddress } from '@/shared/infrastructure/cep/viaCepLookup';
 
 const stateOptions = [
   'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT',
@@ -351,55 +361,11 @@ const isFilled = (value: string) => value.trim().length > 0;
 
 const normalizeDigits = (value: string) => value.replace(/\D/g, '');
 
-const normalizeCepDigits = (value: string) => value.replace(/\D/g, '').slice(0, 8);
+const normalizeCepDigits = normalizeCep;
 
-const formatCep = (value: string) => {
-  const digits = normalizeCepDigits(value);
+const formatCep = formatCepValue;
 
-  if (digits.length <= 5) {
-    return digits;
-  }
-
-  return `${digits.slice(0, 5)}-${digits.slice(5, 8)}`;
-};
-
-const formatCpfCnpj = (value: string) => {
-  const digits = normalizeDigits(value).slice(0, 14);
-
-  if (digits.length <= 11) {
-    if (digits.length <= 3) {
-      return digits;
-    }
-
-    if (digits.length <= 6) {
-      return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-    }
-
-    if (digits.length <= 9) {
-      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-    }
-
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
-  }
-
-  if (digits.length <= 2) {
-    return digits;
-  }
-
-  if (digits.length <= 5) {
-    return `${digits.slice(0, 2)}.${digits.slice(2)}`;
-  }
-
-  if (digits.length <= 8) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
-  }
-
-  if (digits.length <= 12) {
-    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
-  }
-
-  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
-};
+const formatCpfCnpj = formatCpfCnpjValue;
 
 const formatPhone = (value: string) => {
   const digits = normalizeDigits(value).slice(0, 11);
@@ -446,15 +412,6 @@ const parseConsumptionLaunchDate = (value: string) => {
   }
 
   return new Date(year, month - 1, day, hours || 0, minutes || 0);
-};
-
-type ViaCepResponse = {
-  cep?: string;
-  logradouro?: string;
-  bairro?: string;
-  localidade?: string;
-  uf?: string;
-  erro?: boolean;
 };
 
 export function CadastroPage() {
@@ -742,28 +699,20 @@ export function CadastroPage() {
       try {
         setIsSupplierCepLookupLoading(true);
 
-        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
-          signal: controller.signal
-        });
+        const data = await lookupCepAddress(cepDigits);
 
-        if (!response.ok) {
-          throw new Error('Falha na consulta de CEP.');
-        }
-
-        const data = (await response.json()) as ViaCepResponse;
-
-        if (data.erro) {
+        if (!data) {
           setSupplierCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
-        setSupplierAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
-        setSupplierNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
-        setSupplierCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
-        setSupplierState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+        setSupplierAddress((prev) => (isFilled(prev) ? prev : data.street));
+        setSupplierNeighborhood((prev) => (isFilled(prev) ? prev : data.district));
+        setSupplierCity((prev) => (isFilled(prev) ? prev : data.city));
+        setSupplierState((prev) => (isFilled(prev) ? prev : data.state || prev));
 
-        const suggestedCity = data.localidade ?? supplierCity;
-        const suggestedUf = data.uf ?? supplierState;
+        const suggestedCity = data.city || supplierCity;
+        const suggestedUf = data.state || supplierState;
         setSupplierCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
@@ -797,28 +746,20 @@ export function CadastroPage() {
       try {
         setIsEmployeeCepLookupLoading(true);
 
-        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
-          signal: controller.signal
-        });
+        const data = await lookupCepAddress(cepDigits);
 
-        if (!response.ok) {
-          throw new Error('Falha na consulta de CEP.');
-        }
-
-        const data = (await response.json()) as ViaCepResponse;
-
-        if (data.erro) {
+        if (!data) {
           setEmployeeCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
-        setEmployeeAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
-        setEmployeeNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
-        setEmployeeCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
-        setEmployeeState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+        setEmployeeAddress((prev) => (isFilled(prev) ? prev : data.street));
+        setEmployeeNeighborhood((prev) => (isFilled(prev) ? prev : data.district));
+        setEmployeeCity((prev) => (isFilled(prev) ? prev : data.city));
+        setEmployeeState((prev) => (isFilled(prev) ? prev : data.state || prev));
 
-        const suggestedCity = data.localidade ?? employeeCity;
-        const suggestedUf = data.uf ?? employeeState;
+        const suggestedCity = data.city || employeeCity;
+        const suggestedUf = data.state || employeeState;
         setEmployeeCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
@@ -852,28 +793,20 @@ export function CadastroPage() {
       try {
         setIsClientCepLookupLoading(true);
 
-        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`, {
-          signal: controller.signal
-        });
+        const data = await lookupCepAddress(cepDigits);
 
-        if (!response.ok) {
-          throw new Error('Falha na consulta de CEP.');
-        }
-
-        const data = (await response.json()) as ViaCepResponse;
-
-        if (data.erro) {
+        if (!data) {
           setClientCepSuggestionMessage('CEP não encontrado para sugestão de endereço.');
           return;
         }
 
-        setClientAddress((prev) => (isFilled(prev) ? prev : data.logradouro ?? ''));
-        setClientNeighborhood((prev) => (isFilled(prev) ? prev : data.bairro ?? ''));
-        setClientCity((prev) => (isFilled(prev) ? prev : data.localidade ?? ''));
-        setClientState((prev) => (isFilled(prev) ? prev : data.uf ?? prev));
+        setClientAddress((prev) => (isFilled(prev) ? prev : data.street));
+        setClientNeighborhood((prev) => (isFilled(prev) ? prev : data.district));
+        setClientCity((prev) => (isFilled(prev) ? prev : data.city));
+        setClientState((prev) => (isFilled(prev) ? prev : data.state || prev));
 
-        const suggestedCity = data.localidade ?? clientCity;
-        const suggestedUf = data.uf ?? clientState;
+        const suggestedCity = data.city || clientCity;
+        const suggestedUf = data.state || clientState;
         setClientCepSuggestionMessage(`Sugestão aplicada: ${suggestedCity}/${suggestedUf}.`);
       } catch {
         if (!controller.signal.aborted) {
@@ -2057,6 +1990,16 @@ export function CadastroPage() {
       return;
     }
 
+    if (!isValidCpfCnpj(cpfCnpj)) {
+      setSupplierFormError('CPF/CNPJ inválido. Informe CPF com 11 dígitos ou CNPJ com 14 dígitos válidos.');
+      return;
+    }
+
+    if (supplierCep && !isValidCep(supplierCep)) {
+      setSupplierFormError('CEP deve conter 8 dígitos.');
+      return;
+    }
+
     const usedCodes = getUsedSupplierCodes(suppliers.filter((supplier) => supplier.id !== editingSupplierId));
     const generatedCode = supplierCode && !usedCodes.has(supplierCode)
       ? supplierCode
@@ -2126,6 +2069,16 @@ export function CadastroPage() {
 
     if (!isFilled(employeeCpf) || !isFilled(employeeFullName) || !isFilled(employeeCity)) {
       setEmployeeFormError('Preencha CPF, Nome completo e Cidade antes de salvar.');
+      return;
+    }
+
+    if (!isValidCpf(employeeCpf)) {
+      setEmployeeFormError('CPF inválido. Verifique os 11 dígitos informados.');
+      return;
+    }
+
+    if (employeeCep && !isValidCep(employeeCep)) {
+      setEmployeeFormError('CEP deve conter 8 dígitos.');
       return;
     }
 
@@ -2206,6 +2159,16 @@ export function CadastroPage() {
 
     if (!isFilled(clientFullName) || !isFilled(clientCpf)) {
       setClientFormError('Preencha Nome completo e CPF antes de salvar.');
+      return;
+    }
+
+    if (!isValidCpf(clientCpf)) {
+      setClientFormError('CPF inválido. Verifique os 11 dígitos informados.');
+      return;
+    }
+
+    if (clientCep && !isValidCep(clientCep)) {
+      setClientFormError('CEP deve conter 8 dígitos.');
       return;
     }
 
@@ -2770,7 +2733,7 @@ export function CadastroPage() {
                   <input
                     id="employee-cpf"
                     value={employeeCpf}
-                    onChange={(e) => setEmployeeCpf(formatCpfCnpj(e.target.value))}
+                    onChange={(e) => setEmployeeCpf(formatCpfValue(e.target.value))}
                     required
                   />
                 </div>
@@ -3038,7 +3001,7 @@ export function CadastroPage() {
                   <input
                     id="client-cpf"
                     value={clientCpf}
-                    onChange={(e) => setClientCpf(formatCpfCnpj(e.target.value))}
+                    onChange={(e) => setClientCpf(formatCpfValue(e.target.value))}
                     required
                   />
                 </div>
