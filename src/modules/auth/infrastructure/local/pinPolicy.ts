@@ -1,4 +1,4 @@
-import type { Role } from '@/modules/auth/domain/types/Role';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 
 export type PinKind = 'LOGIN' | 'SENSITIVE';
 
@@ -17,16 +17,16 @@ export type PinOperationResult = {
 const loginStorageKey = 'pdv.auth.loginPins';
 const sensitiveStorageKey = 'pdv.auth.sensitivePins';
 
-const defaultLoginPins: Record<Role, string> = {
+export const defaultLoginPins: Record<Role, string> = {
   ADMIN: '9000',
-  GERENTE: '7070',
+  GERENTE: '7700',
   CAIXA: '2025',
-  ATENDENTE: '3030',
+  ATENDENTE: '3300',
   COMANDA_A: '1111',
   COMANDA_B: '2222'
 };
 
-const defaultSensitivePins: Record<Role, string> = {
+export const defaultSensitivePins: Record<Role, string> = {
   ADMIN: '9900',
   GERENTE: '7700',
   CAIXA: '2200',
@@ -72,13 +72,26 @@ const readPins = (kind: PinKind): Record<Role, string> => {
     const parsed = JSON.parse(raw) as Record<Role, string>;
     const defaults = getDefaultPins(kind);
 
-    return {
+    const pins = {
       ...defaults,
       ...parsed
     };
+    return migrateLegacyDefaultPins(kind, pins);
   } catch {
     return { ...getDefaultPins(kind) };
   }
+};
+
+const migrateLegacyDefaultPins = (kind: PinKind, pins: Record<Role, string>) => {
+  if (kind !== 'LOGIN') {
+    return pins;
+  }
+
+  return {
+    ...pins,
+    GERENTE: pins.GERENTE === '7070' ? defaultLoginPins.GERENTE : pins.GERENTE,
+    ATENDENTE: pins.ATENDENTE === '3030' ? defaultLoginPins.ATENDENTE : pins.ATENDENTE
+  };
 };
 
 const persistPins = (kind: PinKind, pins: Record<Role, string>) => {
@@ -157,4 +170,9 @@ export const getPinPolicySummary = () => {
     loginStrengthIssues: Object.values(loginPins).filter((pin) => !isPinStrongEnough(pin)).length,
     sensitiveStrengthIssues: Object.values(sensitivePins).filter((pin) => !isPinStrongEnough(pin)).length
   };
+};
+
+export const getDefaultPinHint = () => {
+  const orderedRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];
+  return `PIN login: ${orderedRoles.map((role) => `${getRoleLabel(role)} ${defaultLoginPins[role]}`).join(', ')}.`;
 };

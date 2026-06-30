@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import type { User } from '@/modules/auth/domain/entities/User';
 import { hasPermission } from '@/modules/auth/domain/services/permissionPolicy';
 import type { Permission } from '@/modules/auth/domain/types/Permission';
-import { roleLabels, type Role } from '@/modules/auth/domain/types/Role';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import {
   changeRolePin,
   getPinPolicySummary,
@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: `Perfil ${roleLabels[role]} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
+            message: `Perfil ${getRoleLabel(role)} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
           };
         }
 
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const nextUser: User = {
           id: `u-${role.toLowerCase()}`,
-          name: roleLabels[role],
+          name: getRoleLabel(role),
           role,
           storeId: selectedStore.id,
           storeName: getStoreDisplayName(selectedStore)
@@ -184,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          message: `Acesso liberado: ${roleLabels[role]} em ${getStoreDisplayName(selectedStore)}.`
+          message: `Acesso liberado: ${getRoleLabel(role)} em ${getStoreDisplayName(selectedStore)}.`
         };
       },
       confirmSensitiveAction: (action: SensitiveAction, password: string) => {
