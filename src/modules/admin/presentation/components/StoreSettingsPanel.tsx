@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
 
-import type { Role } from '@/modules/auth/domain/types/Role';
+import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import {
   readStoreSettings,
   saveStoreSettings,
@@ -8,14 +8,7 @@ import {
   type StoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
 
-const roleLabel: Record<Role, string> = {
-  ADMIN: 'Admin da plataforma',
-  GERENTE: 'Gerente',
-  CAIXA: 'Caixa',
-  ATENDENTE: 'Atendente',
-  COMANDA_A: 'Balança A',
-  COMANDA_B: 'Balança B'
-};
+const getStoreRoleLabel = (role: Role) => (role === 'ADMIN' ? 'Admin da plataforma' : getRoleLabel(role));
 
 const nowIso = () => new Date().toISOString();
 
@@ -346,7 +339,7 @@ export function StoreSettingsPanel() {
                   checked={form.allowedRoles.includes(roleOption)}
                   onChange={() => toggleRole(roleOption)}
                 />
-                {roleLabel[roleOption]}
+                {getStoreRoleLabel(roleOption)}
               </label>
             ))}
           </div>

@@ -39,6 +39,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 
 ## Atualizações Recentes (2026-06)
 - A UI de autenticação exibe `Balança A` e `Balança B` (mantendo as roles internas `COMANDA_A` e `COMANDA_B`).
+- Rótulos visíveis de perfis devem usar `getRoleLabel()` em `src/modules/auth/domain/types/Role.ts`; não renderizar `COMANDA_A` ou `COMANDA_B` diretamente para o usuário.
 - Tela do caixa com foco operacional no campo de leitura/digitação de comanda:
 	- campo principal com foco contínuo para leitor/teclado
 	- Enter abre atendimento por número de comanda
@@ -158,14 +159,14 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 
 ## Autenticação e PIN
 - Login por PIN por perfil na tela de acesso.
-- PINs exibidos atualmente na UI:
-	- `Admin`: login `9000`
+- PINs de login exibidos atualmente na UI:
+	- `Administrador`: login `9000`
 	- `Caixa`: login `2025`
 	- `Balança A`: login `1111`
 	- `Balança B`: login `2222`
-- PIN sensível exibido na UI:
-	- `Admin`: `9900`
-	- `Caixa`: `2200`
+	- `Gerente`: login `7700`
+	- `Atendente`: login `3300`
+- PIN sensível não deve ser exposto na tela de login; fica restrito aos fluxos protegidos e à gestão de PIN no Admin.
 
 ## Regras de Manutenção
 - Não reintroduzir nomenclatura antiga de balança no código novo.

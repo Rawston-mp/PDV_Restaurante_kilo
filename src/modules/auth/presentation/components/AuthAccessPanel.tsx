@@ -7,6 +7,7 @@ import {
   roleCanAccessStore,
   type StoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
+import { getDefaultPinHint } from '@/modules/auth/infrastructure/local/pinPolicy';
 
 const getStoreDisplayName = (store: StoreSettings) => store.tradeName || store.name;
 
@@ -153,9 +154,7 @@ export function AuthAccessPanel() {
 
         {message && <p className="auth-message">{message}</p>}
 
-        <p className="auth-hint">
-          PIN login: Admin 9000, Caixa 2025, Balança A 1111, Balança B 2222. PIN sensível: Admin 9900, Caixa 2200.
-        </p>
+        <p className="auth-hint">{getDefaultPinHint()}</p>
       </section>
     </div>
   );

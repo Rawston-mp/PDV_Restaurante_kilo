@@ -11,6 +11,7 @@ import {
   saveLocalPeripheralSettings,
   saveStoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
+import { getDefaultPinHint, verifyLoginPin } from '@/modules/auth/infrastructure/local/pinPolicy';
 
 describe('platform settings locais', () => {
   beforeEach(() => {
@@ -31,6 +32,17 @@ describe('platform settings locais', () => {
     expect(roleCanAccessStore('ADMIN', stores[0])).toBe(true);
     expect(roleCanAccessStore('CAIXA', stores[0])).toBe(true);
     expect(STORE_SETTINGS_STORAGE_KEY).toBe('pdv.platform.stores');
+  });
+
+  it('exibe dica de PIN de login sem expor PIN sensível', () => {
+    expect(getDefaultPinHint()).toBe(
+      'PIN login: Administrador 9000, Caixa 2025, Balança A 1111, Balança B 2222, Gerente 7700, Atendente 3300.'
+    );
+  });
+
+  it('aceita PIN de login para gerente e atendente', () => {
+    expect(verifyLoginPin('GERENTE', '7700')).toBe(true);
+    expect(verifyLoginPin('ATENDENTE', '3300')).toBe(true);
   });
 
   it('bloqueia perfil operacional quando não está vinculado à loja', () => {
