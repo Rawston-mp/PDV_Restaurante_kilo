@@ -123,7 +123,7 @@ export function CartPanel({
             active:scale-95
           "
         >
-          Receber
+          Receber <span className="ml-2 text-sm font-black opacity-70">F9</span>
         </button>
 
         <button

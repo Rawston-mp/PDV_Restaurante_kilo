@@ -1060,6 +1060,12 @@ export function CashierPage() {
         return;
       }
 
+      if (event.key === 'F9') {
+        event.preventDefault();
+        openPayment('ORCAMENTO');
+        return;
+      }
+
       if (event.key === 'F3') {
         event.preventDefault();
         openPayment('NFCE');
