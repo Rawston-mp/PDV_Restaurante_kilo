@@ -8,6 +8,9 @@ export type StoreSettings = {
   name: string;
   legalName: string;
   tradeName: string;
+  logoUrl: string;
+  welcomeTitle: string;
+  welcomeSubtitle: string;
   cnpj: string;
   stateRegistration: string;
   zipCode: string;
@@ -92,6 +95,9 @@ const createDefaultStore = (): StoreSettings => {
     name: 'Desenvolvimento',
     legalName: 'Desenvolvimento',
     tradeName: 'Desenvolvimento',
+    logoUrl: '',
+    welcomeTitle: 'Bem-vindo ao PDV!',
+    welcomeSubtitle: 'Tudo pronto para você realizar ótimas vendas.',
     cnpj: '',
     stateRegistration: '',
     zipCode: '',
@@ -135,6 +141,9 @@ const sanitizeStore = (store: Partial<StoreSettings>): StoreSettings | null => {
     name,
     legalName: legalName || name,
     tradeName: tradeName || name,
+    logoUrl: String(store.logoUrl ?? ''),
+    welcomeTitle: String(store.welcomeTitle ?? 'Bem-vindo ao PDV!'),
+    welcomeSubtitle: String(store.welcomeSubtitle ?? 'Tudo pronto para você realizar ótimas vendas.'),
     cnpj: String(store.cnpj ?? ''),
     stateRegistration: String(store.stateRegistration ?? ''),
     zipCode: String(store.zipCode ?? ''),

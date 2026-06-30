@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { DashboardPage } from '@/modules/orders/presentation/pages/DashboardPage';
+import { WelcomePage } from '@/modules/home/presentation/pages/WelcomePage';
 import { NewOrderPage } from '@/modules/orders/presentation/pages/NewOrderPage';
 import { ProductsPage } from '@/modules/products/presentation/pages/ProductsPage';
 import { RequirePermission } from '@/modules/auth/presentation/components/RequirePermission';
@@ -23,12 +24,23 @@ export function App() {
   const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
+  const previousUserIdRef = useRef<string | null>(user?.id ?? null);
 
   useEffect(() => {
     if (isScaleTerminal && !location.pathname.startsWith('/comanda')) {
       navigate('/comanda', { replace: true });
     }
   }, [isScaleTerminal, location.pathname, navigate]);
+
+  useEffect(() => {
+    const previousUserId = previousUserIdRef.current;
+    const currentUserId = user?.id ?? null;
+    previousUserIdRef.current = currentUserId;
+
+    if (!previousUserId && currentUserId && !isScaleTerminal) {
+      navigate('/', { replace: true });
+    }
+  }, [isScaleTerminal, navigate, user?.id]);
 
   return (
     <div className="layout">
@@ -51,6 +63,14 @@ export function App() {
         <Routes>
           <Route
             path="/"
+            element={
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE']}>
+                <WelcomePage />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/dashboard"
             element={
               <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE']}>
                 <DashboardPage />
