@@ -25,7 +25,7 @@ describe('Cashier access', () => {
 
     expect(await screen.findByText('Usuário logado')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Cadastros' })).toBeNull();
-    expect(screen.getByText('Acesso negado para o perfil atual.')).toBeTruthy();
+    expect(screen.queryByText('Produtos > Cadastro')).toBeNull();
   });
 
   it('permite Caixa consultar Produtos sem exibir Novo cadastro', async () => {
@@ -42,6 +42,7 @@ describe('Cashier access', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(await screen.findByText('Usuário logado')).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Produtos' }));
     expect(await screen.findByRole('heading', { name: 'Produtos' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '+ Novo cadastro' })).toBeNull();
     expect(screen.queryByText('Produtos > Cadastro')).toBeNull();

@@ -23,13 +23,13 @@ import {
   formatCertificateFileSize,
   getCertificateExpiryStatus,
   getUfNfceRuleMessage,
-  isValidCnpjFormat,
   parseDigitalCertificateSettings,
   type CertificateImportSource,
   type CertificateModel,
   type DigitalCertificateSettings,
   validateCscByUf
 } from '@/shared/domain/services/digitalCertificateRules';
+import { formatCnpj, isValidCnpj, normalizeCnpj } from '@/shared/domain/services/documentValidation';
 
 const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLOSE_COMANDA', 'CANCEL_ORDER'];
 const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
@@ -311,8 +311,8 @@ export function AdminPage() {
       return;
     }
 
-    if (!isValidCnpjFormat(certificateCnpj)) {
-      setCertificateFormError('CNPJ inválido. Informe 14 dígitos válidos.');
+    if (!isValidCnpj(certificateCnpj)) {
+      setCertificateFormError('CNPJ inválido. Verifique os 14 dígitos informados.');
       return;
     }
 
@@ -353,7 +353,7 @@ export function AdminPage() {
     const settings: DigitalCertificateSettings = {
       alias: certificateAlias,
       companyName: certificateCompanyName,
-      cnpj: certificateCnpj,
+      cnpj: normalizeCnpj(certificateCnpj),
       stateRegistration: certificateStateRegistration,
       cnae: certificateCnae,
       taxRegime: certificateTaxRegime,
@@ -701,7 +701,7 @@ export function AdminPage() {
                   CNPJ *
                   <input
                     value={certificateCnpj}
-                    onChange={(e) => setCertificateCnpj(e.target.value)}
+                    onChange={(e) => setCertificateCnpj(formatCnpj(e.target.value))}
                     placeholder="00.000.000/0000-00"
                   />
                 </label>

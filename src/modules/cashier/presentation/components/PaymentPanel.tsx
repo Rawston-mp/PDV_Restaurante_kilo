@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
+import {
+  formatCpfCnpj,
+  isValidCpfCnpj,
+  normalizeCpfCnpj
+} from '@/shared/domain/services/documentValidation';
 import { type CashierCartItem } from './CartItem';
 import {
   type PaymentDocumentMode,
@@ -88,12 +93,11 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
   const totalPaid = entries.reduce((sum, entry) => sum + entry.amount, 0);
   const remaining = Math.max(0, payableTotal - totalPaid);
   const change = totalPaid > payableTotal ? totalPaid - payableTotal : 0;
-  const customerDocumentDigits = customerDocument.replace(/\D/g, '');
+  const customerDocumentDigits = normalizeCpfCnpj(customerDocument);
   const isCustomerDocumentValid = !customerDocumentDigits
-    || customerDocumentDigits.length === 11
-    || customerDocumentDigits.length === 14;
+    || isValidCpfCnpj(customerDocumentDigits);
   const customerDocumentError = documentMode === 'NFCE' && !isCustomerDocumentValid
-    ? 'CPF/CNPJ deve ter 11 ou 14 dígitos.'
+    ? 'CPF/CNPJ do cliente inválido.'
     : null;
   const documentModeBadge = documentMode === 'NFCE'
     ? {
@@ -317,7 +321,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
                 <input
                   id="nfce-customer-document"
                   value={customerDocument}
-                  onChange={(event) => setCustomerDocument(event.target.value)}
+                  onChange={(event) => setCustomerDocument(formatCpfCnpj(event.target.value))}
                   inputMode="numeric"
                   autoComplete="off"
                   placeholder="Opcional, se o cliente solicitar"

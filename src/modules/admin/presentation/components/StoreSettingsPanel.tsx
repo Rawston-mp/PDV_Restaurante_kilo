@@ -7,6 +7,18 @@ import {
   storeRoleOptions,
   type StoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
+import {
+  formatCep,
+  formatCnpj,
+  formatCpf,
+  isValidCep,
+  isValidCnpj,
+  isValidCpf,
+  normalizeCep,
+  normalizeCnpj,
+  normalizeCpf
+} from '@/shared/domain/services/documentValidation';
+import { lookupCepAddress } from '@/shared/infrastructure/cep/viaCepLookup';
 
 const getStoreRoleLabel = (role: Role) => (role === 'ADMIN' ? 'Admin da plataforma' : getRoleLabel(role));
 
@@ -41,14 +53,14 @@ const createBlankStore = (): StoreSettings => {
   };
 };
 
-const onlyDigits = (value: string) => value.replace(/\D/g, '');
-
 export function StoreSettingsPanel() {
   const [stores, setStores] = useState<StoreSettings[]>(readStoreSettings);
   const [selectedStoreId, setSelectedStoreId] = useState(stores[0]?.id ?? '');
   const [storeSearch, setStoreSearch] = useState('');
   const [form, setForm] = useState<StoreSettings>(() => stores[0] ?? createBlankStore());
   const [message, setMessage] = useState<string | null>(null);
+  const [cepMessage, setCepMessage] = useState<string | null>(null);
+  const [isCepLoading, setIsCepLoading] = useState(false);
 
   const filteredStores = useMemo(() => {
     const query = storeSearch
@@ -75,6 +87,40 @@ export function StoreSettingsPanel() {
       ...current,
       [field]: value
     }));
+  };
+
+  const handleCepChange = async (value: string) => {
+    const formattedCep = formatCep(value);
+    updateField('zipCode', formattedCep);
+    setCepMessage(null);
+
+    const cep = normalizeCep(formattedCep);
+    if (cep.length < 8) {
+      return;
+    }
+
+    setIsCepLoading(true);
+    try {
+      const address = await lookupCepAddress(cep);
+      if (!address) {
+        setCepMessage('CEP não encontrado. Verifique o número informado.');
+        return;
+      }
+
+      setForm((current) => ({
+        ...current,
+        zipCode: formatCep(address.cep),
+        address: current.address || address.street,
+        district: current.district || address.district,
+        city: current.city || address.city,
+        state: address.state || current.state
+      }));
+      setCepMessage('Endereço preenchido pelo CEP.');
+    } catch {
+      setCepMessage('Não foi possível consultar o CEP agora.');
+    } finally {
+      setIsCepLoading(false);
+    }
   };
 
   const onLogoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -153,13 +199,18 @@ export function StoreSettingsPanel() {
       return;
     }
 
-    if (form.cnpj && onlyDigits(form.cnpj).length !== 14) {
-      setMessage('CNPJ deve ter 14 dígitos.');
+    if (form.cnpj && !isValidCnpj(form.cnpj)) {
+      setMessage('CNPJ inválido. Verifique os 14 dígitos informados.');
       return;
     }
 
-    if (form.responsibleCpf && onlyDigits(form.responsibleCpf).length !== 11) {
-      setMessage('CPF do responsável deve ter 11 dígitos.');
+    if (form.responsibleCpf && !isValidCpf(form.responsibleCpf)) {
+      setMessage('CPF do responsável inválido. Verifique os 11 dígitos informados.');
+      return;
+    }
+
+    if (form.zipCode && !isValidCep(form.zipCode)) {
+      setMessage('CEP deve conter 8 dígitos.');
       return;
     }
 
@@ -168,8 +219,9 @@ export function StoreSettingsPanel() {
       name: tradeName,
       legalName,
       tradeName,
-      cnpj: onlyDigits(form.cnpj),
-      responsibleCpf: onlyDigits(form.responsibleCpf),
+      cnpj: normalizeCnpj(form.cnpj),
+      responsibleCpf: normalizeCpf(form.responsibleCpf),
+      zipCode: normalizeCep(form.zipCode),
       updatedAt: nowIso()
     };
     const exists = stores.some((store) => store.id === nextStore.id);
@@ -263,7 +315,7 @@ export function StoreSettingsPanel() {
             </label>
             <label>
               CNPJ
-              <input value={form.cnpj} onChange={(event) => updateField('cnpj', event.target.value)} inputMode="numeric" />
+              <input value={form.cnpj} onChange={(event) => updateField('cnpj', formatCnpj(event.target.value))} inputMode="numeric" />
             </label>
             <label>
               Inscrição estadual
@@ -279,7 +331,7 @@ export function StoreSettingsPanel() {
             </label>
             <label>
               CPF do responsável
-              <input value={form.responsibleCpf} onChange={(event) => updateField('responsibleCpf', event.target.value)} inputMode="numeric" />
+              <input value={form.responsibleCpf} onChange={(event) => updateField('responsibleCpf', formatCpf(event.target.value))} inputMode="numeric" />
             </label>
           </div>
         </section>
@@ -289,8 +341,13 @@ export function StoreSettingsPanel() {
           <div className="admin-config-grid admin-address-grid">
             <label>
               CEP
-              <input value={form.zipCode} onChange={(event) => updateField('zipCode', event.target.value)} inputMode="numeric" />
+              <input value={form.zipCode} onChange={(event) => void handleCepChange(event.target.value)} inputMode="numeric" />
             </label>
+            {(isCepLoading || cepMessage) && (
+              <p className="suppliers-cep-feedback">
+                {isCepLoading ? 'Buscando endereço pelo CEP...' : cepMessage}
+              </p>
+            )}
             <label>
               Endereço
               <input value={form.address} onChange={(event) => updateField('address', event.target.value)} />

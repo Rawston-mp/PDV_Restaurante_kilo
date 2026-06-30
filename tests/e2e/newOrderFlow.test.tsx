@@ -59,6 +59,7 @@ describe('New order flow e2e', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(await screen.findByText('Usuário logado')).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Novo Pedido' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Abrir comanda' }));
     expect(await screen.findByText(/Comanda ativa:\s*sim/)).toBeTruthy();
