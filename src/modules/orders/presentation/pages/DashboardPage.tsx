@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import type { Order } from '@/modules/orders/domain/entities/Order';
 import type { OrderStatus } from '@/modules/orders/domain/entities/Order';
@@ -8,6 +8,12 @@ import { useCashMovementsQuery } from '@/modules/finance/presentation/hooks/useC
 import { useCreateCashMovement } from '@/modules/finance/presentation/hooks/useCreateCashMovement';
 import { useConveniosQuery } from '@/modules/convenios/presentation/hooks/useConveniosQuery';
 import { financeContainer } from '@/modules/finance/infrastructure/container/financeContainer';
+import {
+  cashMovementCategoriesStorageKey,
+  cashMovementCategoriesUpdatedEvent,
+  readCashMovementCategoryCatalog,
+  type CashMovementCategoryCatalog
+} from '@/modules/finance/infrastructure/local/cashMovementCategories';
 import type { CashMovement } from '@/modules/finance/domain/entities/CashMovement';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -26,9 +32,6 @@ const movementTypeLabels = {
   ENTRADA: 'Entrada',
   SAIDA: 'Saída'
 } as const;
-
-const incomeCategories = ['PIX', 'DINHEIRO', 'TRANSFERENCIA', 'FIADO', 'CARTAO', 'OUTRO'] as const;
-const expenseCategories = ['TROCO', 'INSUMOS', 'FORNECEDOR', 'BANCO', 'MANUTENCAO', 'OUTROS'] as const;
 
 const normalizeDate = (value: Date | string | undefined) => {
   if (!value) {
@@ -113,6 +116,9 @@ export function DashboardPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [movementType, setMovementType] = useState<'ENTRADA' | 'SAIDA'>('ENTRADA');
   const [movementCategory, setMovementCategory] = useState('PIX');
+  const [movementCategoryCatalog, setMovementCategoryCatalog] = useState<CashMovementCategoryCatalog>(() =>
+    readCashMovementCategoryCatalog()
+  );
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
   const [movementConvenioId, setMovementConvenioId] = useState('');
@@ -308,7 +314,30 @@ export function DashboardPage() {
   }));
 
   const activeConvenios = convenios.filter((convenio) => convenio.active);
-  const movementCategoryOptions = movementType === 'ENTRADA' ? incomeCategories : expenseCategories;
+  const movementCategoryOptions = movementCategoryCatalog[movementType];
+
+  useEffect(() => {
+    const syncCategoryCatalog = () => setMovementCategoryCatalog(readCashMovementCategoryCatalog());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === cashMovementCategoriesStorageKey) {
+        syncCategoryCatalog();
+      }
+    };
+
+    window.addEventListener(cashMovementCategoriesUpdatedEvent, syncCategoryCatalog);
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener(cashMovementCategoriesUpdatedEvent, syncCategoryCatalog);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!movementCategoryOptions.includes(movementCategory)) {
+      setMovementCategory(movementCategoryOptions[0]);
+    }
+  }, [movementCategory, movementCategoryOptions]);
 
   const sortedMovements = useMemo(
     () =>
@@ -356,7 +385,7 @@ export function DashboardPage() {
     setMovementAmount('');
     setMovementDescription('');
     setMovementConvenioId('');
-    setMovementCategory(movementType === 'ENTRADA' ? 'PIX' : 'TROCO');
+    setMovementCategory(movementCategoryCatalog[movementType][0]);
     setMovementLaunchedAt(formatDateTimeInput(new Date()));
     setMovementError(null);
   };
@@ -535,7 +564,7 @@ export function DashboardPage() {
             <span>Use convênios para classificar as entradas e as saídas do fechamento.</span>
           </div>
 
-          <form className="dashboard-finance-form" onSubmit={onCreateMovement}>
+          <form className="dashboard-finance-form" onSubmit={onCreateMovement} autoComplete="off">
             <div>
               <label htmlFor="movement-type">Tipo</label>
               <select
@@ -544,7 +573,7 @@ export function DashboardPage() {
                 onChange={(event) => {
                   const nextType = event.target.value as 'ENTRADA' | 'SAIDA';
                   setMovementType(nextType);
-                  setMovementCategory(nextType === 'ENTRADA' ? 'PIX' : 'TROCO');
+                  setMovementCategory(movementCategoryCatalog[nextType][0]);
                   setMovementConvenioId('');
                 }}
               >
