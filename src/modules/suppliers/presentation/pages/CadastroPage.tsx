@@ -20,6 +20,14 @@ import { useCreateStockEntry } from '@/modules/stockEntries/presentation/hooks/u
 import { useStockEntriesQuery } from '@/modules/stockEntries/presentation/hooks/useStockEntriesQuery';
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import {
+  addCashMovementCategory,
+  deleteCashMovementCategory,
+  defaultCashMovementCategories,
+  readCashMovementCategoryCatalog,
+  updateCashMovementCategory,
+  type CashMovementCategoryType
+} from '@/modules/finance/infrastructure/local/cashMovementCategories';
+import {
   formatCep as formatCepValue,
   formatCpf as formatCpfValue,
   formatCpfCnpj as formatCpfCnpjValue,
@@ -542,6 +550,19 @@ export function CadastroPage() {
     RECEITA: [...defaultFinanceDocumentTypesByTab.RECEITA],
     CONTA_CORRENTE: [...defaultFinanceDocumentTypesByTab.CONTA_CORRENTE]
   });
+  const [cashMovementCategoryCatalog, setCashMovementCategoryCatalog] = useState(() =>
+    readCashMovementCategoryCatalog()
+  );
+  const [cashMovementCategoryDrafts, setCashMovementCategoryDrafts] = useState<Record<CashMovementCategoryType, string>>({
+    ENTRADA: '',
+    SAIDA: ''
+  });
+  const [editingCashMovementCategory, setEditingCashMovementCategory] = useState<{
+    type: CashMovementCategoryType;
+    name: string;
+  } | null>(null);
+  const [editingCashMovementCategoryName, setEditingCashMovementCategoryName] = useState('');
+  const [cashMovementCategoryError, setCashMovementCategoryError] = useState<string | null>(null);
   const [financeStatus, setFinanceStatus] = useState<'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO'>('ABERTO');
   const [financeNotes, setFinanceNotes] = useState('');
   const [duplicateFinanceSourceEntryId, setDuplicateFinanceSourceEntryId] = useState<string | null>(null);
@@ -679,10 +700,31 @@ export function CadastroPage() {
     }
   }, []);
 
-  const financeDocumentTypeOptions = useMemo(
-    () => financeDocumentTypeCatalog[activeFinanceTab] ?? [],
-    [financeDocumentTypeCatalog, activeFinanceTab]
-  );
+  const financeDocumentTypeOptions = useMemo(() => {
+    const categoryType = activeFinanceTab === 'DESPESAS'
+      ? 'SAIDA'
+      : activeFinanceTab === 'RECEITA'
+        ? 'ENTRADA'
+        : null;
+
+    if (!categoryType) {
+      const options = financeDocumentTypeCatalog.CONTA_CORRENTE.filter(Boolean);
+      return financeDocumentRef && !options.includes(financeDocumentRef)
+        ? [financeDocumentRef, ...options]
+        : options;
+    }
+
+    const options = [
+      ...new Set([
+        ...(cashMovementCategoryCatalog[categoryType] ?? []),
+        ...defaultCashMovementCategories[categoryType]
+      ].filter(Boolean))
+    ];
+
+    return financeDocumentRef && !options.includes(financeDocumentRef)
+      ? [financeDocumentRef, ...options]
+      : options;
+  }, [activeFinanceTab, cashMovementCategoryCatalog, financeDocumentRef, financeDocumentTypeCatalog.CONTA_CORRENTE]);
 
   useEffect(() => {
     const cepDigits = normalizeCepDigits(supplierCep);
@@ -1256,25 +1298,58 @@ export function CadastroPage() {
     return `Serão geradas ${installmentCount} parcela(s), com intervalo de ${intervalDays} dia(s), de ${firstDueDate.toLocaleDateString('pt-BR')} até ${lastDueDate.toLocaleDateString('pt-BR')}.`;
   }, [duplicateFinanceInstallmentCount, duplicateFinanceIntervalDays, duplicateFinanceDueDate, duplicateFinanceFixedDayEnabled]);
 
-  const financeSupplierSuggestions = useMemo(() => {
-    const normalizedQuery = normalizeSearchText(financeSupplierName).trim();
-    if (normalizedQuery.length < 3) {
-      return [];
-    }
+  const financePersonLabel = activeFinanceTab === 'RECEITA'
+    ? 'Cliente'
+    : activeFinanceTab === 'DESPESAS'
+      ? 'Fornecedor'
+      : 'Origem/Destino';
 
-    return suppliers
-      .filter((supplier) => {
-        const legalName = normalizeSearchText(supplier.legalName);
-        const tradeName = normalizeSearchText(supplier.tradeName ?? '');
-        return legalName.includes(normalizedQuery) || tradeName.includes(normalizedQuery);
-      })
-      .slice(0, 10)
-      .map((supplier) => ({
-        id: supplier.id,
-        label: supplier.legalName || supplier.tradeName || ''
-      }))
-      .filter((supplier) => supplier.label.length > 0);
-  }, [suppliers, financeSupplierName]);
+  const financePersonOptions = useMemo(() => {
+    const sourceOptions = activeFinanceTab === 'RECEITA'
+      ? clients
+          .filter((client) => client.active)
+          .map((client) => ({
+            id: client.id,
+            label: client.fullName || client.cpf || ''
+          }))
+      : activeFinanceTab === 'DESPESAS'
+        ? suppliers
+            .map((supplier) => ({
+              id: supplier.id,
+              label: supplier.legalName || supplier.tradeName || ''
+            }))
+        : [];
+
+    const options = sourceOptions.filter((person) => person.label.length > 0);
+
+    return financeSupplierName && !options.some((person) => person.label === financeSupplierName)
+      ? [{ id: 'current-finance-person', label: financeSupplierName }, ...options]
+      : options;
+  }, [activeFinanceTab, clients, financeSupplierName, suppliers]);
+
+  const financeAccountOptions = useMemo(() => {
+    const suggestions = convenios.flatMap((convenio) => {
+      const bankName = convenio.bankName?.trim();
+      const accountName = convenio.accountName?.trim();
+      const convenioName = convenio.name?.trim();
+      const combinedAccount = [bankName, accountName].filter(Boolean).join(' - ');
+
+      return [combinedAccount, bankName, accountName, convenioName]
+        .filter((label): label is string => Boolean(label?.trim()));
+    });
+
+    const uniqueSuggestions = suggestions.reduce<string[]>((accumulator, label) => {
+      const alreadyExists = accumulator.some(
+        (item) => normalizeSearchText(item) === normalizeSearchText(label)
+      );
+
+      return alreadyExists ? accumulator : [...accumulator, label];
+    }, []);
+
+    return financeAccountName && !uniqueSuggestions.includes(financeAccountName)
+      ? [financeAccountName, ...uniqueSuggestions]
+      : uniqueSuggestions;
+  }, [convenios, financeAccountName]);
 
   const openSupplierFormFromFinance = () => {
     const initialName = financeSupplierName.trim();
@@ -1290,30 +1365,60 @@ export function CadastroPage() {
     setFinanceFormError(null);
   };
 
-  const addFinanceDocumentTypeOption = () => {
-    const candidate = financeDocumentRef.trim();
-    if (candidate.length < 2) {
-      setFinanceFormError('Digite ao menos 2 caracteres em Documento / Referência para cadastrar no +.');
+  const onAddCashMovementCategory = (type: CashMovementCategoryType) => {
+    const result = addCashMovementCategory(cashMovementCategoryCatalog, type, cashMovementCategoryDrafts[type]);
+
+    setCashMovementCategoryCatalog(result.catalog);
+    setCashMovementCategoryError(result.error);
+
+    if (!result.error) {
+      setCashMovementCategoryDrafts((current) => ({ ...current, [type]: '' }));
+      setEditingCashMovementCategory(null);
+      setEditingCashMovementCategoryName('');
+    }
+  };
+
+  const onStartEditCashMovementCategory = (type: CashMovementCategoryType, name: string) => {
+    setEditingCashMovementCategory({ type, name });
+    setEditingCashMovementCategoryName(name);
+    setCashMovementCategoryError(null);
+  };
+
+  const onSaveCashMovementCategory = () => {
+    if (!editingCashMovementCategory) {
       return;
     }
 
-    const alreadyExists = financeDocumentTypeOptions.some(
-      (option) => normalizeSearchText(option) === normalizeSearchText(candidate)
+    const result = updateCashMovementCategory(
+      cashMovementCategoryCatalog,
+      editingCashMovementCategory.type,
+      editingCashMovementCategory.name,
+      editingCashMovementCategoryName
     );
-    if (alreadyExists) {
-      setFinanceFormError('Esse tipo de documento já está cadastrado.');
-      return;
+
+    setCashMovementCategoryCatalog(result.catalog);
+    setCashMovementCategoryError(result.error);
+
+    if (!result.error) {
+      setEditingCashMovementCategory(null);
+      setEditingCashMovementCategoryName('');
     }
+  };
 
-    const nextOptions = [...financeDocumentTypeOptions, candidate].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const nextCatalog: FinanceDocumentTypeCatalog = {
-      ...financeDocumentTypeCatalog,
-      [activeFinanceTab]: nextOptions
-    };
+  const onDeleteCashMovementCategory = (type: CashMovementCategoryType, name: string) => {
+    const result = deleteCashMovementCategory(cashMovementCategoryCatalog, type, name);
 
-    setFinanceDocumentTypeCatalog(nextCatalog);
-    localStorage.setItem(financeDocumentTypesStorageKey, JSON.stringify(nextCatalog));
-    setFinanceFormError(null);
+    setCashMovementCategoryCatalog(result.catalog);
+    setCashMovementCategoryError(result.error);
+
+    if (
+      editingCashMovementCategory?.type === type &&
+      editingCashMovementCategory.name === name &&
+      !result.error
+    ) {
+      setEditingCashMovementCategory(null);
+      setEditingCashMovementCategoryName('');
+    }
   };
 
   const stockEntryRows = useMemo(
@@ -2157,12 +2262,12 @@ export function CadastroPage() {
   const onSubmitClient = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!isFilled(clientFullName) || !isFilled(clientCpf)) {
-      setClientFormError('Preencha Nome completo e CPF antes de salvar.');
+    if (!isFilled(clientFullName)) {
+      setClientFormError('Preencha o nome completo antes de salvar.');
       return;
     }
 
-    if (!isValidCpf(clientCpf)) {
+    if (isFilled(clientCpf) && !isValidCpf(clientCpf)) {
       setClientFormError('CPF inválido. Verifique os 11 dígitos informados.');
       return;
     }
@@ -2577,7 +2682,7 @@ export function CadastroPage() {
             <h3>Cadastro rápido | Fornecedores</h3>
           </header>
 
-          <form onSubmit={onSubmitSupplier} className="suppliers-form">
+          <form onSubmit={onSubmitSupplier} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -2719,7 +2824,7 @@ export function CadastroPage() {
             <h3>Cadastro rápido | Funcionários</h3>
           </header>
 
-          <form onSubmit={onSubmitEmployee} className="suppliers-form">
+          <form onSubmit={onSubmitEmployee} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -2987,7 +3092,7 @@ export function CadastroPage() {
             <h3>Cadastro rápido | Clientes</h3>
           </header>
 
-          <form onSubmit={onSubmitClient} className="suppliers-form">
+          <form onSubmit={onSubmitClient} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -2997,12 +3102,11 @@ export function CadastroPage() {
                   <input id="client-code" value={clientCode} readOnly />
                 </div>
                 <div>
-                  <label htmlFor="client-cpf">CPF</label>
+                  <label htmlFor="client-cpf">CPF (opcional)</label>
                   <input
                     id="client-cpf"
                     value={clientCpf}
                     onChange={(e) => setClientCpf(formatCpfValue(e.target.value))}
-                    required
                   />
                 </div>
                 <div>
@@ -3239,7 +3343,7 @@ export function CadastroPage() {
             <h3>Cadastro rápido | Convênios</h3>
           </header>
 
-          <form onSubmit={onSubmitConvenio} className="suppliers-form">
+          <form onSubmit={onSubmitConvenio} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3362,7 +3466,7 @@ export function CadastroPage() {
             <h3>Cadastro rápido | Administradora de cartões</h3>
           </header>
 
-          <form onSubmit={onSubmitCardManager} className="suppliers-form">
+          <form onSubmit={onSubmitCardManager} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3502,7 +3606,112 @@ export function CadastroPage() {
             </div>
           </header>
 
-          <form onSubmit={onSubmitFinanceEntry} className="suppliers-form">
+          <form onSubmit={onSubmitFinanceEntry} className="suppliers-form" autoComplete="off">
+            <section className="suppliers-section cash-movement-category-section">
+              <h4>Categorias do caixa</h4>
+              <p className="products-subtitle">
+                Edite as categorias usadas em Dashboard &gt; Caixa &gt; Lançar entrada ou saída.
+              </p>
+
+              <div className="cash-movement-category-grid">
+                {(['ENTRADA', 'SAIDA'] as CashMovementCategoryType[]).map((type) => (
+                  <div className="cash-movement-category-card" key={type}>
+                    <div className="cash-movement-category-card-header">
+                      <strong>{type === 'ENTRADA' ? 'Entradas' : 'Saídas'}</strong>
+                      <span>{cashMovementCategoryCatalog[type].length} categorias</span>
+                    </div>
+
+                    <div className="products-supplier-picker-field">
+                      <input
+                        value={cashMovementCategoryDrafts[type]}
+                        onChange={(event) => {
+                          setCashMovementCategoryDrafts((current) => ({
+                            ...current,
+                            [type]: event.target.value
+                          }));
+                          setCashMovementCategoryError(null);
+                        }}
+                        placeholder={type === 'ENTRADA' ? 'Ex.: PIX, dinheiro' : 'Ex.: insumos, fornecedor'}
+                        aria-label={`Nova categoria de ${type === 'ENTRADA' ? 'entrada' : 'saída'}`}
+                      />
+                      <button
+                        type="button"
+                        className="products-supplier-picker-button"
+                        onClick={() => onAddCashMovementCategory(type)}
+                        aria-label={`Adicionar categoria de ${type === 'ENTRADA' ? 'entrada' : 'saída'}`}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <ul className="cash-movement-category-list">
+                      {cashMovementCategoryCatalog[type].map((category) => {
+                        const isEditing =
+                          editingCashMovementCategory?.type === type &&
+                          editingCashMovementCategory.name === category;
+
+                        return (
+                          <li key={category}>
+                            {isEditing ? (
+                              <input
+                                value={editingCashMovementCategoryName}
+                                onChange={(event) => setEditingCashMovementCategoryName(event.target.value)}
+                                aria-label={`Editar categoria ${category}`}
+                              />
+                            ) : (
+                              <span>{category}</span>
+                            )}
+
+                            <div className="cash-movement-category-actions">
+                              {isEditing ? (
+                                <>
+                                  <button type="button" onClick={onSaveCashMovementCategory}>
+                                    Salvar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="button-muted"
+                                    onClick={() => {
+                                      setEditingCashMovementCategory(null);
+                                      setEditingCashMovementCategoryName('');
+                                      setCashMovementCategoryError(null);
+                                    }}
+                                  >
+                                    Cancelar
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="button-muted"
+                                    onClick={() => onStartEditCashMovementCategory(type, category)}
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="button-muted"
+                                    onClick={() => onDeleteCashMovementCategory(type, category)}
+                                  >
+                                    Excluir
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+
+              {cashMovementCategoryError && (
+                <p className="products-form-warning">{cashMovementCategoryError}</p>
+              )}
+            </section>
+
             <section className="suppliers-section">
               <h4>
                 {activeFinanceTab === 'DESPESAS'
@@ -3518,32 +3727,47 @@ export function CadastroPage() {
                   <input id="finance-code" value={financeCode} readOnly />
                 </div>
                 <div>
-                  <label htmlFor="finance-supplier-name">Fornecedor</label>
+                  <label htmlFor="finance-supplier-name">{financePersonLabel}</label>
                   <div className="products-supplier-picker-field">
-                    <input
+                    <select
                       id="finance-supplier-name"
-                      list="finance-supplier-suggestions"
                       value={financeSupplierName}
                       onChange={(e) => {
                         setFinanceSupplierName(e.target.value);
                         setFinanceFormError(null);
                       }}
-                      placeholder="Digite 3 letras para sugerir fornecedor"
-                    />
+                      disabled={activeFinanceTab === 'CONTA_CORRENTE'}
+                    >
+                      <option value="">
+                        {activeFinanceTab === 'RECEITA'
+                          ? 'Selecione o cliente'
+                          : activeFinanceTab === 'DESPESAS'
+                            ? 'Selecione o fornecedor'
+                            : 'Não se aplica'}
+                      </option>
+                      {financePersonOptions.map((person) => (
+                        <option key={person.id} value={person.label}>
+                          {person.label}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       className="products-supplier-picker-button"
                       onClick={openSupplierFormFromFinance}
-                      aria-label="Cadastrar fornecedor rápido"
+                      aria-label={activeFinanceTab === 'RECEITA' ? 'Cadastrar cliente rápido' : 'Cadastrar fornecedor rápido'}
+                      disabled={activeFinanceTab !== 'DESPESAS'}
                     >
                       +
                     </button>
                   </div>
-                  <datalist id="finance-supplier-suggestions">
-                    {financeSupplierSuggestions.map((supplier) => (
-                      <option key={supplier.id} value={supplier.label} />
-                    ))}
-                  </datalist>
+                  {activeFinanceTab !== 'CONTA_CORRENTE' && !financePersonOptions.length && (
+                    <small>
+                      {activeFinanceTab === 'RECEITA'
+                        ? 'Nenhum cliente ativo cadastrado.'
+                        : 'Nenhum fornecedor cadastrado.'}
+                    </small>
+                  )}
                 </div>
                 <div>
                   <label htmlFor="finance-description">Descrição</label>
@@ -3604,53 +3828,68 @@ export function CadastroPage() {
               <div className="suppliers-row-3">
                 <div>
                   <label htmlFor="finance-account-name">Conta</label>
-                  <input
-                    id="finance-account-name"
-                    value={financeAccountName}
-                    onChange={(e) => setFinanceAccountName(e.target.value)}
-                    placeholder="Ex.: caixa, Banco X, conta operacional"
-                  />
+                  <input id="finance-account-name" value={financeAccountName} readOnly placeholder="Selecione abaixo" />
+                  <div className="finance-option-chips" aria-label="Contas cadastradas em convênios">
+                    {financeAccountOptions.length ? (
+                      financeAccountOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className={financeAccountName === option ? 'is-selected' : ''}
+                          onClick={() => {
+                            setFinanceAccountName(option);
+                            setFinanceFormError(null);
+                          }}
+                        >
+                          {option}
+                        </button>
+                      ))
+                    ) : (
+                      <span>Nenhum banco/conta cadastrado em Convênios.</span>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="finance-document-ref">Documento / Referência</label>
-                  <div className="products-supplier-picker-field">
-                    <input
-                      id="finance-document-ref"
-                      list="finance-document-ref-options"
-                      value={financeDocumentRef}
-                      onChange={(e) => {
-                        setFinanceDocumentRef(e.target.value);
-                        setFinanceFormError(null);
-                      }}
-                      placeholder="Ex.: boleto, PIX, TED, adiantamento"
-                    />
-                    <button
-                      type="button"
-                      className="products-supplier-picker-button"
-                      onClick={addFinanceDocumentTypeOption}
-                      aria-label="Cadastrar tipo de documento"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <datalist id="finance-document-ref-options">
+                  <input id="finance-document-ref" value={financeDocumentRef} readOnly placeholder="Selecione abaixo" />
+                  <div className="finance-option-chips" aria-label="Documentos e referências financeiras">
                     {financeDocumentTypeOptions.map((option) => (
-                      <option key={option} value={option} />
+                      <button
+                        key={option}
+                        type="button"
+                        className={financeDocumentRef === option ? 'is-selected' : ''}
+                        onClick={() => {
+                          setFinanceDocumentRef(option);
+                          setFinanceFormError(null);
+                        }}
+                      >
+                        {option}
+                      </button>
                     ))}
-                  </datalist>
+                  </div>
+                  <small>
+                    {activeFinanceTab === 'DESPESAS'
+                      ? 'Usa as categorias de Saídas cadastradas acima.'
+                      : activeFinanceTab === 'RECEITA'
+                        ? 'Usa as categorias de Entradas cadastradas acima.'
+                        : 'Use referências de movimentação entre contas.'}
+                  </small>
                 </div>
                 <div>
                   <label htmlFor="finance-status">Status</label>
-                  <select
-                    id="finance-status"
-                    value={financeStatus}
-                    onChange={(e) => setFinanceStatus(e.target.value as 'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO')}
-                  >
-                    <option value="ABERTO">ABERTO</option>
-                    <option value="PAGO">PAGO</option>
-                    <option value="RECEBIDO">RECEBIDO</option>
-                    <option value="ESTORNADO">ESTORNADO</option>
-                  </select>
+                  <input id="finance-status" value={financeStatus} readOnly />
+                  <div className="finance-option-chips finance-status-chips" aria-label="Status financeiro">
+                    {(['ABERTO', 'PAGO', 'RECEBIDO', 'ESTORNADO'] as const).map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        className={financeStatus === status ? 'is-selected' : ''}
+                        onClick={() => setFinanceStatus(status)}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -3716,7 +3955,7 @@ export function CadastroPage() {
             />
           </header>
 
-          <form onSubmit={onSubmitStockEntry} className="suppliers-form">
+          <form onSubmit={onSubmitStockEntry} className="suppliers-form" autoComplete="off">
             <section className="suppliers-section">
               <h4>Cabeçalho da nota</h4>
 

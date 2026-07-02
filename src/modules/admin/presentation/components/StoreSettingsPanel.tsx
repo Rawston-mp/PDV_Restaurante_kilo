@@ -288,7 +288,7 @@ export function StoreSettingsPanel() {
         </div>
       )}
 
-      <form onSubmit={onSaveStore} className="admin-config-form">
+      <form onSubmit={onSaveStore} className="admin-config-form" autoComplete="off">
         <section className="admin-config-section">
           <h4>Dados do estabelecimento</h4>
           <div className="admin-config-grid">

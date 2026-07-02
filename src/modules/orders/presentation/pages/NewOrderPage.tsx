@@ -157,7 +157,7 @@ export function NewOrderPage() {
   return (
     <section className="card">
       <h2>Novo Pedido</h2>
-      <form onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} autoComplete="off">
         <label htmlFor="table">Mesa</label>
         <input
           id="table"
@@ -251,7 +251,7 @@ export function NewOrderPage() {
           <h3>Adicionar item</h3>
           <p>Sensor de peso: {connected ? 'conectado' : 'desconectado'}</p>
           <p>Peso recebido: {weight ? `${weight.toFixed(3)} kg` : 'aguardando leitura'}</p>
-          <form onSubmit={onAddItem}>
+          <form onSubmit={onAddItem} autoComplete="off">
             <label htmlFor="item-name">Nome do item</label>
             <input
               id="item-name"

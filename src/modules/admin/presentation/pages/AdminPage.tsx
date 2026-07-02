@@ -513,7 +513,7 @@ export function AdminPage() {
 
           {message && <p className="admin-message">{message}</p>}
 
-          <form onSubmit={onChangePin} className="admin-pin-form">
+          <form onSubmit={onChangePin} className="admin-pin-form" autoComplete="off">
             <h4>Gestão de PIN</h4>
 
             <label htmlFor="pin-role">Perfil</label>
@@ -685,7 +685,7 @@ export function AdminPage() {
           <h3>Configurações Fiscais NFC-e</h3>
           <p className="admin-subtitle">Configure dados fiscais, certificado digital e parâmetros para emissão de NFC-e.</p>
 
-          <form onSubmit={onSaveCertificateSettings} className="admin-certificate-form">
+          <form onSubmit={onSaveCertificateSettings} className="admin-certificate-form" autoComplete="off">
             <section className="admin-fiscal-section">
               <h4>Dados da Empresa para NFC-e</h4>
               <div className="admin-fiscal-grid">
