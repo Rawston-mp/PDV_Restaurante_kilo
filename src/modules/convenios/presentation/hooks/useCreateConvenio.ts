@@ -5,6 +5,7 @@ import { conveniosContainer } from '@/modules/convenios/infrastructure/container
 type Input = {
   convenioCode: string;
   name: string;
+  cpfCnpj?: string;
   paymentMethod: 'PIX' | 'DINHEIRO' | 'TRANSFERENCIA' | 'FIADO' | 'CARTAO' | 'OUTRO';
   cashFlow: 'ENTRADA' | 'SAIDA' | 'AMBOS';
   bankName: string;

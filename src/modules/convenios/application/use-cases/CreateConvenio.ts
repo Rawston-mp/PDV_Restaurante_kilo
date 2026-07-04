@@ -12,6 +12,7 @@ export class CreateConvenio {
       id: input.id,
       convenioCode: input.convenioCode,
       name: input.name,
+      cpfCnpj: input.cpfCnpj,
       paymentMethod: input.paymentMethod,
       cashFlow: input.cashFlow,
       bankName: input.bankName,

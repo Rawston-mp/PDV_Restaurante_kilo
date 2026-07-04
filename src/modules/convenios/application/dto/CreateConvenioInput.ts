@@ -4,6 +4,7 @@ export type CreateConvenioInput = {
   id: string;
   convenioCode: string;
   name: string;
+  cpfCnpj?: string;
   paymentMethod: ConvenioPaymentMethod;
   cashFlow: ConvenioCashFlow;
   bankName: string;

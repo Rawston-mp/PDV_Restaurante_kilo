@@ -34,7 +34,8 @@ import {
   isValidCep,
   isValidCpf,
   isValidCpfCnpj,
-  normalizeCep
+  normalizeCep,
+  normalizeCpfCnpj
 } from '@/shared/domain/services/documentValidation';
 import { lookupCepAddress } from '@/shared/infrastructure/cep/viaCepLookup';
 
@@ -112,6 +113,28 @@ const parseLegacyStockEntryCode = (description: string) => {
   const [firstChunk] = description.split(' - ');
   return /^\d{2,5}$/.test(firstChunk) ? firstChunk : null;
 };
+
+const parseFinanceAmount = (value: string) => {
+  const parsed = Number(value.replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const isSameCalendarDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const financeStatusOptionsByTab = {
+  DESPESAS: ['ABERTO', 'PAGO', 'ESTORNADO'],
+  RECEITA: ['ABERTO', 'RECEBIDO', 'ESTORNADO'],
+  CONTA_CORRENTE: ['ABERTO', 'RECEBIDO', 'ESTORNADO']
+} as const satisfies Record<FinanceTab, Array<FinanceEntry['status']>>;
+
+const isFinanceIncomeSettled = (entry: FinanceEntry) =>
+  entry.tab === 'RECEITA' && (entry.status === 'RECEBIDO' || entry.status === 'PAGO');
+
+const isFinanceExpenseSettled = (entry: FinanceEntry) =>
+  entry.tab === 'DESPESAS' && entry.status === 'PAGO';
 
 const normalizeXmlValue = (value: string) =>
   value
@@ -513,12 +536,18 @@ export function CadastroPage() {
   const [convenioFormError, setConvenioFormError] = useState<string | null>(null);
   const [convenioCode, setConvenioCode] = useState('');
   const [convenioName, setConvenioName] = useState('');
+  const [convenioCpfCnpj, setConvenioCpfCnpj] = useState('');
   const [convenioPaymentMethod, setConvenioPaymentMethod] = useState<(typeof convenioPaymentMethodOptions)[number]>('PIX');
   const [convenioCashFlow, setConvenioCashFlow] = useState<(typeof convenioCashFlowOptions)[number]>('ENTRADA');
   const [convenioBankName, setConvenioBankName] = useState('');
   const [convenioAccountName, setConvenioAccountName] = useState('');
   const [convenioActive, setConvenioActive] = useState(true);
   const [convenioNotes, setConvenioNotes] = useState('');
+  const [convenioFilterId, setConvenioFilterId] = useState('');
+  const [convenioFilterName, setConvenioFilterName] = useState('');
+  const [convenioFilterCpfCnpj, setConvenioFilterCpfCnpj] = useState('');
+  const [convenioFilterStatus, setConvenioFilterStatus] = useState<'TODOS' | 'ATIVO' | 'INATIVO'>('ATIVO');
+  const [convenioSortBy, setConvenioSortBy] = useState<'ID' | 'NOME'>('ID');
 
   const [cardManagers, setCardManagers] = useState<CardManagerSettings[]>([]);
   const [editingCardManagerId, setEditingCardManagerId] = useState<string | null>(null);
@@ -544,6 +573,7 @@ export function CadastroPage() {
   const [financeDueDate, setFinanceDueDate] = useState('');
   const [financeCompetenceDate, setFinanceCompetenceDate] = useState('');
   const [financeAccountName, setFinanceAccountName] = useState('');
+  const [financeAccountFilter, setFinanceAccountFilter] = useState('');
   const [financeDocumentRef, setFinanceDocumentRef] = useState('');
   const [financeDocumentTypeCatalog, setFinanceDocumentTypeCatalog] = useState<FinanceDocumentTypeCatalog>({
     DESPESAS: [...defaultFinanceDocumentTypesByTab.DESPESAS],
@@ -984,6 +1014,7 @@ export function CadastroPage() {
     setConvenioFormError(null);
     setConvenioCode(nextCode ?? generateConvenioCodeForCurrentCatalog());
     setConvenioName('');
+    setConvenioCpfCnpj('');
     setConvenioPaymentMethod('PIX');
     setConvenioCashFlow('ENTRADA');
     setConvenioBankName('');
@@ -1232,13 +1263,36 @@ export function CadastroPage() {
   );
 
   const convenioRows = useMemo(
-    () =>
-      [...convenios].sort((a, b) => {
+    () => {
+      const normalizedId = convenioFilterId.trim();
+      const normalizedName = normalizeSearchText(convenioFilterName);
+      const normalizedCpfCnpj = normalizeCpfCnpj(convenioFilterCpfCnpj);
+
+      return [...convenios]
+        .filter((convenio) => {
+          const code = convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '';
+          const document = normalizeCpfCnpj(convenio.cpfCnpj ?? '');
+          const matchesId = !normalizedId || code.includes(normalizedId);
+          const matchesName = !normalizedName || normalizeSearchText(convenio.name).includes(normalizedName);
+          const matchesDocument = !normalizedCpfCnpj || document.includes(normalizedCpfCnpj);
+          const matchesStatus =
+            convenioFilterStatus === 'TODOS' ||
+            (convenioFilterStatus === 'ATIVO' && convenio.active) ||
+            (convenioFilterStatus === 'INATIVO' && !convenio.active);
+
+          return matchesId && matchesName && matchesDocument && matchesStatus;
+        })
+        .sort((a, b) => {
+          if (convenioSortBy === 'NOME') {
+            return a.name.localeCompare(b.name, 'pt-BR');
+          }
+
         const aCode = Number(a.convenioCode ?? parseLegacyConvenioCode(a.name) ?? '0');
         const bCode = Number(b.convenioCode ?? parseLegacyConvenioCode(b.name) ?? '0');
         return aCode - bCode;
-      }),
-    [convenios]
+        });
+    },
+    [convenioFilterCpfCnpj, convenioFilterId, convenioFilterName, convenioFilterStatus, convenioSortBy, convenios]
   );
 
   const cardManagerRows = useMemo(
@@ -1265,6 +1319,82 @@ export function CadastroPage() {
     () => financeRows.filter((entry) => entry.tab === activeFinanceTab),
     [financeRows, activeFinanceTab]
   );
+
+  const financeAccountBalanceRows = useMemo(() => {
+    const today = new Date();
+    const balances = new Map<string, { income: number; expense: number; todayIncome: number; todayExpense: number }>();
+
+    for (const entry of financeRows) {
+      if (entry.status === 'ESTORNADO' || !entry.accountName) {
+        continue;
+      }
+
+      const amount = parseFinanceAmount(entry.amount);
+      if (amount <= 0) {
+        continue;
+      }
+
+      const movementDate = new Date(entry.updatedAt || entry.createdAt);
+      const isToday = !Number.isNaN(movementDate.getTime()) && isSameCalendarDay(movementDate, today);
+      const current = balances.get(entry.accountName) ?? { income: 0, expense: 0, todayIncome: 0, todayExpense: 0 };
+
+      if (isFinanceIncomeSettled(entry)) {
+        current.income += amount;
+        if (isToday) {
+          current.todayIncome += amount;
+        }
+      }
+
+      if (isFinanceExpenseSettled(entry)) {
+        current.expense += amount;
+        if (isToday) {
+          current.todayExpense += amount;
+        }
+      }
+
+      balances.set(entry.accountName, current);
+    }
+
+    return [...balances.entries()]
+      .map(([accountName, balance]) => ({
+        accountName,
+        ...balance,
+        balance: balance.income - balance.expense,
+        todayBalance: balance.todayIncome - balance.todayExpense
+      }))
+      .sort((left, right) => left.accountName.localeCompare(right.accountName, 'pt-BR'));
+  }, [financeRows]);
+
+  const financeAccountMovementRows = useMemo(() => {
+    if (!financeAccountFilter) {
+      return [];
+    }
+
+    let runningBalance = 0;
+
+    return financeRows
+      .filter((entry) => entry.accountName === financeAccountFilter)
+      .filter((entry) => entry.status !== 'ESTORNADO')
+      .filter((entry) => isFinanceIncomeSettled(entry) || isFinanceExpenseSettled(entry))
+      .sort((left, right) => {
+        const leftDate = new Date(left.updatedAt || left.createdAt).getTime();
+        const rightDate = new Date(right.updatedAt || right.createdAt).getTime();
+        return leftDate - rightDate;
+      })
+      .map((entry) => {
+        const amount = parseFinanceAmount(entry.amount);
+        const debit = entry.tab === 'DESPESAS' ? amount : 0;
+        const credit = entry.tab === 'RECEITA' ? amount : 0;
+        runningBalance += credit - debit;
+
+        return {
+          entry,
+          debit,
+          credit,
+          balance: runningBalance
+        };
+      });
+  }, [financeAccountFilter, financeRows]);
 
   const duplicateFinanceSourceEntry = useMemo(
     () => financeEntries.find((entry) => entry.id === duplicateFinanceSourceEntryId) ?? null,
@@ -1350,6 +1480,19 @@ export function CadastroPage() {
       ? [financeAccountName, ...uniqueSuggestions]
       : uniqueSuggestions;
   }, [convenios, financeAccountName]);
+
+  useEffect(() => {
+    if (!financeAccountOptions.length) {
+      if (financeAccountFilter) {
+        setFinanceAccountFilter('');
+      }
+      return;
+    }
+
+    if (!financeAccountOptions.includes(financeAccountFilter)) {
+      setFinanceAccountFilter(financeAccountOptions[0]);
+    }
+  }, [financeAccountFilter, financeAccountOptions]);
 
   const openSupplierFormFromFinance = () => {
     const initialName = financeSupplierName.trim();
@@ -1499,6 +1642,11 @@ export function CadastroPage() {
       return;
     }
 
+    if (isFilled(convenioCpfCnpj) && !isValidCpfCnpj(convenioCpfCnpj)) {
+      setConvenioFormError('CPF/CNPJ inválido. Informe CPF com 11 dígitos ou CNPJ com 14 dígitos válidos.');
+      return;
+    }
+
     const usedCodes = getUsedConvenioCodes(convenios.filter((convenio) => convenio.id !== editingConvenioId));
     const generatedCode = convenioCode && !usedCodes.has(convenioCode)
       ? convenioCode
@@ -1512,11 +1660,12 @@ export function CadastroPage() {
         return;
       }
 
-      const updatedConvenio = {
-        ...existingConvenio,
-        convenioCode: generatedCode,
-        name: convenioName,
-        paymentMethod: convenioPaymentMethod,
+    const updatedConvenio = {
+      ...existingConvenio,
+      convenioCode: generatedCode,
+      name: convenioName,
+      cpfCnpj: convenioCpfCnpj,
+      paymentMethod: convenioPaymentMethod,
         cashFlow: convenioCashFlow,
         bankName: convenioBankName,
         accountName: convenioAccountName,
@@ -1532,6 +1681,7 @@ export function CadastroPage() {
       const convenio = await createConvenio({
         convenioCode: generatedCode,
         name: convenioName,
+        cpfCnpj: convenioCpfCnpj,
         paymentMethod: convenioPaymentMethod,
         cashFlow: convenioCashFlow,
         bankName: convenioBankName,
@@ -1559,6 +1709,7 @@ export function CadastroPage() {
 
     setConvenioCode(convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? generateConvenioCodeForCurrentCatalog());
     setConvenioName(convenio.name);
+    setConvenioCpfCnpj(convenio.cpfCnpj ?? '');
     setConvenioPaymentMethod(convenio.paymentMethod);
     setConvenioCashFlow(convenio.cashFlow);
     setConvenioBankName(convenio.bankName);
@@ -1708,14 +1859,35 @@ export function CadastroPage() {
   const onSubmitFinanceEntry = (event: FormEvent) => {
     event.preventDefault();
 
-    if (!isFilled(financeDescription)) {
+    if (activeFinanceTab !== 'RECEITA' && !isFilled(financeDescription)) {
       setFinanceFormError('Preencha a descrição antes de salvar.');
       return;
     }
 
-    const amountValue = Number(financeAmount.replace(/\./g, '').replace(',', '.'));
+    const resolvedFinanceDescription = financeDescription.trim()
+      || financeDocumentRef
+      || financeSupplierName
+      || 'Receita';
+
+    const amountValue = parseFinanceAmount(financeAmount);
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
       setFinanceFormError('Informe um valor válido para o lançamento.');
+      return;
+    }
+
+    const resolvedFinanceStatus: FinanceEntry['status'] =
+      activeFinanceTab === 'RECEITA' && financeStatus === 'PAGO' ? 'RECEBIDO' : financeStatus;
+
+    const requiresAccount =
+      (activeFinanceTab === 'DESPESAS' && resolvedFinanceStatus === 'PAGO') ||
+      (activeFinanceTab === 'RECEITA' && resolvedFinanceStatus === 'RECEBIDO');
+
+    if (requiresAccount && !isFilled(financeAccountName)) {
+      setFinanceFormError(
+        activeFinanceTab === 'DESPESAS'
+          ? 'Selecione a conta corrente de onde saiu o dinheiro da despesa.'
+          : 'Selecione a conta corrente onde entrou o dinheiro da receita.'
+      );
       return;
     }
 
@@ -1737,14 +1909,14 @@ export function CadastroPage() {
         financeCode: generatedCode,
         tab: activeFinanceTab,
         supplierName: financeSupplierName,
-        description: financeDescription,
+        description: resolvedFinanceDescription,
         categoryType: financeCategoryType,
         amount: financeAmount,
         dueDate: financeDueDate,
         competenceDate: financeCompetenceDate,
         accountName: financeAccountName,
         documentRef: financeDocumentRef,
-        status: financeStatus,
+        status: resolvedFinanceStatus,
         notes: financeNotes,
         updatedAt: new Date().toISOString(),
         version: existingEntry.version + 1
@@ -1760,14 +1932,14 @@ export function CadastroPage() {
         financeCode: generatedCode,
         tab: activeFinanceTab,
         supplierName: financeSupplierName,
-        description: financeDescription,
+        description: resolvedFinanceDescription,
         categoryType: financeCategoryType,
         amount: financeAmount,
         dueDate: financeDueDate,
         competenceDate: financeCompetenceDate,
         accountName: financeAccountName,
         documentRef: financeDocumentRef,
-        status: financeStatus,
+        status: resolvedFinanceStatus,
         notes: financeNotes,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -1801,7 +1973,7 @@ export function CadastroPage() {
     setFinanceCompetenceDate(entry.competenceDate);
     setFinanceAccountName(entry.accountName);
     setFinanceDocumentRef(entry.documentRef);
-    setFinanceStatus(entry.status);
+    setFinanceStatus(entry.tab === 'RECEITA' && entry.status === 'PAGO' ? 'RECEBIDO' : entry.status);
     setFinanceNotes(entry.notes);
   };
 
@@ -3353,7 +3525,7 @@ export function CadastroPage() {
                   <input id="convenio-code" value={convenioCode} readOnly />
                 </div>
                 <div>
-                  <label htmlFor="convenio-name">Nome do convenio</label>
+                  <label htmlFor="convenio-name">Nome referência</label>
                   <input
                     id="convenio-name"
                     value={convenioName}
@@ -3361,6 +3533,18 @@ export function CadastroPage() {
                     required
                   />
                 </div>
+                <div>
+                  <label htmlFor="convenio-cpf-cnpj">CPF/CNPJ</label>
+                  <input
+                    id="convenio-cpf-cnpj"
+                    value={convenioCpfCnpj}
+                    onChange={(e) => setConvenioCpfCnpj(formatCpfCnpjValue(e.target.value))}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-3">
                 <div>
                   <label htmlFor="convenio-payment-method">Meio de pagamento</label>
                   <select
@@ -3375,11 +3559,8 @@ export function CadastroPage() {
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="convenio-cash-flow">Direcao</label>
+                  <label htmlFor="convenio-cash-flow">Direção</label>
                   <select
                     id="convenio-cash-flow"
                     value={convenioCashFlow}
@@ -3393,21 +3574,24 @@ export function CadastroPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="convenio-bank-name">Banco / Origem</label>
+                  <label htmlFor="convenio-bank-name">Banco / Conta corrente</label>
                   <input
                     id="convenio-bank-name"
                     value={convenioBankName}
                     onChange={(e) => setConvenioBankName(e.target.value)}
-                    placeholder="Ex.: Banco Z"
+                    placeholder="Ex.: Stone, Santander, Nubank"
                   />
                 </div>
+              </div>
+
+              <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="convenio-account-name">Conta / Destino</label>
+                  <label htmlFor="convenio-account-name">Descrição da conta</label>
                   <input
                     id="convenio-account-name"
                     value={convenioAccountName}
                     onChange={(e) => setConvenioAccountName(e.target.value)}
-                    placeholder="Ex.: conta corrente"
+                    placeholder="Ex.: Conta principal, POS balcão, conta corrente"
                   />
                 </div>
               </div>
@@ -3775,7 +3959,7 @@ export function CadastroPage() {
                     id="finance-description"
                     value={financeDescription}
                     onChange={(e) => setFinanceDescription(e.target.value)}
-                    required
+                    required={activeFinanceTab !== 'RECEITA'}
                   />
                 </div>
                 <div>
@@ -3827,7 +4011,13 @@ export function CadastroPage() {
 
               <div className="suppliers-row-3">
                 <div>
-                  <label htmlFor="finance-account-name">Conta</label>
+                  <label htmlFor="finance-account-name">
+                    {activeFinanceTab === 'DESPESAS'
+                      ? 'Conta corrente de saída'
+                      : activeFinanceTab === 'RECEITA'
+                        ? 'Conta corrente de entrada'
+                        : 'Conta corrente'}
+                  </label>
                   <input id="finance-account-name" value={financeAccountName} readOnly placeholder="Selecione abaixo" />
                   <div className="finance-option-chips" aria-label="Contas cadastradas em convênios">
                     {financeAccountOptions.length ? (
@@ -3848,6 +4038,13 @@ export function CadastroPage() {
                       <span>Nenhum banco/conta cadastrado em Convênios.</span>
                     )}
                   </div>
+                  <small>
+                    {activeFinanceTab === 'DESPESAS'
+                      ? 'Obrigatório quando o status for PAGO.'
+                      : activeFinanceTab === 'RECEITA'
+                        ? 'Obrigatório quando o status for RECEBIDO.'
+                        : 'Use para transferências ou conferência entre contas.'}
+                  </small>
                 </div>
                 <div>
                   <label htmlFor="finance-document-ref">Documento / Referência</label>
@@ -3879,7 +4076,7 @@ export function CadastroPage() {
                   <label htmlFor="finance-status">Status</label>
                   <input id="finance-status" value={financeStatus} readOnly />
                   <div className="finance-option-chips finance-status-chips" aria-label="Status financeiro">
-                    {(['ABERTO', 'PAGO', 'RECEBIDO', 'ESTORNADO'] as const).map((status) => (
+                    {financeStatusOptionsByTab[activeFinanceTab].map((status) => (
                       <button
                         key={status}
                         type="button"
@@ -4662,47 +4859,95 @@ export function CadastroPage() {
       )}
 
       {activeTab === 'CONVENIOS' && (
-        <article className="card products-list-card">
-          <h3>Convênios cadastrados</h3>
+        <article className="card products-list-card convenio-list-card">
+          <header className="products-cadastro-header">
+            <div>
+              <h3>Cadastro de convênios</h3>
+              <p className="products-subtitle">Referências financeiras usadas em caixa, bancos, cartões e conta corrente.</p>
+            </div>
+            <button
+              type="button"
+              className="products-new-button"
+              onClick={() => {
+                if (!showCadastroSpan) {
+                  clearConvenioForm();
+                }
+                setShowCadastroSpan((prev) => !prev);
+              }}
+            >
+              {showCadastroSpan ? 'Fechar cadastro' : '+ Novo cadastro'}
+            </button>
+          </header>
+
+          <div className="convenio-filter-bar">
+            <label>
+              #Id:
+              <input value={convenioFilterId} onChange={(e) => setConvenioFilterId(e.target.value.replace(/\D/g, ''))} />
+            </label>
+            <label>
+              Nome:
+              <input value={convenioFilterName} onChange={(e) => setConvenioFilterName(e.target.value)} />
+            </label>
+            <label>
+              CPF/CNPJ:
+              <input
+                value={convenioFilterCpfCnpj}
+                onChange={(e) => setConvenioFilterCpfCnpj(formatCpfCnpjValue(e.target.value))}
+              />
+            </label>
+            <label>
+              Status:
+              <select value={convenioFilterStatus} onChange={(e) => setConvenioFilterStatus(e.target.value as 'TODOS' | 'ATIVO' | 'INATIVO')}>
+                <option value="ATIVO">Ativo</option>
+                <option value="INATIVO">Inativo</option>
+                <option value="TODOS">Todos</option>
+              </select>
+            </label>
+            <label>
+              Ordenar:
+              <select value={convenioSortBy} onChange={(e) => setConvenioSortBy(e.target.value as 'ID' | 'NOME')}>
+                <option value="ID">#Id</option>
+                <option value="NOME">Nome</option>
+              </select>
+            </label>
+            <button type="button" onClick={() => undefined}>Buscar</button>
+          </div>
 
           {convenioRows.length === 0 ? (
             <p className="empty-state">Nenhum convênio cadastrado ainda.</p>
           ) : (
-            <ul className="products-list suppliers-list">
+            <div className="convenio-table">
+              <div className="convenio-table-head">
+                <span>Nome Referência</span>
+                <span>CPF / CNPJ</span>
+                <span>Banco</span>
+                <span>Status</span>
+                <span>Ações</span>
+              </div>
               {convenioRows.map((convenio) => (
-                <li key={convenio.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '--'}</span>{' '}
-                      {convenio.name}
-                    </strong>
-                    <span>
-                      {convenio.paymentMethod} | {convenio.cashFlow}
-                    </span>
-                    <span>
-                      {convenio.bankName || 'Sem banco informado'}
-                      {convenio.accountName ? ` | ${convenio.accountName}` : ''}
-                    </span>
-                    <span>Status: {convenio.active ? 'ATIVO' : 'INATIVO'}</span>
+                <div className="convenio-table-row" key={convenio.id}>
+                  <strong>
+                    <span className="products-id-tag">ID {convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '--'}</span>{' '}
+                    {convenio.name}
+                  </strong>
+                  <span>{convenio.cpfCnpj || '-'}</span>
+                  <span>{convenio.bankName || convenio.accountName || '-'}</span>
+                  <span>{convenio.active ? 'Ativo' : 'Inativo'}</span>
+                  <div className="convenio-table-actions">
+                    <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="products-delete-button"
+                      onClick={() => void onDeleteConvenio(convenio.id)}
+                    >
+                      Excluir
+                    </button>
                   </div>
-                  <div>
-                    <span>{convenio.notes || 'Sem observações'}</span>
-                    <div className="products-row-actions">
-                      <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="products-delete-button"
-                        onClick={() => void onDeleteConvenio(convenio.id)}
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </div>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </article>
       )}
@@ -4883,6 +5128,85 @@ export function CadastroPage() {
             </section>
           )}
 
+          <section className="finance-account-summary">
+            <div className="finance-account-summary-header">
+              <div>
+                <h4>Movimentações conta corrente</h4>
+                <p className="products-subtitle">
+                  Escolha a conta para conferir débito, crédito e saldo. Lançamentos em aberto não movimentam saldo.
+                </p>
+              </div>
+              <span>{financeAccountOptions.length} contas</span>
+            </div>
+
+            <div className="finance-account-toolbar">
+              <label htmlFor="finance-account-filter">Conta corrente:</label>
+              <select
+                id="finance-account-filter"
+                value={financeAccountFilter}
+                onChange={(event) => setFinanceAccountFilter(event.target.value)}
+              >
+                {financeAccountOptions.map((account) => (
+                  <option key={account} value={account}>
+                    {account}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!financeAccountOptions.length ? (
+              <p className="empty-state">Cadastre bancos/contas em Convênios para consultar saldo por conta corrente.</p>
+            ) : (
+              <div className="finance-account-ledger">
+                <div className="finance-account-ledger-head">
+                  <span>Conta corrente</span>
+                  <span>Descrição</span>
+                  <span>Débito</span>
+                  <span>Crédito</span>
+                  <span>Saldo</span>
+                </div>
+
+                <div className="finance-account-ledger-row is-opening">
+                  <strong>Saldo anterior</strong>
+                  <span>-</span>
+                  <b>-</b>
+                  <b>-</b>
+                  <b>R$ 0,00</b>
+                </div>
+
+                {financeAccountMovementRows.length ? (
+                  financeAccountMovementRows.map(({ entry, debit, credit, balance }) => (
+                    <div className="finance-account-ledger-row" key={entry.id}>
+                      <strong>{entry.accountName}</strong>
+                      <span>{entry.description}</span>
+                      <b className="is-debit">{debit ? currencyFormatter.format(debit) : '-'}</b>
+                      <b className="is-credit">{credit ? currencyFormatter.format(credit) : '-'}</b>
+                      <b>{currencyFormatter.format(balance)}</b>
+                    </div>
+                  ))
+                ) : (
+                  <p className="empty-state">Nenhuma movimentação paga ou recebida para esta conta.</p>
+                )}
+
+                <div className="finance-account-ledger-row is-total">
+                  <strong>Saldo</strong>
+                  <span>{financeAccountFilter || '-'}</span>
+                  <b className="is-debit">
+                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + row.debit, 0))}
+                  </b>
+                  <b className="is-credit">
+                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + row.credit, 0))}
+                  </b>
+                  <b>
+                    {currencyFormatter.format(
+                      financeAccountMovementRows.reduce((sum, row) => sum + row.credit - row.debit, 0)
+                    )}
+                  </b>
+                </div>
+              </div>
+            )}
+          </section>
+
           {activeFinanceRows.length === 0 ? (
             <p className="empty-state">Nenhum lançamento em {activeFinanceTab === 'DESPESAS' ? 'Despesas' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}.</p>
           ) : (
@@ -4898,7 +5222,7 @@ export function CadastroPage() {
                       Tipo: {entry.categoryType} | Status: {entry.status}
                     </span>
                     <span>
-                      Fornecedor: {entry.supplierName || '-'}
+                      {entry.tab === 'RECEITA' ? 'Cliente' : entry.tab === 'DESPESAS' ? 'Fornecedor' : 'Origem/Destino'}: {entry.supplierName || '-'}
                     </span>
                     <span>
                       Valor: {entry.amount || '-'} | Vencimento: {entry.dueDate || '-'} | Competência: {entry.competenceDate || '-'}

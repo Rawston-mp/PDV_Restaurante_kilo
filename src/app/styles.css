@@ -4112,6 +4112,196 @@ body {
     background: #0369a1;
 }
 
+.finance-account-summary {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0.9rem 0;
+    padding: 0.85rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: linear-gradient(120deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.finance-account-summary-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.finance-account-summary-header h4 {
+    margin: 0;
+    color: #1e3a8a;
+    font-size: 0.92rem;
+}
+
+.finance-account-summary-header span {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 0.72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.finance-account-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.finance-account-toolbar label {
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.finance-account-toolbar select {
+    min-width: 230px;
+    min-height: 34px;
+    padding: 0.42rem 0.56rem;
+    border: 1px solid #93c5fd;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.finance-account-ledger {
+    display: grid;
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.finance-account-ledger-head,
+.finance-account-ledger-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(240px, 2fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr);
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.46rem 0.65rem;
+}
+
+.finance-account-ledger-head {
+    background: #60a5fa;
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.finance-account-ledger-row {
+    border-top: 1px solid #e2e8f0;
+    color: #0f172a;
+    font-size: 0.78rem;
+}
+
+.finance-account-ledger-row:nth-child(even) {
+    background: #f8fafc;
+}
+
+.finance-account-ledger-row strong {
+    font-weight: 800;
+}
+
+.finance-account-ledger-row b {
+    text-align: right;
+}
+
+.finance-account-ledger-row .is-debit {
+    color: #dc2626;
+}
+
+.finance-account-ledger-row .is-credit {
+    color: #16a34a;
+}
+
+.finance-account-ledger-row.is-opening,
+.finance-account-ledger-row.is-total {
+    background: #f1f5f9;
+    font-weight: 800;
+}
+
+.convenio-list-card {
+    gap: 0.9rem;
+}
+
+.convenio-filter-bar {
+    display: grid;
+    grid-template-columns: minmax(70px, 0.45fr) minmax(220px, 1.2fr) minmax(190px, 0.9fr) minmax(120px, 0.65fr) minmax(120px, 0.65fr) auto;
+    gap: 0.55rem;
+    align-items: end;
+    padding: 0.55rem;
+    border-radius: 8px;
+    background: #eff6ff;
+}
+
+.convenio-filter-bar label {
+    display: grid;
+    gap: 0.25rem;
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.convenio-filter-bar input,
+.convenio-filter-bar select {
+    min-height: 30px;
+    padding: 0.32rem 0.48rem;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.convenio-filter-bar button {
+    min-height: 30px;
+    padding: 0.32rem 0.75rem;
+    border-radius: 6px;
+}
+
+.convenio-table {
+    display: grid;
+    border: 1px solid #dbeafe;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.convenio-table-head,
+.convenio-table-row {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.6fr) minmax(160px, 0.9fr) minmax(170px, 0.9fr) minmax(90px, 0.5fr) minmax(150px, 0.7fr);
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.42rem 0.65rem;
+}
+
+.convenio-table-head {
+    background: #60a5fa;
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.convenio-table-row {
+    border-top: 1px solid #e2e8f0;
+    color: #0f172a;
+    font-size: 0.8rem;
+}
+
+.convenio-table-row:nth-child(odd) {
+    background: #f8fafc;
+}
+
+.convenio-table-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
 .suppliers-form label {
     font-size: 0.84rem;
     color: #334155;
