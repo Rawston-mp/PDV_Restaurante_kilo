@@ -15,6 +15,11 @@ import {
   type CashMovementCategoryCatalog
 } from '@/modules/finance/infrastructure/local/cashMovementCategories';
 import type { CashMovement } from '@/modules/finance/domain/entities/CashMovement';
+import {
+  formatCurrencyInput,
+  normalizeCurrencyInputChange,
+  parseCurrencyInput
+} from '@/shared/domain/services/currencyInput';
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -360,7 +365,7 @@ export function DashboardPage() {
   const onCreateMovement = async (event: FormEvent) => {
     event.preventDefault();
 
-    const amount = Number(movementAmount.replace(',', '.'));
+    const amount = parseCurrencyInput(movementAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setMovementError('Informe um valor válido para o lançamento.');
       return;
@@ -601,7 +606,8 @@ export function DashboardPage() {
                 id="movement-amount"
                 inputMode="decimal"
                 value={movementAmount}
-                onChange={(event) => setMovementAmount(event.target.value)}
+                onChange={(event) => setMovementAmount(normalizeCurrencyInputChange(event.target.value))}
+                onBlur={() => setMovementAmount(formatCurrencyInput(movementAmount))}
                 placeholder="0,00"
               />
             </div>
