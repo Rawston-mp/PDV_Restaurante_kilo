@@ -1,15 +1,15 @@
 ---
 name: pdv-touch-enterprise
-description: "Use when: atualizar ou consultar o fluxo operacional do PDV Touch, especialmente tela de comanda, perfis COMANDA_A/COMANDA_B (UI exibida como Balança A/B), PIN, teclado numérico/virtual, sensor de peso, caixa, cadastro de produtos, cards de produto, fluxo de pagamento e backend de comandas."
+description: "Use when: atualizar ou consultar o projeto PDV Touch/PDVTouch Restaurante, especialmente comanda por quilo, perfis COMANDA_A/COMANDA_B (UI Balança A/B), PIN, teclado numérico/virtual, sensor de peso, caixa, produtos, estoque, financeiro, fluxo de pagamento, backend de comandas, preparação fiscal, NFC-e, certificado, CSC, SEFAZ, homologação e testes em restaurante real."
 ---
 
 # PDV Touch Enterprise Skill
 
 ## Objetivo
-Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de comanda por quilo (duas balanças), continuidade de atendimento e encerramento exclusivo no caixa.
+Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com foco no fluxo de comanda por quilo (duas balanças), continuidade de atendimento, encerramento exclusivo no caixa, financeiro e evolução fiscal para NFC-e.
 
 ## Baseline Funcional (Documento 2026)
-- Fluxo alvo: ENTRADA -> ESCOLHA -> BALANÇA -> CAIXA -> SAÍDA.
+- Fluxo alvo: ENTRADA -> ESCOLHA -> BALANÇA -> CAIXA -> SAIDA.
 - Dois fluxos de balança: autoatendimento e atendimento assistido.
 - A comanda permanece aberta para múltiplas pesagens.
 - Encerramento de comanda ocorre apenas no caixa.
@@ -36,6 +36,18 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - O catálogo vem do cadastro de produtos (sem catálogo hardcoded).
 - Caixa usa cadastro real de produtos com `descricao`, foto, status `indisponivel` e status `oculto`.
 - RBAC e login por PIN estão ativos.
+
+## Estado Fiscal e Homologação NFC-e (2026-07)
+- O restaurante já possui certificado digital e operação fiscal funcional em outro sistema; o objetivo do dono/desenvolvedor é evoluir o PDVTouch para uso próprio homologado/testado no restaurante.
+- O projeto já possui preparação fiscal na UI e nas regras:
+	- seleção entre `NFC-e` e `Orçamento não fiscal` no recebimento
+	- cadastro de produtos com NCM, CFOP, CST/CSOSN, PIS, COFINS, ICMS, EAN/GTIN e tipo fiscal
+	- Admin com configuração fiscal, certificado, UF, CSC, CSC ID e série
+	- regras de certificado/CSC em `src/shared/domain/services/digitalCertificateRules.ts`
+	- bloqueios operacionais quando certificado fiscal está inválido/vencido
+- Ponto crítico: o fluxo `NFC-e` atual ainda é modo de documento/recibo local, não emissão fiscal autorizada na SEFAZ.
+- Antes de substituir o sistema fiscal atual, implementar autorização real de NFC-e modelo 65: XML 4.00, assinatura A1, transmissão SEFAZ, protocolo, XML autorizado, DANFE NFC-e com QR Code, cancelamento, inutilização, contingência, exportação de XML e auditoria.
+- O README raiz agora contém o roteiro de implantação/teste real: `README.md`.
 
 ## Atualizações Recentes (2026-06)
 - A UI de autenticação exibe `Balança A` e `Balança B` (mantendo as roles internas `COMANDA_A` e `COMANDA_B`).
@@ -78,6 +90,8 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Quando houver mudanças na leitura de peso, no peso manual ou no backend de comandas.
 - Quando for revisar regras de acesso, PIN ou checklist de validação operacional.
 - Quando for alterar cadastro/edição de produtos, cards do caixa, status indisponível/oculto ou exibição de foto/descrição.
+- Quando for analisar ou implementar preparação fiscal, NFC-e, certificado A1, CSC, SEFAZ, DANFE, XML, homologação, contingência, cancelamento, inutilização ou piloto em restaurante real.
+- Quando for atualizar documentação do projeto sobre o caminho para teste real/homologação fiscal.
 
 ## Escopo Implementado (Resumo)
 - Comanda operacional por número (sem leitura de código de barras).
@@ -89,6 +103,8 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 	- tornar indisponível (visível, mas bloqueado para adicionar)
 	- ocultar (retira do grid de venda)
 - Fechamento/caixa completo existe no módulo de pedidos (`/orders/new`), mas não como etapa integrada do fluxo `/comanda` com estados formais do documento.
+- Financeiro possui fluxos de despesas, receitas e conta corrente; em telas financeiras, preservar filtros por tipo: despesas mostram saídas, receitas mostram entradas e conta corrente mostra entrada + saída.
+- Fluxo fiscal no caixa permite escolher `NFC-e`, mas ainda não gera XML autorizado pela SEFAZ.
 
 ## Lacunas em Relação ao Documento Base
 - Não há leitura nativa de código de barras da comanda nem fallback "digitar número" na tela de balança (hoje opera por número digitado).
@@ -97,6 +113,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Não há persistência backend para comandas/pesagens/pagamentos/auditoria no modelo de tabelas proposto.
 - Não há regras de timeout e autoencerramento por inatividade da comanda no fluxo atual.
 - Não há relatórios de discrepância balança x caixa no backend dedicado.
+- Não há módulo fiscal NFC-e real com XML assinado, SEFAZ, protocolo, DANFE, QR Code, cancelamento, inutilização e contingência.
 
 ## Inconsistências do Documento de Referência
 - Seção 6 possui trecho corrompido em `PA-05` (comparação de peso/valor quebrada).
@@ -109,6 +126,8 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 3. Adicionar coordenação entre duas balanças com lock por comanda + timeout.
 4. Integrar etapa `PRONTA_PARA_CAIXA` até encerramento no caixa.
 5. Implementar trilha de auditoria imutável para transições críticas.
+6. Implementar módulo fiscal NFC-e separado do componente do caixa, com adapters para XML, assinatura, SEFAZ, DANFE e persistência fiscal.
+7. Usar o sistema fiscal atual em paralelo até homologação técnica, validação contábil e piloto controlado serem concluídos.
 
 ## Perfis
 - `ADMIN`
@@ -143,6 +162,7 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Estado de comanda com máquina de estados e trilha de auditoria append-only em arquivo.
 
 ## Arquivos-Chave
+- `README.md`
 - `src/components/Comanda/ComandaScreen.tsx`
 - `src/hooks/comanda/useComanda.ts`
 - `src/hooks/comanda/useWeight.ts`
@@ -152,10 +172,13 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - `src/modules/cashier/presentation/components/CashRegisterClose.tsx`
 - `src/modules/cashier/presentation/components/SmartInput.tsx`
 - `src/modules/products/presentation/pages/ProductsPage.tsx`
+- `src/modules/admin/presentation/pages/AdminPage.tsx`
+- `src/shared/domain/services/digitalCertificateRules.ts`
 - `src/app/styles.css`
 - `src/shared/infrastructure/storage/comandaCache.ts`
 - `backend/src/server.ts`
 - `backend/src/services/scaleReader.service.ts`
+- `docs/PDVTOUCH_ARCHITECTURE_BLUEPRINT.md`
 
 ## Autenticação e PIN
 - Login por PIN por perfil na tela de acesso.
@@ -175,6 +198,10 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 - Se alterar fluxo de comanda, revisar testes e build antes de concluir.
 - Se alterar cadastro de produtos ou cards do caixa, validar espaçamento, overflow, imagem, menu operacional e build.
 - Não assumir que backend atual suporta estados completos de comanda sem implementar camada de domínio/persistência.
+- Se mexer em fiscal/NFC-e, tratar o fluxo atual como simulado até existir XML autorizado pela SEFAZ e protocolo salvo.
+- Não permitir que venda paga em modo fiscal desapareça ou fique sem estado final: autorizada, contingência controlada, rejeitada pendente ou revisão manual.
+- Não armazenar senha do certificado A1 em `localStorage`; segredos fiscais pertencem ao backend/armazenamento protegido.
+- Se alterar estorno, cancelamento, reabertura, pagamento ou emissão fiscal, registrar trilha de auditoria com usuário, data/hora e motivo.
 
 ## Checklist de Validação
 1. Validar login com perfis permitidos.
@@ -186,7 +213,9 @@ Centralizar o estado operacional do projeto PDV Touch com foco no fluxo de coman
 7. Validar que avançar comanda não fecha automaticamente a anterior.
 8. Validar cadastro/edição de produto com foto, categorias, descrição e status indisponível/oculto.
 9. Validar cards do caixa com produto disponível, indisponível, oculto, com foto e sem foto.
-10. Rodar build e, quando aplicável, testes automatizados.
+10. Para financeiro, validar que Despesas lista saídas, Receita lista entradas e Conta Corrente lista entrada + saída.
+11. Para NFC-e real, validar em homologação: status SEFAZ, autorização, rejeição tratada, cancelamento, inutilização, contingência, DANFE, QR Code e exportação de XML.
+12. Rodar build e, quando aplicável, testes automatizados.
 
 ## Pendências para Análise mais Precisa
 - Política oficial de timeout e autoencerramento de comanda (ativos e limites).
@@ -244,6 +273,18 @@ npm run dev
 - Integração fim a fim com o caixa para o encerramento formal da comanda no fluxo da própria comanda.
 - Regras de timeout e abandono de comanda (2h alerta, 4h política opcional).
 - Relatórios de discrepância balança x caixa e reconciliação operacional.
+- Módulo fiscal NFC-e completo (`src/modules/fiscal` e backend fiscal) com:
+	- tabela `fiscal_documents`/`nfce_documents`
+	- controle seguro de numeração por CNPJ/série/ambiente
+	- geração de XML NFC-e modelo 65
+	- assinatura com certificado A1
+	- adapter SEFAZ homologação/produção
+	- gravação de XML assinado/autorizado, chave, protocolo, `cStat` e `xMotivo`
+	- DANFE NFC-e térmico com QR Code
+	- cancelamento, inutilização, contingência e retransmissão
+	- painel de pendências fiscais
+	- exportação de XML para contador
+- Validação rígida de cadastro fiscal de produtos antes de venda em modo fiscal.
 
 ## O que pode melhorar
 - Consolidar regras de negócio de comanda em camada de domínio única para reduzir lógica dispersa em hooks.
@@ -264,6 +305,8 @@ npm run dev
 - Prioridade alta: evoluir snapshot backend de comanda/itens/pesagens para schema PostgreSQL relacional com contratos finais.
 - Prioridade alta: fechar política final de timeout/expiração para lock por comanda em duas balanças.
 - Prioridade alta: entregar identificação por código de barras da comanda com fallback manual.
+- Prioridade alta: implementar o módulo fiscal NFC-e real antes de qualquer piloto substituindo o sistema fiscal atual.
+- Prioridade alta: manter o sistema fiscal atual em paralelo durante homologação e piloto controlado.
 - Prioridade média: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.
 - Prioridade média: fechar pacote mínimo de testes E2E do fluxo comanda por quilo (automático, manual, exceções).
 - Prioridade média: normalizar o documento-base em requisitos testáveis antes de expandir a API e o banco.
