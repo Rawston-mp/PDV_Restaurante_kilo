@@ -54,7 +54,7 @@ jobs:
         run: npm run build -- --base ./
 
       - name: Upload dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pdv-dist
           path: dist
@@ -83,28 +83,56 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
+
           npm run build
-          npx electron-builder --win dir --x64 --publish never -c.npmRebuild=false -c.win.signAndEditExecutable=false -c.forceCodeSigning=false
+
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Falha ao gerar instalador Windows no CI."
-            exit $LASTEXITCODE
+            Write-Error "Falha no build web (npm run build)."
+            exit 1
+          }
+
+          $built = $false
+
+          npx electron-builder --win dir --x64 --publish never -c.npmRebuild=false -c.win.signAndEditExecutable=false -c.forceCodeSigning=false
+          if ($LASTEXITCODE -eq 0 -and (Test-Path "release-electron/win-unpacked/PDVTouch Restaurante.exe")) {
+            $built = $true
+            Write-Host "Build via electron-builder concluido com sucesso."
+          }
+
+          if (-not $built) {
+            Write-Host "electron-builder falhou no runner. Aplicando fallback com electron-packager..."
+            npx --yes @electron/packager . "PDVTouch Restaurante" --platform=win32 --arch=x64 --out=release-electron --overwrite --prune=true
+
+            if ($LASTEXITCODE -eq 0) {
+              $fallbackExe = Get-ChildItem -Path release-electron -Recurse -Filter "PDVTouch Restaurante.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($null -ne $fallbackExe) {
+                $built = $true
+                Write-Host "Fallback via electron-packager concluido com sucesso."
+              }
+            }
+          }
+
+          if (-not $built) {
+            Write-Error "Falha ao gerar executavel Windows no CI (electron-builder e fallback)."
+            exit 1
           }
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           USE_HARD_LINKS: 'false'
 
       - name: Upload Windows installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: windows-installer-${{ github.sha }}
           path: |
-            release-electron/win-unpacked/PDVTouch Restaurante.exe
-            release-electron/win-unpacked/resources/**
-            release-electron/win-unpacked/locales/**
-            release-electron/win-unpacked/*.dll
-            release-electron/win-unpacked/*.pak
-            release-electron/win-unpacked/*.bin
-            release-electron/win-unpacked/*.json
-            release-electron/win-unpacked/version
+            release-electron/**/*.exe
+            release-electron/**/*.dll
+            release-electron/**/*.pak
+            release-electron/**/*.bin
+            release-electron/**/*.json
+            release-electron/**/resources/**
+            release-electron/**/locales/**
+            release-electron/**/version
           if-no-files-found: error
           retention-days: 7
