@@ -9,6 +9,13 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,6 +30,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -44,12 +52,13 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (dist-mode)
-        run: npm run build -- --base ./
+      - name: Build
+        run: npm run build
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
