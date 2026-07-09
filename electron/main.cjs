@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
@@ -40,6 +41,14 @@ const startBackend = () => {
   const root = app.getAppPath();
   const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
   const serverEntry = path.join(root, 'backend', 'src', 'server.ts');
+
+  if (!fs.existsSync(tsxCli)) {
+    throw new Error(`Runtime ausente: nao encontrei tsx em ${tsxCli}.`);
+  }
+
+  if (!fs.existsSync(serverEntry)) {
+    throw new Error(`Backend ausente: nao encontrei ${serverEntry}.`);
+  }
 
   backendProcess = spawn(process.execPath, [tsxCli, serverEntry], {
     cwd: root,
