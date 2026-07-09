@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "node dev.mjs",
     "frontend:dev": "vite",
     "backend:dev": "tsx watch backend/src/server.ts",
     "backend:start": "tsx backend/src/server.ts",
+    "start:prod": "tsx backend/src/server.ts",
     "build": "tsc -b && vite build",
+    "electron:dev": "npm run build && electron electron/main.cjs",
+    "electron:pack": "npm run build && electron-builder --win --x64",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -33,6 +37,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.5.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "jsdom": "^25.0.1",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
@@ -40,5 +46,37 @@
     "typescript": "^5.8.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.9"
+  },
+  "build": {
+    "appId": "br.com.pdvtouch.restaurante",
+    "productName": "PDVTouch Restaurante",
+    "directories": {
+      "output": "release-electron"
+    },
+    "asar": false,
+    "files": [
+      "dist/**/*",
+      "backend/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "PDVTouch-Restaurante-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PDVTouch-Restaurante-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
