@@ -20,6 +20,9 @@ import { PaymentPanel, type PaymentConfirmPayload } from '@/modules/cashier/pres
 import { CashRegisterClose } from '@/modules/cashier/presentation/components/CashRegisterClose';
 import { CashierVirtualKeyboard } from '@/modules/cashier/presentation/components/CashierVirtualKeyboard';
 import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/types';
+import { buildReceiptText } from '@/fiscal/receiptService';
+import { convertNonFiscalToMockNfce } from '@/fiscal/mockNfce';
+import type { NonFiscalReceipt, PaymentType, ReceiptEmitter, ReceiptItem, ReceiptPayment } from '@/fiscal/types';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import type { ItemComanda } from '@/types/comanda';
@@ -1218,13 +1221,41 @@ export function CashierPage() {
 
   const subtotal = cartItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
+  const mapPaymentType = (method: PaymentEntry['method']): PaymentType => {
+    const map: Record<PaymentEntry['method'], PaymentType> = {
+      DINHEIRO: 'DINHEIRO',
+      PIX: 'PIX',
+      DEBITO: 'CARTAO_DEBITO',
+      CREDITO: 'CARTAO_CREDITO',
+      FIADO: 'OUTROS',
+      TICKET: 'VALE'
+    };
+
+    return map[method] ?? 'OUTROS';
+  };
+
+  const buildReceiptEmitter = (): ReceiptEmitter => ({
+    razaoSocial: 'RAZÃO SOCIAL DO RESTAURANTE LTDA',
+    nomeFantasia: 'PDV_RESTAURANTE_KILO',
+    cnpj: '00000000000000',
+    inscricaoEstadual: '000.000.000.000',
+    endereco: {
+      logradouro: 'Rua Exemplo',
+      numero: '123',
+      bairro: 'Bairro',
+      municipio: 'São Paulo',
+      uf: 'SP',
+      cep: '00000000'
+    }
+  });
+
   const printReceipt = (
     payments: PaymentEntry[],
     discountAmount = 0,
     documentMode: PaymentDocumentMode = 'NFCE',
     customerDocument = ''
   ) => {
-    const opened = window.open('', '_blank', 'width=420,height=720');
+    const opened = window.open('', '_blank', 'width=460,height=760');
     if (!opened) {
       return;
     }
@@ -1233,160 +1264,93 @@ export function CashierPage() {
     const payableTotal = Math.max(0, subtotal - discountAmount);
     const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
     const change = Math.max(0, totalPaid - payableTotal);
-    const receiptItems = cartItems.map((item) => ({
-      ...item,
-      total: item.quantity * item.unitPrice
-    }));
     const receiptComandaNumbers = [...new Set([comandaNumber.trim(), ...joinedComandaNumbers].filter(Boolean))];
-    const receiptIdentificationLabel = receiptComandaNumbers.length > 1 ? 'Comandas' : 'Atendimento';
-    const receiptIdentificationValue = receiptComandaNumbers.length > 0
+    const comandaLabel = receiptComandaNumbers.length > 0
       ? receiptComandaNumbers.map((numero) => `#${numero}`).join(' + ')
-      : 'Venda avulsa';
+      : undefined;
     const customerDocumentDigits = customerDocument.replace(/\D/g, '');
-    const customerDocumentHtml = documentMode === 'NFCE' && customerDocumentDigits
-      ? `<div class="row"><span>CPF/CNPJ cliente</span><strong>${escapeHtml(customerDocumentDigits)}</strong></div>`
-      : '';
     const discountFactor = subtotal > 0 ? payableTotal / subtotal : 0;
-    const chargedTaxes = receiptItems.reduce((sum, item) => {
+    const receiptItems: ReceiptItem[] = cartItems.map((item, index) => ({
+      codigo: item.productCode || item.barcode || String(index + 1).padStart(3, '0'),
+      descricao: item.name,
+      ncm: item.ncm,
+      cfop: item.cfop,
+      unidade: item.unit,
+      quantidade: item.quantity,
+      valorUnitario: item.unitPrice,
+      valorTotal: Number((item.quantity * item.unitPrice).toFixed(2)),
+      cstCsosn: item.taxSituationCode
+    }));
+    const chargedTaxes = cartItems.reduce((sum, item) => {
       const combinedRate = parseTaxRate(item.aliqIcms) + parseTaxRate(item.aliqPis) + parseTaxRate(item.aliqCofins);
-      return sum + item.total * discountFactor * (combinedRate / 100);
+      return sum + item.quantity * item.unitPrice * discountFactor * (combinedRate / 100);
     }, 0);
-    const taxSectionHtml = documentMode === 'NFCE'
-      ? `
-          <div class="section">
-            <div class="section-title">Impostos</div>
-            <div class="row totals">
-              <span>Impostos cobrados</span>
-              <strong>${escapeHtml(chargedTaxes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong>
-            </div>
-          </div>
-        `
-      : '';
+    const receiptPayments: ReceiptPayment[] = payments.map((payment) => ({
+      tipo: mapPaymentType(payment.method),
+      valor: payment.amount
+    }));
+    const nonFiscalReceipt: NonFiscalReceipt = {
+      tipo: 'NON_FISCAL',
+      emitente: buildReceiptEmitter(),
+      controleInterno: String(Date.now()).slice(-8).padStart(8, '0'),
+      dataEmissao: now.toLocaleString('pt-BR'),
+      consumidor: customerDocumentDigits
+        ? { cpfCnpj: customerDocumentDigits, nome: 'CONSUMIDOR FINAL' }
+        : undefined,
+      comanda: comandaLabel,
+      operador: user?.name ?? 'CAIXA 01',
+      pdv: 'CAIXA PRINCIPAL',
+      itens: receiptItems,
+      pagamentos: receiptPayments,
+      totalProdutos: Number(subtotal.toFixed(2)),
+      descontoTotal: Number(discountAmount.toFixed(2)),
+      acrescimoTotal: 0,
+      totalDocumento: Number(payableTotal.toFixed(2)),
+      troco: Number(change.toFixed(2))
+    };
+    const receipt = documentMode === 'NFCE'
+      ? {
+          ...convertNonFiscalToMockNfce(nonFiscalReceipt),
+          consumidor: customerDocumentDigits
+            ? { cpfCnpj: customerDocumentDigits, nome: 'CONSUMIDOR FINAL' }
+            : undefined,
+          tributosAproximados: {
+            federal: 0,
+            estadual: Number(chargedTaxes.toFixed(2)),
+            municipal: 0
+          }
+        }
+      : nonFiscalReceipt;
+    const receiptText = buildReceiptText(receipt);
 
     opened.document.write(`
       <html>
         <head>
-          <title>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento não fiscal'}</title>
+          <title>${documentMode === 'NFCE' ? 'DANFE NFC-e' : 'Comprovante não fiscal'}</title>
           <style>
             body {
-              font-family: Arial, sans-serif;
               margin: 0;
-              padding: 16px;
-              color: #111827;
+              padding: 10px;
+              background: #ffffff;
+              color: #000000;
             }
             .receipt {
-              max-width: 360px;
+              width: 384px;
+              max-width: 100%;
               margin: 0 auto;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 16px;
-            }
-            .header h1 {
-              font-size: 18px;
-              margin: 0;
-            }
-            .header p {
-              margin: 4px 0 0;
-              font-size: 12px;
-              color: #6b7280;
-            }
-            .section {
-              margin-top: 12px;
-              padding-top: 12px;
-              border-top: 1px dashed #d1d5db;
-            }
-            .section-title {
-              font-size: 12px;
-              font-weight: 700;
-              text-transform: uppercase;
-              color: #374151;
-              margin-bottom: 8px;
-            }
-            .row {
-              display: flex;
-              justify-content: space-between;
-              gap: 12px;
-              font-size: 12px;
-              margin-bottom: 4px;
-            }
-            .row strong {
-              text-align: right;
-            }
-            .item {
-              margin-bottom: 10px;
-            }
-            .item-name {
-              font-size: 13px;
-              font-weight: 700;
-              margin-bottom: 2px;
-            }
-            .item-meta {
+              white-space: pre-wrap;
+              font-family: "Courier New", Consolas, monospace;
               font-size: 11px;
-              color: #6b7280;
-              margin-bottom: 2px;
-            }
-            .totals {
-              font-size: 13px;
-              font-weight: 700;
+              line-height: 1.25;
             }
             @media print {
-              body {
-                padding: 0;
-              }
+              body { padding: 0; }
+              .receipt { width: 80mm; }
             }
           </style>
         </head>
         <body>
-          <div class="receipt">
-            <div class="header">
-              <h1>PDV Touch</h1>
-              <p>${documentMode === 'NFCE' ? 'Comprovante de venda NFC-e' : 'Orçamento não fiscal'}</p>
-              <p>${escapeHtml(now.toLocaleString('pt-BR'))}</p>
-            </div>
-
-            <div class="section">
-              <div class="section-title">Identificação</div>
-              <div class="row"><span>${receiptIdentificationLabel}</span><strong>${escapeHtml(receiptIdentificationValue)}</strong></div>
-              <div class="row"><span>Operador</span><strong>${escapeHtml(user?.name ?? 'Não autenticado')}</strong></div>
-              ${customerDocumentHtml}
-            </div>
-
-            <div class="section">
-              <div class="section-title">Itens</div>
-              ${receiptItems
-                .map(
-                  (item) => `
-                    <div class="item">
-                      <div class="item-name">${escapeHtml(item.name)}</div>
-                      <div class="item-meta">${receiptComandaNumbers.length > 1 && item.sourceComandaNumber ? `Comanda #${escapeHtml(item.sourceComandaNumber)} · ` : ''}${formatQuantity(item.quantity, item.unit)} ${item.unit === 'KG' ? 'kg' : 'un'} · ${escapeHtml(item.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</div>
-                    </div>
-                  `
-                )
-                .join('')}
-            </div>
-
-            ${taxSectionHtml}
-
-            <div class="section">
-              <div class="section-title">Pagamentos</div>
-              ${payments
-                .map(
-                  (payment) => `
-                    <div class="row">
-                      <span>${escapeHtml(payment.label)}</span>
-                      <strong>${escapeHtml(payment.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong>
-                    </div>
-                  `
-                )
-                .join('')}
-              <div class="row totals"><span>Subtotal</span><strong>${escapeHtml(subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
-              ${discountAmount > 0 ? `<div class="row totals"><span>Desconto</span><strong>-${escapeHtml(discountAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>` : ''}
-              <div class="row totals"><span>Total</span><strong>${escapeHtml(payableTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
-              <div class="row totals"><span>Pago</span><strong>${escapeHtml(totalPaid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
-              <div class="row totals"><span>Troco</span><strong>${escapeHtml(change.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))}</strong></div>
-            </div>
-          </div>
+          <pre class="receipt">${escapeHtml(receiptText)}</pre>
           <script>
             window.onload = function () {
               window.print();
@@ -1398,7 +1362,6 @@ export function CashierPage() {
     `);
     opened.document.close();
   };
-
   // ── Cart mutations ─────────────────────────────────────────────────────────
   const addProduct = (product: CashierProduct) => {
     if (product.isUnavailable) {
