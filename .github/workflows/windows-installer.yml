@@ -76,18 +76,32 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           USE_HARD_LINKS: 'false'
 
+      - name: Prepare delivery zip (short paths)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force .\delivery -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path .\delivery\PDVTouch | Out-Null
+
+          $sourceRoot = "release-electron/win-unpacked"
+          if (-not (Test-Path $sourceRoot)) {
+            $candidate = Get-ChildItem -Path release-electron -Directory | Where-Object { $_.Name -like "*win32-x64*" } | Select-Object -First 1
+            if ($null -ne $candidate) {
+              $sourceRoot = $candidate.FullName
+            }
+          }
+
+          Copy-Item "$sourceRoot\*" ".\delivery\PDVTouch\" -Recurse -Force
+
+          if (Test-Path .\windows-portable-delivery.zip) {
+            Remove-Item .\windows-portable-delivery.zip -Force
+          }
+
+          Compress-Archive -Path .\delivery\PDVTouch\* -DestinationPath .\windows-portable-delivery.zip -CompressionLevel Optimal
+
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v5
         with:
           name: windows-installer-${{ github.sha }}
-          path: |
-            release-electron/**/*.exe
-            release-electron/**/*.dll
-            release-electron/**/*.pak
-            release-electron/**/*.bin
-            release-electron/**/*.json
-            release-electron/**/resources/**
-            release-electron/**/locales/**
-            release-electron/**/version
+          path: windows-portable-delivery.zip
           if-no-files-found: error
           retention-days: 7
