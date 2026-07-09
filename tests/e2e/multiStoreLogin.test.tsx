@@ -8,10 +8,49 @@ import { saveStoreSettings } from '@/modules/admin/infrastructure/local/platform
 
 afterEach(() => {
   cleanup();
+  window.localStorage?.removeItem('pdv.auth.user');
   saveStoreSettings([]);
 });
 
 describe('Login multi-loja', () => {
+  it('exige PIN mesmo quando havia sessão salva no computador', () => {
+    const storedValues = new Map<string, string>();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storedValues.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storedValues.set(key, value);
+        },
+        removeItem: (key: string) => {
+          storedValues.delete(key);
+        }
+      }
+    });
+
+    window.localStorage.setItem(
+      'pdv.auth.user',
+      JSON.stringify({
+        id: 'u-admin-default',
+        name: 'Administrador',
+        role: 'ADMIN',
+        storeId: 'store-development',
+        storeName: 'Desenvolvimento'
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Acessar o sistema')).toBeTruthy();
+    expect(screen.queryByText('Usuário logado')).toBeNull();
+    expect(window.localStorage.getItem('pdv.auth.user')).toBeNull();
+  });
   it('exibe lojas vinculadas e bloqueia seleção sem vínculo operacional', async () => {
     const now = new Date('2026-06-28T12:00:00.000Z').toISOString();
     saveStoreSettings([

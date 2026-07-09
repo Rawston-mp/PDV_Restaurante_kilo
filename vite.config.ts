@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 // postcss/tailwind loaded automatically by vite via postcss.config.js
 
 export default defineConfig({
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {

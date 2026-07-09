@@ -56,61 +56,27 @@ const getStoreDisplayName = (store: { name: string; tradeName?: string }) => sto
 
 const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];
 
-const defaultUser: User = {
-  id: 'u-admin-default',
-  name: 'Administrador',
-  role: 'ADMIN'
+const clearStoredUser = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (!window.localStorage || typeof window.localStorage.removeItem !== 'function') {
+    return;
+  }
+
+  window.localStorage.removeItem(storageKey);
 };
 
 const loadStoredUser = (): User | null => {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  if (import.meta.env.DEV) {
-    if (window.localStorage && typeof window.localStorage.removeItem === 'function') {
-      window.localStorage.removeItem(storageKey);
-    }
-
-    return null;
-  }
-
-  if (!window.localStorage || typeof window.localStorage.getItem !== 'function') {
-    return defaultUser;
-  }
-
-  const raw = window.localStorage.getItem(storageKey);
-  if (!raw) {
-    return defaultUser;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as User;
-    if (!parsed.id || !parsed.name || !parsed.role) {
-      return defaultUser;
-    }
-
-    return parsed;
-  } catch {
-    return defaultUser;
-  }
+  clearStoredUser();
+  return null;
 };
 
 const persistUser = (user: User | null) => {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  if (!window.localStorage || typeof window.localStorage.setItem !== 'function') {
-    return;
-  }
-
   if (!user) {
-    window.localStorage.removeItem(storageKey);
-    return;
+    clearStoredUser();
   }
-
-  window.localStorage.setItem(storageKey, JSON.stringify(user));
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
