@@ -49,6 +49,22 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - Antes de substituir o sistema fiscal atual, implementar autorização real de NFC-e modelo 65: XML 4.00, assinatura A1, transmissão SEFAZ, protocolo, XML autorizado, DANFE NFC-e com QR Code, cancelamento, inutilização, contingência, exportação de XML e auditoria.
 - O README raiz agora contém o roteiro de implantação/teste real: `README.md`.
 
+## Atualizações Recentes (2026-07)
+- Aplicativo desktop Electron corrigido para produção:
+	- `vite.config.ts` deve manter `base: './'` para que `dist/index.html` carregue assets por caminho relativo no `file://`.
+	- `src/main.tsx` deve usar `HashRouter` quando `window.location.protocol === 'file:'` e `BrowserRouter` no navegador/dev.
+	- `electron/main.cjs` deve carregar a interface com `mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'))` no pacote instalado.
+- Segurança de autenticação no executável:
+	- não permitir fallback automático para `Administrador` ou qualquer usuário padrão.
+	- `AuthProvider` deve iniciar com `user: null`, limpar `pdv.auth.user` antigo e exigir loja, perfil e PIN a cada abertura do app.
+	- não persistir login automático em `localStorage` sem uma regra explícita de lembrar acesso aprovada.
+- Release validado:
+	- setup principal: `release-electron\PDVTouch-Restaurante-Setup-0.1.0.exe`.
+	- portable: `release-electron\PDVTouch-Restaurante-Portable-0.1.0.exe`.
+	- app instalado pode ficar em `C:\Program Files\PDVTouch Restaurante\PDVTouch Restaurante.exe` quando instalado como máquina.
+- Para evitar regressão de tela branca no Electron, conferir sempre que `dist/index.html` contém `./assets/...`, nunca `/assets/...`.
+- Para evitar regressão de segurança, procurar antes de empacotar por `defaultUser`, `u-admin-default`, `return defaultUser` e `setItem(storageKey)` no fluxo de autenticação.
+
 ## Atualizações Recentes (2026-06)
 - A UI de autenticação exibe `Balança A` e `Balança B` (mantendo as roles internas `COMANDA_A` e `COMANDA_B`).
 - Rótulos visíveis de perfis devem usar `getRoleLabel()` em `src/modules/auth/domain/types/Role.ts`; não renderizar `COMANDA_A` ou `COMANDA_B` diretamente para o usuário.
@@ -194,8 +210,8 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 ## Regras de Manutenção
 - Não reintroduzir nomenclatura antiga de balança no código novo.
 - Para novas alterações operacionais, documentar sempre impacto em rota, perfil, teclado e validação.
-- Se mudar PIN, role ou evento websocket, atualizar esta skill junto.
-- Se alterar fluxo de comanda, revisar testes e build antes de concluir.
+- Se mudar PIN, role, evento websocket, autenticação Electron ou pacote de release, atualizar esta skill junto.
+- Se alterar fluxo de comanda, autenticação ou empacotamento Electron, revisar testes, build e npm run electron:pack antes de concluir.
 - Se alterar cadastro de produtos ou cards do caixa, validar espaçamento, overflow, imagem, menu operacional e build.
 - Não assumir que backend atual suporta estados completos de comanda sem implementar camada de domínio/persistência.
 - Se mexer em fiscal/NFC-e, tratar o fluxo atual como simulado até existir XML autorizado pela SEFAZ e protocolo salvo.

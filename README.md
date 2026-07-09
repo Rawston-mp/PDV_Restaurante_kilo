@@ -369,7 +369,52 @@ Backend em modo start:
 npm run backend:start
 ```
 
-## 10. PostgreSQL Local
+## 10. Aplicativo Desktop (Electron)
+
+O pacote desktop do PDVTouch deve ser gerado pelo Electron Builder.
+
+Comando recomendado:
+
+```bash
+npm run electron:pack
+```
+
+Artefatos gerados:
+
+- Setup: `release-electron\PDVTouch-Restaurante-Setup-0.1.0.exe`
+- Portable: `release-electron\PDVTouch-Restaurante-Portable-0.1.0.exe`
+- Pasta descompactada: `release-electron\win-unpacked`
+
+Para instalar no computador do cliente, usar o arquivo `PDVTouch-Restaurante-Setup-0.1.0.exe`. Não é necessário baixar o projeto completo pelo GitHub no computador do cliente.
+
+### Regras obrigatórias do desktop
+
+- O aplicativo instalado deve abrir na tela de login.
+- O sistema deve exigir loja, usuário/perfil e PIN a cada abertura.
+- Não deve existir login automático como Administrador ou qualquer usuário padrão.
+- Sessões antigas salvas em `pdv.auth.user` devem ser removidas na inicialização.
+- Não persistir login automático em `localStorage` sem uma regra explícita e aprovada de lembrar acesso.
+
+### Prevenção de tela branca
+
+No Electron empacotado, a interface é carregada por `file://`. Por isso:
+
+- `vite.config.ts` deve manter `base: './'`.
+- `src/main.tsx` deve usar `HashRouter` quando `window.location.protocol === 'file:'`.
+- `dist/index.html` deve apontar para `./assets/...`, nunca `/assets/...`.
+- `electron/main.cjs` deve carregar `dist/index.html` com `mainWindow.loadFile(...)`.
+
+Antes de enviar um novo setup, validar:
+
+```bash
+npm run test -- tests/e2e/multiStoreLogin.test.tsx tests/e2e/cashierAccess.test.tsx tests/unit/platformSettings.test.ts
+npm run build
+npm run electron:pack
+```
+
+Também conferir no pacote gerado que não existem os padrões `defaultUser`, `u-admin-default`, `return defaultUser` ou persistência automática com `setItem(storageKey)` no fluxo de autenticação.
+
+## 11. PostgreSQL Local
 
 O backend tenta usar PostgreSQL local por padrão e cria tabelas automaticamente para o estado de comandas.
 
@@ -397,7 +442,7 @@ $env:PDV_USE_POSTGRES="true"
 
 Se a conexão com PostgreSQL falhar, o backend usa fallback em arquivo local.
 
-## 11. Resumo Executivo
+## 12. Resumo Executivo
 
 O PDVTouch já tem uma boa base operacional para restaurante: comanda, caixa, produtos, estoque, financeiro e preparação de campos fiscais.
 
