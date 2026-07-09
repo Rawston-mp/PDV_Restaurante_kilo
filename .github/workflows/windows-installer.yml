@@ -39,7 +39,7 @@ jobs:
         shell: pwsh
         run: |
           npm run build
-          npx electron-builder --win portable --x64 --publish never -c.npmRebuild=false -c.win.signAndEditExecutable=false -c.forceCodeSigning=false -c.compression=store
+          npx electron-builder --win dir --x64 --publish never -c.npmRebuild=false -c.win.signAndEditExecutable=false -c.forceCodeSigning=false
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Falha ao gerar instalador Windows no CI."
             exit $LASTEXITCODE
@@ -53,7 +53,13 @@ jobs:
         with:
           name: windows-installer-${{ github.sha }}
           path: |
-            release-electron/*Portable*.exe
-            release-electron/latest.yml
+            release-electron/win-unpacked/PDVTouch Restaurante.exe
+            release-electron/win-unpacked/resources/**
+            release-electron/win-unpacked/locales/**
+            release-electron/win-unpacked/*.dll
+            release-electron/win-unpacked/*.pak
+            release-electron/win-unpacked/*.bin
+            release-electron/win-unpacked/*.json
+            release-electron/win-unpacked/version
           if-no-files-found: error
           retention-days: 7
