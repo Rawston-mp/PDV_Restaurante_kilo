@@ -16,7 +16,7 @@ export function formatQuantity(value: number): string {
   });
 }
 
-export function padLeft(value: string | number, size: number, char = "0"): string {
+export function padLeft(value: string | number, size: number, char = " "): string {
   return String(value).padStart(size, char);
 }
 

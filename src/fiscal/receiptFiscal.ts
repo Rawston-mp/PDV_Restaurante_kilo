@@ -82,6 +82,15 @@ export function buildFiscalReceiptText(receipt: FiscalReceipt): string {
     const total = padLeft(formatMoney(item.valorTotal), 9);
 
     lines.push(`${codigo} ${descricao} ${quantidade} ${unidade} ${unitario} ${total}`);
+
+    const fiscalDetails = [
+      item.cfop ? `CFOP ${item.cfop}` : null,
+      item.cstCsosn ? `CST/CSOSN ${item.cstCsosn}` : null
+    ].filter(Boolean);
+
+    if (fiscalDetails.length > 0) {
+      lines.push(`         ${fiscalDetails.join("  ")}`);
+    }
   }
 
   lines.push(thinLine());

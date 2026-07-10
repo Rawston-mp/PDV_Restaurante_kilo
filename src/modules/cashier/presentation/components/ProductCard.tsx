@@ -17,6 +17,7 @@ export type CashierProduct = {
   cfop?: string;
   fiscalType?: string;
   taxSituationCode?: string;
+  cstIcms?: string;
   aliqIcms?: string;
   aliqPis?: string;
   aliqCofins?: string;
