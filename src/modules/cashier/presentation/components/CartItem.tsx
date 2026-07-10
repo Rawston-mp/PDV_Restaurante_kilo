@@ -13,6 +13,7 @@ export type CashierCartItem = {
   ncm?: string;
   cfop?: string;
   taxSituationCode?: string;
+  cstIcms?: string;
   fiscalType?: string;
   aliqIcms?: string;
   aliqPis?: string;

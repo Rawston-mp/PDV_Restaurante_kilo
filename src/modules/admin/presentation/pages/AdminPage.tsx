@@ -301,54 +301,19 @@ export function AdminPage() {
   const onSaveCertificateSettings = (event: FormEvent) => {
     event.preventDefault();
 
-    if (!certificateFileName.trim()) {
-      setCertificateFormError('Importe o arquivo do certificado antes de salvar.');
-      return;
-    }
-
-    if (!certificateCompanyName.trim()) {
-      setCertificateFormError('Informe a razão social da empresa.');
-      return;
-    }
-
-    if (!isValidCnpj(certificateCnpj)) {
-      setCertificateFormError('CNPJ inválido. Verifique os 14 dígitos informados.');
-      return;
-    }
-
-    if (!certificateStateRegistration.trim()) {
-      setCertificateFormError('Informe a inscrição estadual.');
-      return;
-    }
-
-    if (!certificateCnae.trim()) {
-      setCertificateFormError('Selecione o CNAE principal.');
-      return;
-    }
-
-    if (!certificateTaxRegime.trim()) {
-      setCertificateFormError('Selecione o regime tributário.');
-      return;
-    }
-
-    if (isCscRequired) {
-      const cscValidationError = validateCscByUf({
-        uf: certificateUf,
-        cscId: certificateCscId,
-        cscCode: certificateCscCode
-      });
-
-      if (cscValidationError) {
-        setCertificateFormError(cscValidationError);
-        return;
-      }
-    }
-
+    const cscValidationError = isCscRequired
+      ? validateCscByUf({
+          uf: certificateUf,
+          cscId: certificateCscId,
+          cscCode: certificateCscCode
+        })
+      : null;
     const renewAlertDays = Number(certificateRenewAlertDays);
-    if (!Number.isFinite(renewAlertDays) || renewAlertDays < 1 || renewAlertDays > 180) {
-      setCertificateFormError('Alerta de renovação deve estar entre 1 e 180 dias.');
-      return;
-    }
+    const hasInvalidRenewAlertDays =
+      !Number.isFinite(renewAlertDays) || renewAlertDays < 1 || renewAlertDays > 180;
+    const safeRenewAlertDays = hasInvalidRenewAlertDays
+      ? DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS
+      : renewAlertDays;
 
     const settings: DigitalCertificateSettings = {
       alias: certificateAlias,
@@ -373,7 +338,7 @@ export function AdminPage() {
       fileExtension: certificateFileExtension,
       importSource: certificateImportSource,
       expirationDate: certificateExpirationDate,
-      renewAlertDays,
+      renewAlertDays: safeRenewAlertDays,
       importedAt: certificateImportedAt,
       updatedAt: new Date().toISOString()
     };
@@ -382,7 +347,21 @@ export function AdminPage() {
     setSavedCertificateSettings(settings);
     setCertificatePassword('');
     setCertificateFormError(null);
-    setCertificateMessage('Configuração do certificado digital salva com sucesso.');
+    const pendingWarnings = [
+      !certificateCompanyName.trim() ? 'informe a razão social' : null,
+      !isValidCnpj(certificateCnpj) ? 'corrija o CNPJ' : null,
+      !certificateCnae.trim() ? 'selecione o CNAE principal' : null,
+      !certificateTaxRegime.trim() ? 'selecione o regime tributário' : null,
+      cscValidationError,
+      hasInvalidRenewAlertDays ? 'ajuste o alerta de renovação para um valor entre 1 e 180 dias' : null,
+      !certificateFileName.trim() ? 'importe o A1 antes de emitir NFC-e real' : null,
+      !certificateStateRegistration.trim() ? 'informe a inscrição estadual antes de emitir NFC-e real' : null
+    ].filter(Boolean);
+    setCertificateMessage(
+      pendingWarnings.length > 0
+        ? `Configuração fiscal salva com pendência: ${pendingWarnings.join('; ')}.`
+        : 'Configuração do certificado digital salva com sucesso.'
+    );
   };
 
   const onRemoveCertificateSettings = () => {
@@ -902,7 +881,7 @@ export function AdminPage() {
             )}
 
             <div className="admin-actions">
-              <button type="submit">Salvar certificado</button>
+              <button type="submit">Salvar configuração fiscal</button>
               <button type="button" className="button-muted" onClick={clearCertificateForm}>
                 Limpar formulário
               </button>

@@ -43,6 +43,7 @@ import {
   unmarkComandaLocallyCancelled,
   upsertComandaItems
 } from '@/shared/infrastructure/storage/comandaCache';
+import { loadDigitalCertificateSettings } from '@/shared/domain/services/digitalCertificateRules';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CashierPage — tela de caixa unificada
@@ -151,6 +152,41 @@ const parseTaxRate = (value?: string) => {
   return Number.isFinite(rate) && rate >= 0 ? rate : 0;
 };
 
+const hasValidTaxRateInput = (value?: string) => {
+  const trimmed = value?.replace('%', '').trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const normalized = trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : trimmed;
+  const rate = Number(normalized);
+  return Number.isFinite(rate) && rate >= 0;
+};
+
+const validateFiscalItemsForNfce = (items: CashierCartItem[]) => {
+  const errors: string[] = [];
+
+  for (const item of items) {
+    const missingFields = [
+      !item.ncm?.trim() ? 'NCM' : null,
+      !item.cfop?.trim() ? 'CFOP' : null,
+      !(item.taxSituationCode?.trim() || item.cstIcms?.trim()) ? 'CST/CSOSN' : null,
+      !item.fiscalType?.trim() ? 'tipo fiscal' : null,
+      !hasValidTaxRateInput(item.aliqIcms) ? 'alíquota ICMS' : null,
+      !hasValidTaxRateInput(item.aliqPis) ? 'alíquota PIS' : null,
+      !hasValidTaxRateInput(item.aliqCofins) ? 'alíquota COFINS' : null
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      errors.push(`${item.name}: ${missingFields.join(', ')}`);
+    }
+  }
+
+  return errors;
+};
+
 const sortComandasByNumero = (items: ActiveComandaEntry[]) =>
   [...items].sort((a, b) => {
     const numeroA = Number(a.numero);
@@ -255,6 +291,7 @@ const mapComandaItemsToCashierCart = (
       ncm: matchedProduct?.ncm,
       cfop: matchedProduct?.cfop,
       taxSituationCode: matchedProduct?.taxSituationCode,
+      cstIcms: matchedProduct?.cstIcms,
       fiscalType: matchedProduct?.fiscalType,
       aliqIcms: matchedProduct?.aliqIcms,
       aliqPis: matchedProduct?.aliqPis,
@@ -902,6 +939,7 @@ export function CashierPage() {
         cfop: product.cfop,
         fiscalType: product.fiscalType,
         taxSituationCode: product.taxSituationCode,
+        cstIcms: product.cstIcms,
         aliqIcms: product.aliqIcms,
         aliqPis: product.aliqPis,
         aliqCofins: product.aliqCofins,
@@ -1234,20 +1272,37 @@ export function CashierPage() {
     return map[method] ?? 'OUTROS';
   };
 
-  const buildReceiptEmitter = (): ReceiptEmitter => ({
-    razaoSocial: 'RAZÃO SOCIAL DO RESTAURANTE LTDA',
-    nomeFantasia: 'PDV_RESTAURANTE_KILO',
-    cnpj: '00000000000000',
-    inscricaoEstadual: '000.000.000.000',
-    endereco: {
-      logradouro: 'Rua Exemplo',
-      numero: '123',
-      bairro: 'Bairro',
-      municipio: 'São Paulo',
-      uf: 'SP',
-      cep: '00000000'
-    }
-  });
+  const buildReceiptEmitter = (): ReceiptEmitter => {
+    const fiscalSettings = loadDigitalCertificateSettings();
+    const addressParts = (fiscalSettings?.addressLine1 || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const hasStructuredAddress = addressParts.length >= 3;
+    const addressStreet = hasStructuredAddress
+      ? addressParts[0]
+      : fiscalSettings?.addressLine1?.trim() || '';
+    const addressNumber = hasStructuredAddress ? addressParts[1] : '';
+    const addressDistrict = hasStructuredAddress ? addressParts.slice(2).join(', ') : '';
+    const [city = '', uf = 'SP'] = (fiscalSettings?.cityUf || '')
+      .split('/')
+      .map((part) => part.trim());
+
+    return {
+      razaoSocial: fiscalSettings?.companyName?.trim() || 'RAZÃO SOCIAL DO RESTAURANTE LTDA',
+      nomeFantasia: 'PDV_RESTAURANTE_KILO',
+      cnpj: fiscalSettings?.cnpj?.trim() || '00000000000000',
+      inscricaoEstadual: fiscalSettings?.stateRegistration?.trim() || undefined,
+      endereco: {
+        logradouro: addressStreet || 'Rua Exemplo',
+        numero: addressNumber || 'S/N',
+        bairro: addressDistrict || fiscalSettings?.addressLine2?.trim() || 'Bairro',
+        municipio: city || 'São Paulo',
+        uf: uf.toUpperCase() === 'SP' ? 'SP' : 'SP',
+        cep: '00000000'
+      }
+    };
+  };
 
   const printReceipt = (
     payments: PaymentEntry[],
@@ -1279,7 +1334,7 @@ export function CashierPage() {
       quantidade: item.quantity,
       valorUnitario: item.unitPrice,
       valorTotal: Number((item.quantity * item.unitPrice).toFixed(2)),
-      cstCsosn: item.taxSituationCode
+      cstCsosn: item.taxSituationCode || item.cstIcms
     }));
     const chargedTaxes = cartItems.reduce((sum, item) => {
       const combinedRate = parseTaxRate(item.aliqIcms) + parseTaxRate(item.aliqPis) + parseTaxRate(item.aliqCofins);
@@ -1289,6 +1344,7 @@ export function CashierPage() {
       tipo: mapPaymentType(payment.method),
       valor: payment.amount
     }));
+    const fiscalSettings = loadDigitalCertificateSettings();
     const nonFiscalReceipt: NonFiscalReceipt = {
       tipo: 'NON_FISCAL',
       emitente: buildReceiptEmitter(),
@@ -1309,17 +1365,32 @@ export function CashierPage() {
       troco: Number(change.toFixed(2))
     };
     const receipt = documentMode === 'NFCE'
-      ? {
-          ...convertNonFiscalToMockNfce(nonFiscalReceipt),
-          consumidor: customerDocumentDigits
-            ? { cpfCnpj: customerDocumentDigits, nome: 'CONSUMIDOR FINAL' }
-            : undefined,
-          tributosAproximados: {
-            federal: 0,
-            estadual: Number(chargedTaxes.toFixed(2)),
-            municipal: 0
-          }
-        }
+      ? (() => {
+          const mockNfce = convertNonFiscalToMockNfce(nonFiscalReceipt);
+          const nfceNumber = (fiscalSettings?.nfceNextNumber || mockNfce.nfce.numero || '1')
+            .replace(/\D/g, '')
+            .padStart(9, '0');
+          const nfceSerie = fiscalSettings?.nfceSerie?.trim() || mockNfce.nfce.serie;
+
+          return {
+            ...mockNfce,
+            nfce: {
+              ...mockNfce.nfce,
+              serie: nfceSerie,
+              numero: nfceNumber,
+              ambiente: fiscalSettings?.nfceEnvironment || mockNfce.nfce.ambiente,
+              cscId: fiscalSettings?.cscId?.trim() || mockNfce.nfce.cscId
+            },
+            consumidor: customerDocumentDigits
+              ? { cpfCnpj: customerDocumentDigits, nome: 'CONSUMIDOR FINAL' }
+              : undefined,
+            tributosAproximados: {
+              federal: 0,
+              estadual: Number(chargedTaxes.toFixed(2)),
+              municipal: 0
+            }
+          };
+        })()
       : nonFiscalReceipt;
     const receiptText = buildReceiptText(receipt);
 
@@ -1393,6 +1464,7 @@ export function CashierPage() {
         ncm: product.ncm,
         cfop: product.cfop,
         taxSituationCode: product.taxSituationCode,
+        cstIcms: product.cstIcms,
         fiscalType: product.fiscalType,
         aliqIcms: product.aliqIcms,
         aliqPis: product.aliqPis,
@@ -1549,6 +1621,19 @@ export function CashierPage() {
     const payableTotal = Math.max(0, subtotal - discountAmount);
     const isFiadoFlow = Boolean(fiadoClientId) || payments.some((payment) => payment.method === 'FIADO');
     const finalDocumentMode: PaymentDocumentMode = isFiadoFlow ? 'ORCAMENTO' : documentMode;
+
+    if (finalDocumentMode === 'NFCE') {
+      const fiscalErrors = validateFiscalItemsForNfce(cartItems);
+      if (fiscalErrors.length > 0) {
+        const visibleErrors = fiscalErrors.slice(0, 3).join(' | ');
+        const hiddenCount = fiscalErrors.length - 3;
+        showNotice(
+          `NFC-e bloqueada. Corrija o cadastro fiscal dos produtos: ${visibleErrors}${hiddenCount > 0 ? ` e mais ${hiddenCount} item(ns)` : ''}.`,
+          'error'
+        );
+        return;
+      }
+    }
 
     const closed = await closeComandaAtCashier(finalDocumentMode, customerDocument);
     if (!closed) {
