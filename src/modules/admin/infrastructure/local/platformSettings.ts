@@ -49,29 +49,11 @@ export type ScalePeripheralSettings = {
   lastTestMessage?: string;
 };
 
-export type PrinterConnection = 'USB' | 'SERIAL' | 'ETHERNET';
-
-export type PrinterPeripheralSettings = {
-  enabled: boolean;
-  model: 'Elgin i9 Full';
-  description: string;
-  connection: PrinterConnection;
-  driverName: string;
-  serialPort: string;
-  ipAddress: string;
-  networkPort: string;
-  status: PeripheralStatus;
-  lastTestAt?: string;
-  lastTestMessage?: string;
-};
-
 export type LocalPeripheralSettings = {
   computerName: string;
   scales: ScalePeripheralSettings[];
   /** @deprecated Mantido apenas para migração de configurações locais antigas. */
   scale: ScalePeripheralSettings;
-  cashierPrinter: PrinterPeripheralSettings;
-  kitchenPrinter: PrinterPeripheralSettings;
   updatedAt: string;
 };
 
@@ -229,28 +211,10 @@ const createDefaultScale = (index = 0): ScalePeripheralSettings => ({
   status: 'INATIVO'
 });
 
-const createDefaultPrinter = (description: string): PrinterPeripheralSettings => ({
-  enabled: true,
-  model: 'Elgin i9 Full',
-  description,
-  connection: 'USB',
-  driverName: 'Elgin i9 Full',
-  serialPort: '',
-  ipAddress: '',
-  networkPort: '9100',
-  status: 'INATIVO'
-});
-
 const createDefaultPeripheralSettings = (): LocalPeripheralSettings => ({
   computerName: typeof window !== 'undefined' ? window.navigator.platform || 'Computador local' : 'Computador local',
   scales: [createDefaultScale()],
   scale: createDefaultScale(),
-  cashierPrinter: createDefaultPrinter('Impressora do caixa'),
-  kitchenPrinter: {
-    ...createDefaultPrinter('Impressora da copa'),
-    enabled: false,
-    connection: 'ETHERNET'
-  },
   updatedAt: nowIso()
 });
 
@@ -284,22 +248,6 @@ const sanitizeScaleList = (settings: Partial<LocalPeripheralSettings>): ScalePer
   return source.map((scale, index) => sanitizeScale(scale, index));
 };
 
-const sanitizePrinter = (
-  printer: Partial<PrinterPeripheralSettings> | undefined,
-  fallbackDescription: string
-): PrinterPeripheralSettings => {
-  const defaults = createDefaultPrinter(fallbackDescription);
-  const connection = printer?.connection === 'SERIAL' || printer?.connection === 'ETHERNET' ? printer.connection : 'USB';
-  return {
-    ...defaults,
-    ...printer,
-    model: 'Elgin i9 Full',
-    description: String(printer?.description || fallbackDescription),
-    connection,
-    status: printer?.status === 'ATIVO' || printer?.status === 'ERRO' ? printer.status : 'INATIVO'
-  };
-};
-
 export const readLocalPeripheralSettings = (): LocalPeripheralSettings => {
   if (!hasStorage()) {
     if (!memoryPeripheralSettings) {
@@ -323,8 +271,6 @@ export const readLocalPeripheralSettings = (): LocalPeripheralSettings => {
       computerName: String(parsed.computerName || 'Computador local'),
       scales,
       scale: scales[0],
-      cashierPrinter: sanitizePrinter(parsed.cashierPrinter, 'Impressora do caixa'),
-      kitchenPrinter: sanitizePrinter(parsed.kitchenPrinter, 'Impressora da copa'),
       updatedAt: String(parsed.updatedAt || nowIso())
     };
   } catch {
@@ -338,8 +284,6 @@ export const saveLocalPeripheralSettings = (settings: LocalPeripheralSettings) =
     computerName: settings.computerName.trim() || 'Computador local',
     scales,
     scale: scales[0],
-    cashierPrinter: sanitizePrinter(settings.cashierPrinter, 'Impressora do caixa'),
-    kitchenPrinter: sanitizePrinter(settings.kitchenPrinter, 'Impressora da copa'),
     updatedAt: nowIso()
   };
 
@@ -377,38 +321,5 @@ export const runScaleCommunicationTest = (scale: ScalePeripheralSettings): Scale
     status: 'ATIVO',
     lastTestAt: testedAt,
     lastTestMessage: `Teste local preparado para ${scale.model} na ${scale.port}. A leitura real depende da ponte serial/driver instalado no Windows.`
-  };
-};
-
-export const runPrinterCommunicationTest = (printer: PrinterPeripheralSettings): PrinterPeripheralSettings => {
-  const testedAt = nowIso();
-  if (!printer.enabled) {
-    return {
-      ...printer,
-      status: 'INATIVO',
-      lastTestAt: testedAt,
-      lastTestMessage: `${printer.description} desativada neste computador.`
-    };
-  }
-
-  const missingConnection =
-    (printer.connection === 'USB' && !printer.driverName.trim()) ||
-    (printer.connection === 'SERIAL' && !printer.serialPort.trim()) ||
-    (printer.connection === 'ETHERNET' && (!printer.ipAddress.trim() || !printer.networkPort.trim()));
-
-  if (missingConnection) {
-    return {
-      ...printer,
-      status: 'ERRO',
-      lastTestAt: testedAt,
-      lastTestMessage: 'Complete os dados da conexão antes do teste de impressão.'
-    };
-  }
-
-  return {
-    ...printer,
-    status: 'ATIVO',
-    lastTestAt: testedAt,
-    lastTestMessage: `Teste de impressão preparado para ${printer.model} via ${printer.connection}. A impressão real depende do driver do fabricante instalado.`
   };
 };

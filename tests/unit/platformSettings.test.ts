@@ -6,7 +6,6 @@ import {
   readLocalPeripheralSettings,
   readStoreSettings,
   roleCanAccessStore,
-  runPrinterCommunicationTest,
   runScaleCommunicationTest,
   saveLocalPeripheralSettings,
   saveStoreSettings
@@ -61,7 +60,7 @@ describe('platform settings locais', () => {
     expect(roleCanAccessStore('CAIXA', savedStores[0])).toBe(false);
   });
 
-  it('persiste periféricos locais e valida testes mínimos', () => {
+  it('persiste balanças locais e valida testes mínimos', () => {
     const settings = readLocalPeripheralSettings();
     expect(settings.scales).toHaveLength(1);
     expect(settings.scales[0].name).toBe('Balança principal');
@@ -70,14 +69,8 @@ describe('platform settings locais', () => {
       ...settings.scales[0],
       port: ''
     });
-    const printerWithError = runPrinterCommunicationTest({
-      ...settings.cashierPrinter,
-      connection: 'ETHERNET',
-      ipAddress: ''
-    });
 
     expect(scaleWithError.status).toBe('ERRO');
-    expect(printerWithError.status).toBe('ERRO');
 
     const saved = saveLocalPeripheralSettings({
       ...settings,
@@ -98,11 +91,6 @@ describe('platform settings locais', () => {
       scale: runScaleCommunicationTest({
         ...settings.scales[0],
         port: 'COM3'
-      }),
-      cashierPrinter: runPrinterCommunicationTest({
-        ...settings.cashierPrinter,
-        connection: 'USB',
-        driverName: 'Elgin i9 Full'
       })
     });
 
@@ -110,7 +98,6 @@ describe('platform settings locais', () => {
     expect(saved.scales).toHaveLength(2);
     expect(saved.scales[1].name).toBe('Balança da copa');
     expect(saved.scales[1].status).toBe('ATIVO');
-    expect(saved.cashierPrinter.status).toBe('ATIVO');
     expect(readLocalPeripheralSettings().computerName).toBe('Caixa principal');
     expect(LOCAL_PERIPHERAL_SETTINGS_STORAGE_KEY).toBe('pdv.local.peripherals');
   });

@@ -2215,6 +2215,26 @@ body {
     grid-template-columns: minmax(170px, 0.9fr) repeat(auto-fit, minmax(140px, 1fr));
 }
 
+.admin-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    color: #334155;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.admin-scale-name-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.admin-scale-name-actions button {
+    min-height: 44px;
+    padding: 0.45rem 0.5rem;
+}
+
 .admin-peripheral-grid .admin-inline-check {
     align-self: end;
     min-height: 38px;
