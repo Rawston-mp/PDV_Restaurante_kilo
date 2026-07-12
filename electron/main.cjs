@@ -1,7 +1,8 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const net = require('node:net');
 const path = require('node:path');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
@@ -110,6 +111,81 @@ const startBackend = async() => {
     });
 };
 const getRendererIndexPath = () => path.join(app.getAppPath(), 'dist', 'index.html');
+const getPreloadPath = () => path.join(app.getAppPath(), 'electron', 'preload.cjs');
+
+const buildEscPosTestPayload = (config) => {
+    const columns = Number(config && config.colunas) || 48;
+    const title = 'TESTE DE IMPRESSAO PDV TOUCH';
+    const line = '-'.repeat(Math.min(Math.max(columns, 32), 48));
+    const cutCommand = config && config.corteAutomatico ? '\x1D\x56\x41\x00' : '';
+
+    return Buffer.from(`\x1B@${title}\n${line}\nConexao: REDE\nData: ${new Date().toLocaleString('pt-BR')}\n\n\n${cutCommand}`, 'binary');
+};
+
+const sendNetworkPrinterTest = (config) =>
+    new Promise((resolve, reject) => {
+        const host = String(config && config.caminhoPorta ? config.caminhoPorta : '').trim();
+        const port = Number(config && config.portaTcp) || 9100;
+
+        if (!host) {
+            reject(new Error('IP da impressora nao informado.'));
+            return;
+        }
+
+        const socket = net.createConnection({ host, port, timeout: 5000 }, () => {
+            socket.write(buildEscPosTestPayload(config), () => {
+                socket.end();
+                resolve();
+            });
+        });
+
+        socket.on('timeout', () => {
+            socket.destroy(new Error('Tempo limite ao conectar na impressora.'));
+        });
+
+        socket.on('error', reject);
+    });
+
+ipcMain.on('print-job:test', (event, config) => {
+    const safeConfig = config && typeof config === 'object' ? config : {};
+
+    if (safeConfig.tipoConexao !== 'REDE') {
+        writeStartupLog(`Teste de impressora recebido para conexao ${safeConfig.tipoConexao || 'desconhecida'}.`);
+        return;
+    }
+
+    sendNetworkPrinterTest(safeConfig)
+        .then(() => {
+            writeStartupLog(`Teste de impressora enviado para ${safeConfig.caminhoPorta}:${safeConfig.portaTcp || 9100}.`);
+        })
+        .catch((error) => {
+            writeStartupLog('Falha no teste de impressora.', error);
+        });
+});
+
+ipcMain.on('print-job:execute', (_event, dados) => {
+    writeStartupLog(`Print job recebido para implementacao futura: ${typeof dados}.`);
+});
+
+ipcMain.handle('print-job:list-printers', async() => {
+    try {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return [];
+        }
+
+        const printers = await mainWindow.webContents.getPrintersAsync();
+        return printers.map((printer) => ({
+            name: printer.name,
+            displayName: printer.displayName || printer.name,
+            description: printer.description || '',
+            isDefault: Boolean(printer.isDefault),
+            status: printer.status
+        }));
+    } catch (error) {
+        writeStartupLog('Falha ao listar impressoras instaladas.', error);
+        return [];
+    }
+});
 
 const createWindow = async() => {
     mainWindow = new BrowserWindow({
@@ -120,6 +196,7 @@ const createWindow = async() => {
         title: 'PDVTouch Restaurante',
         autoHideMenuBar: true,
         webPreferences: {
+            preload: getPreloadPath(),
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true

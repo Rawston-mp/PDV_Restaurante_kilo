@@ -11,6 +11,7 @@ import {
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import { StoreSettingsPanel } from '@/modules/admin/presentation/components/StoreSettingsPanel';
 import { PeripheralSettingsPanel } from '@/modules/admin/presentation/components/PeripheralSettingsPanel';
+import { PrinterConfig } from '@/modules/admin/presentation/components/PrinterConfig';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
@@ -549,6 +550,8 @@ export function AdminPage() {
         <StoreSettingsPanel />
 
         <PeripheralSettingsPanel />
+
+        <PrinterConfig />
 
         <article className="card admin-audit">
           <h3>Auditoria de ações sensíveis</h3>

@@ -2,90 +2,20 @@ import { useState } from 'react';
 
 import {
   readLocalPeripheralSettings,
-  runPrinterCommunicationTest,
   runScaleCommunicationTest,
   saveLocalPeripheralSettings,
   type LocalPeripheralSettings,
-  type PrinterPeripheralSettings,
   type ScalePeripheralSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
 
-type PrinterEditorProps = {
-  title: string;
-  printer: PrinterPeripheralSettings;
-  onChange: (printer: PrinterPeripheralSettings) => void;
-  onTest: () => void;
-};
-
 const statusLabel = (status: string) => status.toLowerCase();
+const scaleNameSuggestions = ['Caixa', 'Copa', 'Cozinha'];
 
 const normalizeScaleState = (settings: LocalPeripheralSettings, scales: ScalePeripheralSettings[]): LocalPeripheralSettings => ({
   ...settings,
   scales,
   scale: scales[0]
 });
-
-function PrinterEditor({ title, printer, onChange, onTest }: PrinterEditorProps) {
-  const updatePrinter = (patch: Partial<PrinterPeripheralSettings>) => {
-    onChange({
-      ...printer,
-      ...patch
-    });
-  };
-
-  return (
-    <section className="admin-config-section admin-peripheral-section">
-      <div className="admin-config-section-title">
-        <h4>{title}</h4>
-        <span className={`admin-status-badge is-${printer.status.toLowerCase()}`}>{statusLabel(printer.status)}</span>
-      </div>
-
-      <div className="admin-config-grid admin-peripheral-grid">
-        <label className="admin-inline-check">
-          <input
-            type="checkbox"
-            checked={printer.enabled}
-            onChange={(event) => updatePrinter({ enabled: event.target.checked })}
-          />
-          Ativa neste computador
-        </label>
-        <label>
-          Modelo
-          <input value={printer.model} readOnly />
-        </label>
-        <label>
-          Tipo de conexão
-          <select value={printer.connection} onChange={(event) => updatePrinter({ connection: event.target.value as PrinterPeripheralSettings['connection'] })}>
-            <option value="USB">USB</option>
-            <option value="SERIAL">Serial</option>
-            <option value="ETHERNET">Ethernet / IP</option>
-          </select>
-        </label>
-        <label>
-          Nome da impressora/driver
-          <input value={printer.driverName} onChange={(event) => updatePrinter({ driverName: event.target.value })} />
-        </label>
-        <label>
-          Porta serial
-          <input value={printer.serialPort} onChange={(event) => updatePrinter({ serialPort: event.target.value })} placeholder="COM2" />
-        </label>
-        <label>
-          IP
-          <input value={printer.ipAddress} onChange={(event) => updatePrinter({ ipAddress: event.target.value })} placeholder="192.168.0.50" />
-        </label>
-        <label>
-          Porta de rede
-          <input value={printer.networkPort} onChange={(event) => updatePrinter({ networkPort: event.target.value })} placeholder="9100" />
-        </label>
-      </div>
-
-      <div className="admin-test-row admin-peripheral-test-row">
-        <button type="button" className="button-muted" onClick={onTest}>Testar impressão</button>
-        <span>{printer.lastTestMessage ?? 'Nenhum teste executado.'}</span>
-      </div>
-    </section>
-  );
-}
 
 export function PeripheralSettingsPanel() {
   const [settings, setSettings] = useState<LocalPeripheralSettings>(readLocalPeripheralSettings);
@@ -136,13 +66,6 @@ export function PeripheralSettingsPanel() {
     });
   };
 
-  const updatePrinter = (key: 'cashierPrinter' | 'kitchenPrinter', printer: PrinterPeripheralSettings) => {
-    setSettings((current) => ({
-      ...current,
-      [key]: printer
-    }));
-  };
-
   const onSave = () => {
     const saved = saveLocalPeripheralSettings(settings);
     setSettings(saved);
@@ -159,19 +82,12 @@ export function PeripheralSettingsPanel() {
     });
   };
 
-  const onTestPrinter = (key: 'cashierPrinter' | 'kitchenPrinter') => {
-    setSettings((current) => ({
-      ...current,
-      [key]: runPrinterCommunicationTest(current[key])
-    }));
-  };
-
   return (
     <article className="card admin-config-card admin-peripheral-card">
       <div className="admin-config-header">
         <div>
           <h3>Periféricos do computador</h3>
-          <p className="admin-subtitle">Configuração local para balanças e impressoras usadas nesta estação.</p>
+          <p className="admin-subtitle">Configuração local das balanças usadas nesta estação.</p>
         </div>
         <span>Local</span>
       </div>
@@ -184,7 +100,7 @@ export function PeripheralSettingsPanel() {
             onChange={(event) => setSettings((current) => ({ ...current, computerName: event.target.value }))}
           />
         </label>
-        <button type="button" onClick={onSave}>Salvar periféricos</button>
+        <button type="button" onClick={onSave}>Salvar balanças</button>
       </div>
 
       <section className="admin-config-section admin-peripheral-section">
@@ -222,6 +138,21 @@ export function PeripheralSettingsPanel() {
                   Nome
                   <input value={scale.name} onChange={(event) => updateScale(scale.id, { name: event.target.value })} />
                 </label>
+                <div className="admin-config-field">
+                  <span>Apelido rápido</span>
+                  <div className="admin-scale-name-actions">
+                    {scaleNameSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        className="button-muted"
+                        onClick={() => updateScale(scale.id, { name: suggestion })}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label>
                   Modelo
                   <input value={scale.model} readOnly />
@@ -276,22 +207,8 @@ export function PeripheralSettingsPanel() {
         </div>
       </section>
 
-      <PrinterEditor
-        title="Impressora do caixa"
-        printer={settings.cashierPrinter}
-        onChange={(printer) => updatePrinter('cashierPrinter', printer)}
-        onTest={() => onTestPrinter('cashierPrinter')}
-      />
-
-      <PrinterEditor
-        title="Impressora da copa"
-        printer={settings.kitchenPrinter}
-        onChange={(printer) => updatePrinter('kitchenPrinter', printer)}
-        onTest={() => onTestPrinter('kitchenPrinter')}
-      />
-
       <p className="admin-help-text">
-        As configurações são locais por computador. Troca de máquina exige nova configuração dos periféricos.
+        As configurações são locais por computador. Troca de máquina exige nova configuração das balanças.
       </p>
 
       {message && <p className="admin-message">{message}</p>}
