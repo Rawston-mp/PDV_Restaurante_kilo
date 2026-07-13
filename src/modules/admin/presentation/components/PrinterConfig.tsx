@@ -125,7 +125,7 @@ function readStoredProfiles(): PrinterProfile[] {
 export function PrinterConfig() {
   const [profiles, setProfiles] = useState<PrinterProfile[]>(createDefaultProfiles);
   const [selectedProfileId, setSelectedProfileId] = useState<PrinterProfileId>('CAIXA');
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [, setFeedback] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [printers, setPrinters] = useState<InstalledPrinter[]>([]);
   const [printerQuery, setPrinterQuery] = useState('');
@@ -233,19 +233,8 @@ export function PrinterConfig() {
   };
 
   return (
-    <article className="card admin-config-card">
-      <div className="admin-config-header">
-        <div>
-          <h3>Impressão térmica</h3>
-          <p className="admin-subtitle">Adicione e configure impressoras de caixa, copa ou cozinha.</p>
-        </div>
-      </div>
-
-      <div className="admin-config-toolbar">
-        <button type="button" onClick={() => setIsOpen(true)}>+ Adicionar Impressora</button>
-      </div>
-
-      {feedback && <p className="admin-message">{feedback}</p>}
+    <>
+      <button type="button" onClick={() => setIsOpen(true)}>+ Adicionar Impressora</button>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
@@ -482,6 +471,6 @@ export function PrinterConfig() {
           </section>
         </div>
       )}
-    </article>
+    </>
   );
 }

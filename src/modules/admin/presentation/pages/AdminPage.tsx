@@ -11,7 +11,6 @@ import {
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import { StoreSettingsPanel } from '@/modules/admin/presentation/components/StoreSettingsPanel';
 import { PeripheralSettingsPanel } from '@/modules/admin/presentation/components/PeripheralSettingsPanel';
-import { PrinterConfig } from '@/modules/admin/presentation/components/PrinterConfig';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
@@ -34,6 +33,18 @@ import { formatCnpj, isValidCnpj, normalizeCnpj } from '@/shared/domain/services
 
 const actionOptions: Array<SensitiveAuditEvent['action'] | 'ALL'> = ['ALL', 'CLOSE_COMANDA', 'CANCEL_ORDER'];
 const outcomeOptions: Array<SensitiveAuditEvent['outcome'] | 'ALL'> = ['ALL', 'SUCCESS', 'DENIED'];
+
+const actionLabels: Record<SensitiveAuditEvent['action'] | 'ALL', string> = {
+  ALL: 'Todas as ações',
+  CLOSE_COMANDA: 'Fechamento de comanda',
+  CANCEL_ORDER: 'Cancelamento de pedido'
+};
+
+const outcomeLabels: Record<SensitiveAuditEvent['outcome'] | 'ALL', string> = {
+  ALL: 'Todos os resultados',
+  SUCCESS: 'Aprovado',
+  DENIED: 'Negado'
+};
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
 const cnaeOptions = [
@@ -105,6 +116,9 @@ export function AdminPage() {
   );
   const [savedCertificateSettings, setSavedCertificateSettings] = useState<DigitalCertificateSettings | null>(null);
   const [certificateMessage, setCertificateMessage] = useState<string | null>(null);
+  const [isFiscalSettingsOpen, setIsFiscalSettingsOpen] = useState(false);
+  const [isOperationalOpen, setIsOperationalOpen] = useState(false);
+  const [isAuditOpen, setIsAuditOpen] = useState(false);
 
   const refresh = async () => {
     const tasks = await productsContainer.syncTaskQueue.listAll();
@@ -447,119 +461,161 @@ export function AdminPage() {
 
       <div className="admin-grid">
         <article className="card admin-kpis">
-          <h3>Visao operacional</h3>
-          <ul>
-            <li>
-              <span>Usuário ativo</span>
-              <strong>{user ? `${user.name} (${user.role})` : 'Não autenticado'}</strong>
-            </li>
-            <li>
-              <span>Fila total</span>
-              <strong>{queueSummary.total}</strong>
-            </li>
-            <li>
-              <span>Pendencias produtos</span>
-              <strong>{queueSummary.pendingProducts}</strong>
-            </li>
-            <li>
-              <span>Pendencias pedidos</span>
-              <strong>{queueSummary.pendingOrders}</strong>
-            </li>
-            <li>
-              <span>Eventos sensíveis</span>
-              <strong>{auditEvents.length}</strong>
-            </li>
-            <li>
-              <span>PIN login fraco</span>
-              <strong>{pinHealth.loginStrengthIssues}</strong>
-            </li>
-            <li>
-              <span>PIN sensível fraco</span>
-              <strong>{pinHealth.sensitiveStrengthIssues}</strong>
-            </li>
-          </ul>
-
-          <div className="admin-actions">
-            <button type="button" onClick={() => void refresh()}>
-              Atualizar painel
-            </button>
-            <button type="button" className="button-muted" onClick={() => void onProcessQueue()}>
-              Processar fila
-            </button>
-            <button type="button" className="admin-danger" onClick={onClearAudit}>
-              Limpar auditoria
-            </button>
+          <h3>Operacional</h3>
+          <p className="admin-subtitle">Monitore fila, pendências e segurança dos PINs.</p>
+          <div className="admin-config-toolbar admin-compact-toolbar">
+            <button type="button" onClick={() => setIsOperationalOpen(true)}>Abrir Operacional</button>
           </div>
 
-          {message && <p className="admin-message">{message}</p>}
+          {isOperationalOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+              <section className="w-full max-w-6xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+                <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="admin-eyebrow">Admin</p>
+                    <h3>Operacional</h3>
+                    <p className="admin-subtitle">Acompanhe fila, pendências, auditoria e PINs do sistema.</p>
+                  </div>
+                  <button type="button" className="button-muted" onClick={() => setIsOperationalOpen(false)}>Fechar</button>
+                </div>
 
-          <form onSubmit={onChangePin} className="admin-pin-form" autoComplete="off">
-            <h4>Gestão de PIN</h4>
+                <div className="p-4 space-y-4">
+                  <ul>
+                    <li>
+                      <span>Usuário ativo</span>
+                      <strong>{user ? `${user.name} (${user.role})` : 'Não autenticado'}</strong>
+                    </li>
+                    <li>
+                      <span>Fila total</span>
+                      <strong>{queueSummary.total}</strong>
+                    </li>
+                    <li>
+                      <span>Pendencias produtos</span>
+                      <strong>{queueSummary.pendingProducts}</strong>
+                    </li>
+                    <li>
+                      <span>Pendencias pedidos</span>
+                      <strong>{queueSummary.pendingOrders}</strong>
+                    </li>
+                    <li>
+                      <span>Eventos sensíveis</span>
+                      <strong>{auditEvents.length}</strong>
+                    </li>
+                    <li>
+                      <span>PIN login fraco</span>
+                      <strong>{pinHealth.loginStrengthIssues}</strong>
+                    </li>
+                    <li>
+                      <span>PIN sensível fraco</span>
+                      <strong>{pinHealth.sensitiveStrengthIssues}</strong>
+                    </li>
+                  </ul>
 
-            <label htmlFor="pin-role">Perfil</label>
-            <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {getRoleLabel(role)}
-                </option>
-              ))}
-            </select>
+                  <div className="admin-actions">
+                    <button type="button" onClick={() => void refresh()}>
+                      Atualizar painel
+                    </button>
+                    <button type="button" className="button-muted" onClick={() => void onProcessQueue()}>
+                      Processar fila
+                    </button>
+                    <button type="button" className="admin-danger" onClick={onClearAudit}>
+                      Limpar auditoria
+                    </button>
+                  </div>
 
-            <label htmlFor="pin-kind">Tipo</label>
-            <select
-              id="pin-kind"
-              value={pinKind}
-              onChange={(e) => setPinKind(e.target.value as PinKind)}
-            >
-              <option value="LOGIN">LOGIN</option>
-              <option value="SENSITIVE">SENSITIVE</option>
-            </select>
+                  {message && <p className="admin-message">{message}</p>}
 
-            <label htmlFor="pin-current">PIN atual</label>
-            <input
-              id="pin-current"
-              type="password"
-              value={currentPin}
-              onChange={(e) => setCurrentPin(e.target.value)}
-              required
-            />
+                  <form onSubmit={onChangePin} className="admin-pin-form" autoComplete="off">
+                    <h4>Gestão de PIN</h4>
 
-            <label htmlFor="pin-next">Novo PIN</label>
-            <input
-              id="pin-next"
-              type="password"
-              value={nextPin}
-              onChange={(e) => setNextPin(e.target.value)}
-              required
-            />
+                    <label htmlFor="pin-role">Perfil</label>
+                    <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {getRoleLabel(role)}
+                        </option>
+                      ))}
+                    </select>
 
-            <label htmlFor="pin-confirm">Confirmar novo PIN</label>
-            <input
-              id="pin-confirm"
-              type="password"
-              value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value)}
-              required
-            />
+                    <label htmlFor="pin-kind">Tipo</label>
+                    <select
+                      id="pin-kind"
+                      value={pinKind}
+                      onChange={(e) => setPinKind(e.target.value as PinKind)}
+                    >
+                      <option value="LOGIN">LOGIN</option>
+                      <option value="SENSITIVE">SENSITIVE</option>
+                    </select>
 
-            <button type="submit">Atualizar PIN</button>
-            {pinMessage && <p className="admin-message">{pinMessage}</p>}
-          </form>
+                    <label htmlFor="pin-current">PIN atual</label>
+                    <input
+                      id="pin-current"
+                      type="password"
+                      value={currentPin}
+                      onChange={(e) => setCurrentPin(e.target.value)}
+                      required
+                    />
+
+                    <label htmlFor="pin-next">Novo PIN</label>
+                    <input
+                      id="pin-next"
+                      type="password"
+                      value={nextPin}
+                      onChange={(e) => setNextPin(e.target.value)}
+                      required
+                    />
+
+                    <label htmlFor="pin-confirm">Confirmar novo PIN</label>
+                    <input
+                      id="pin-confirm"
+                      type="password"
+                      value={confirmPin}
+                      onChange={(e) => setConfirmPin(e.target.value)}
+                      required
+                    />
+
+                    <button type="submit">Atualizar PIN</button>
+                    {pinMessage && <p className="admin-message">{pinMessage}</p>}
+                  </form>
+                </div>
+              </section>
+            </div>
+          )}
         </article>
 
         <StoreSettingsPanel />
 
-        <PeripheralSettingsPanel />
-
-        <PrinterConfig />
+        <PeripheralSettingsPanel onOpenFiscalSettings={() => setIsFiscalSettingsOpen(true)} />
 
         <article className="card admin-audit">
           <h3>Auditoria de ações sensíveis</h3>
+          <p className="admin-subtitle">
+            Consulte aprovações e recusas em operações críticas.
+          </p>
+          <div className="admin-config-toolbar admin-compact-toolbar">
+            <button type="button" onClick={() => setIsAuditOpen(true)}>Abrir auditoria</button>
+          </div>
+
+          {isAuditOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+              <section className="w-full max-w-6xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+                <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="admin-eyebrow">Admin</p>
+                    <h3>Auditoria de ações sensíveis</h3>
+                    <p className="admin-subtitle">
+                      Consulte tentativas aprovadas ou negadas em operações críticas, como fechamento de comanda e cancelamentos.
+                    </p>
+                  </div>
+                  <button type="button" className="button-muted" onClick={() => setIsAuditOpen(false)}>Fechar</button>
+                </div>
+
+                <div className="p-4 space-y-4">
           <div className="admin-audit-filters">
             <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value as typeof actionFilter)}>
               {actionOptions.map((item) => (
                 <option key={item} value={item}>
-                  Ação: {item}
+                  Ação: {actionLabels[item]}
                 </option>
               ))}
             </select>
@@ -570,13 +626,13 @@ export function AdminPage() {
             >
               {outcomeOptions.map((item) => (
                 <option key={item} value={item}>
-                  Resultado: {item}
+                  Resultado: {outcomeLabels[item]}
                 </option>
               ))}
             </select>
 
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)}>
-              <option value="ALL">Perfil: ALL</option>
+              <option value="ALL">Perfil: Todos os perfis</option>
               {roleOptions.map((role) => (
                 <option key={role} value={role}>
                   Perfil: {getRoleLabel(role)}
@@ -614,10 +670,10 @@ export function AdminPage() {
                   {filteredAuditEvents.map((event) => (
                     <tr key={event.id}>
                       <td>{new Date(event.createdAt).toLocaleString('pt-BR')}</td>
-                      <td>{event.action}</td>
+                      <td>{actionLabels[event.action]}</td>
                       <td>{getRoleLabel(event.actorRole)}</td>
                       <td>{event.scaleId ?? '-'}</td>
-                      <td>{event.outcome}</td>
+                      <td>{outcomeLabels[event.outcome]}</td>
                       <td>{event.reason ?? '-'}</td>
                     </tr>
                   ))}
@@ -661,11 +717,25 @@ export function AdminPage() {
               </div>
             )}
           </section>
+                </div>
+              </section>
+            </div>
+          )}
         </article>
 
-        <article className="card admin-certificate admin-fiscal-settings">
-          <h3>Configurações Fiscais NFC-e</h3>
-          <p className="admin-subtitle">Configure dados fiscais, certificado digital e parâmetros para emissão de NFC-e.</p>
+        {isFiscalSettingsOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+            <section className="w-full max-w-6xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-orange-200 shadow-2xl mx-auto">
+              <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-orange-100 flex items-center justify-between gap-3">
+                <div>
+                  <p className="admin-eyebrow">Configurações gerais</p>
+                  <h3>Configurações Fiscais NFC-e</h3>
+                  <p className="admin-subtitle">Configure dados fiscais, certificado digital e parâmetros para emissão de NFC-e.</p>
+                </div>
+                <button type="button" className="button-muted" onClick={() => setIsFiscalSettingsOpen(false)}>Fechar</button>
+              </div>
+
+              <article className="card admin-certificate admin-fiscal-settings admin-fiscal-settings-modal">
 
           <form onSubmit={onSaveCertificateSettings} className="admin-certificate-form" autoComplete="off">
             <section className="admin-fiscal-section">
@@ -902,7 +972,10 @@ export function AdminPage() {
               Configuração ativa: {savedCertificateSettings.alias || savedCertificateSettings.fileName} | Atualizada em {new Date(savedCertificateSettings.updatedAt).toLocaleString('pt-BR')}
             </p>
           )}
-        </article>
+              </article>
+            </section>
+          </div>
+        )}
       </div>
     </section>
   );
