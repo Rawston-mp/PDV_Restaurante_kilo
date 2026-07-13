@@ -61,6 +61,7 @@ export function StoreSettingsPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [cepMessage, setCepMessage] = useState<string | null>(null);
   const [isCepLoading, setIsCepLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const filteredStores = useMemo(() => {
     const query = storeSearch
@@ -242,12 +243,31 @@ export function StoreSettingsPanel() {
       <div className="admin-config-header">
         <div>
           <h3>Lojas e vínculos</h3>
-          <p className="admin-subtitle">Cadastro usado no login multi-loja e no contexto operacional.</p>
+          <p className="admin-subtitle">Cadastre lojas e defina perfis autorizados para login.</p>
         </div>
         <span>{stores.length} {stores.length === 1 ? 'loja' : 'lojas'}</span>
       </div>
 
-      <div className="admin-config-toolbar">
+      <div className="admin-config-toolbar admin-compact-toolbar">
+        <button type="button" onClick={() => setIsOpen(true)}>Abrir lojas</button>
+      </div>
+
+      {message && <p className="admin-message">{message}</p>}
+
+      {isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+          <section className="w-full max-w-6xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+            <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+              <div>
+                <p className="admin-eyebrow">Admin</p>
+                <h3>Lojas e vínculos</h3>
+                <p className="admin-subtitle">Cadastro usado no login multi-loja e no contexto operacional.</p>
+              </div>
+              <button type="button" className="button-muted" onClick={() => setIsOpen(false)}>Fechar</button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="admin-config-toolbar">
         <input
           value={storeSearch}
           onChange={(event) => setStoreSearch(event.target.value)}
@@ -271,7 +291,7 @@ export function StoreSettingsPanel() {
         </select>
         <button type="button" onClick={startNewStore}>Nova loja</button>
         <button type="button" className="button-muted" onClick={reloadStores}>Recarregar lojas</button>
-      </div>
+              </div>
 
       {filteredStores.length > 0 && (
         <div className="admin-store-pills">
@@ -409,6 +429,10 @@ export function StoreSettingsPanel() {
       </form>
 
       {message && <p className="admin-message">{message}</p>}
+            </div>
+          </section>
+        </div>
+      )}
     </article>
   );
 }

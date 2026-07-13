@@ -34,6 +34,7 @@ export type PeripheralStatus = 'ATIVO' | 'INATIVO' | 'ERRO';
 export type ScalePeripheralSettings = {
   id: string;
   name: string;
+  quickLabel?: 'Balança A' | 'Balança B';
   enabled: boolean;
   model: 'PRIX 3/16';
   serialNumber: string;
@@ -197,7 +198,8 @@ export const getStoreSettingsForRole = (role: Role) =>
 
 const createDefaultScale = (index = 0): ScalePeripheralSettings => ({
   id: `scale-${index + 1}`,
-  name: index === 0 ? 'Balança principal' : `Balança ${index + 1}`,
+  name: index === 0 ? 'Auto Atendimento' : `Local ${index + 1}`,
+  quickLabel: index === 0 ? 'Balança A' : 'Balança B',
   enabled: true,
   model: 'PRIX 3/16',
   serialNumber: '12389113',
@@ -225,6 +227,7 @@ const sanitizeScale = (scale?: Partial<ScalePeripheralSettings>, index = 0): Sca
     ...scale,
     id: String(scale?.id || defaults.id),
     name: String(scale?.name || defaults.name),
+    quickLabel: scale?.quickLabel === 'Balança B' ? 'Balança B' : scale?.quickLabel === 'Balança A' ? 'Balança A' : defaults.quickLabel,
     model: 'PRIX 3/16',
     serialNumber: String(scale?.serialNumber ?? defaults.serialNumber),
     connection: 'SERIAL_RS232',

@@ -63,7 +63,8 @@ describe('platform settings locais', () => {
   it('persiste balanças locais e valida testes mínimos', () => {
     const settings = readLocalPeripheralSettings();
     expect(settings.scales).toHaveLength(1);
-    expect(settings.scales[0].name).toBe('Balança principal');
+    expect(settings.scales[0].name).toBe('Auto Atendimento');
+    expect(settings.scales[0].quickLabel).toBe('Balança A');
 
     const scaleWithError = runScaleCommunicationTest({
       ...settings.scales[0],
