@@ -111,6 +111,20 @@ export function AuthAccessPanel() {
             )}
           </select>
 
+          {selectedStore?.accessNoticeEnabled && (
+            <div className="auth-access-notice">
+              <strong>Aviso de regularização</strong>
+              <p>
+                Seu acesso será negado em {selectedStore.accessNoticeDays || '10'} dia(s). Entre em contato com o suporte para regularização.
+              </p>
+              <span>{selectedStore.supportCompanyName || 'Suporte'}</span>
+              <span>
+                {selectedStore.supportPhone || 'Telefone não informado'} | WhatsApp: {selectedStore.supportWhatsapp || 'não informado'}
+              </span>
+              <span>{selectedStore.supportEmail || 'E-mail não informado'}</span>
+            </div>
+          )}
+
           <label htmlFor="role">Usuário</label>
           <select
             id="role"

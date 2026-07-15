@@ -10,12 +10,29 @@ import {
   saveLocalPeripheralSettings,
   saveStoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
-import { getDefaultPinHint, verifyLoginPin } from '@/modules/auth/infrastructure/local/pinPolicy';
+import { changeRolePin, getDefaultPinHint, verifyLoginPin } from '@/modules/auth/infrastructure/local/pinPolicy';
 
 describe('platform settings locais', () => {
   beforeEach(() => {
+    const storedValues = new Map<string, string>();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storedValues.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storedValues.set(key, value);
+        },
+        removeItem: (key: string) => {
+          storedValues.delete(key);
+        }
+      }
+    });
+
     saveStoreSettings([]);
     saveLocalPeripheralSettings(readLocalPeripheralSettings());
+    window.localStorage.removeItem('pdv.auth.loginPins');
+    window.localStorage.removeItem('pdv.auth.loginPins.store-dev');
+    window.localStorage.removeItem('pdv.auth.loginPins.store-alegre');
   });
 
   it('cria loja padrão ativa para primeiro acesso', () => {
@@ -42,6 +59,21 @@ describe('platform settings locais', () => {
   it('aceita PIN de login para gerente e atendente', () => {
     expect(verifyLoginPin('GERENTE', '7700')).toBe(true);
     expect(verifyLoginPin('ATENDENTE', '3300')).toBe(true);
+  });
+
+  it('permite PIN de login diferente por loja', () => {
+    const result = changeRolePin({
+      kind: 'LOGIN',
+      role: 'ADMIN',
+      currentPin: '9000',
+      nextPin: '5678',
+      storeId: 'store-alegre'
+    });
+
+    expect(result.success).toBe(true);
+    expect(verifyLoginPin('ADMIN', '5678', 'store-alegre')).toBe(true);
+    expect(verifyLoginPin('ADMIN', '9000', 'store-alegre')).toBe(false);
+    expect(verifyLoginPin('ADMIN', '9000', 'store-dev')).toBe(true);
   });
 
   it('bloqueia perfil operacional quando não está vinculado à loja', () => {

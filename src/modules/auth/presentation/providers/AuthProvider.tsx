@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        if (!verifyLoginPin(role, password)) {
+        if (!verifyLoginPin(role, password, selectedStore.id)) {
           logWarn({
             event: 'AUTH_LOGIN_DENIED',
             module: 'auth',
@@ -161,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        if (!verifySensitivePin(user.role, password)) {
+        if (!verifySensitivePin(user.role, password, user.storeId)) {
           logWarn({
             event: 'AUTH_SENSITIVE_DENIED',
             module: 'auth',
@@ -204,7 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           kind,
           role,
           currentPin,
-          nextPin
+          nextPin,
+          storeId: user.storeId
         });
 
         if (result.success) {
@@ -223,7 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return result;
       },
-      getPinHealth: () => getPinPolicySummary(),
+      getPinHealth: () => getPinPolicySummary(user?.storeId),
       signOut: () => {
         setUser(null);
         persistUser(null);

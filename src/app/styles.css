@@ -1912,6 +1912,47 @@ body {
     line-height: 1.35;
 }
 
+.admin-home-summary {
+    grid-column: 1 / -1;
+    min-height: auto !important;
+    display: grid !important;
+    gap: 0.8rem !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.admin-home-summary h3 {
+    margin: 0;
+}
+
+.admin-home-summary ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.65rem;
+}
+
+.admin-home-summary li {
+    display: grid;
+    gap: 0.25rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 0.75rem;
+}
+
+.admin-home-summary span {
+    color: #475569;
+    font-size: 0.82rem;
+}
+
+.admin-home-summary strong {
+    color: #0369a1;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
 .admin-kpis ul {
     margin: 0;
     padding: 0;
@@ -2122,6 +2163,54 @@ body {
     align-items: center;
     gap: 0.45rem;
     color: #1f2937;
+    font-size: 0.88rem;
+}
+
+.admin-store-pin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-store-pin-card {
+    display: grid;
+    gap: 0.55rem;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 0.75rem;
+    min-width: 0;
+}
+
+.admin-store-pin-card strong {
+    color: #0f172a;
+}
+
+.admin-store-pin-card label {
+    display: grid;
+    gap: 0.25rem;
+    color: #334155;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.admin-access-notice-preview {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid #f59e0b;
+    border-radius: 14px;
+    background: #fffbeb;
+    color: #78350f;
+    padding: 0.9rem;
+}
+
+.admin-access-notice-preview p {
+    margin: 0;
+    font-weight: 700;
+}
+
+.admin-access-notice-preview span {
+    color: #92400e;
     font-size: 0.88rem;
 }
 
@@ -2557,6 +2646,32 @@ body {
     color: #e2e8f0;
     background: rgba(2, 6, 23, 0.72);
     border: 1px solid rgba(59, 130, 246, 0.58);
+}
+
+.auth-access-notice {
+    display: grid;
+    gap: 0.32rem;
+    border: 1px solid rgba(245, 158, 11, 0.65);
+    border-radius: 12px;
+    background: rgba(120, 53, 15, 0.28);
+    color: #fde68a;
+    padding: 0.75rem;
+    line-height: 1.35;
+}
+
+.auth-access-notice strong {
+    color: #fbbf24;
+}
+
+.auth-access-notice p {
+    margin: 0;
+    color: #fef3c7;
+    font-weight: 700;
+}
+
+.auth-access-notice span {
+    color: #fed7aa;
+    font-size: 0.9rem;
 }
 
 .auth-password-row {

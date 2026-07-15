@@ -234,7 +234,7 @@ export function PrinterConfig() {
 
   return (
     <>
-      <button type="button" onClick={() => setIsOpen(true)}>+ Adicionar Impressora</button>
+      <button type="button" onClick={() => setIsOpen(true)}>Impressoras</button>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
