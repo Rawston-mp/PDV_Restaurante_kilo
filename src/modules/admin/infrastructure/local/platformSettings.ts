@@ -2,6 +2,23 @@ import type { Role } from '@/modules/auth/domain/types/Role';
 
 export const STORE_SETTINGS_STORAGE_KEY = 'pdv.platform.stores';
 export const LOCAL_PERIPHERAL_SETTINGS_STORAGE_KEY = 'pdv.local.peripherals';
+export const PLATFORM_OWNER_SETTINGS_STORAGE_KEY = 'pdv.platform.ownerSettings';
+export const PLATFORM_OWNER_STORE_ID = 'store-development';
+
+export type StoreCommercialStatus = 'EM_DIA' | 'AVISO_PAGAMENTO' | 'SUSPENSA' | 'CANCELADA' | 'TESTE' | 'CORTESIA';
+
+export type PlatformOwnerSettings = {
+  companyName: string;
+  developerName: string;
+  yearsActive: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  website: string;
+  aboutText: string;
+  supportMessage: string;
+  updatedAt: string;
+};
 
 export type StoreSettings = {
   id: string;
@@ -24,6 +41,12 @@ export type StoreSettings = {
   responsibleName: string;
   responsibleCpf: string;
   active: boolean;
+  commercialStatus: StoreCommercialStatus;
+  monthlyFee: string;
+  paymentDueDate: string;
+  graceDays: string;
+  accessBlockedAt: string;
+  commercialNotes: string;
   accessNoticeEnabled: boolean;
   accessNoticeDays: string;
   supportCompanyName: string;
@@ -69,6 +92,7 @@ export const storeRoleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE
 const defaultStoreRoles: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
 let memoryStoreSettings: StoreSettings[] | null = null;
 let memoryPeripheralSettings: LocalPeripheralSettings | null = null;
+let memoryOwnerSettings: PlatformOwnerSettings | null = null;
 
 const hasStorage = () =>
   typeof window !== 'undefined' &&
@@ -77,10 +101,70 @@ const hasStorage = () =>
 
 const nowIso = () => new Date().toISOString();
 
+const normalizeIdentity = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .trim();
+
+const commercialStatusOptions: StoreCommercialStatus[] = [
+  'EM_DIA',
+  'AVISO_PAGAMENTO',
+  'SUSPENSA',
+  'CANCELADA',
+  'TESTE',
+  'CORTESIA'
+];
+
+export const commercialStatusLabels: Record<StoreCommercialStatus, string> = {
+  EM_DIA: 'Em dia',
+  AVISO_PAGAMENTO: 'Aviso de pagamento',
+  SUSPENSA: 'Suspensa',
+  CANCELADA: 'Cancelada',
+  TESTE: 'Teste',
+  CORTESIA: 'Cortesia'
+};
+
+const sanitizeCommercialStatus = (status: unknown): StoreCommercialStatus =>
+  commercialStatusOptions.includes(status as StoreCommercialStatus)
+    ? (status as StoreCommercialStatus)
+    : 'EM_DIA';
+
+const createDefaultOwnerSettings = (): PlatformOwnerSettings => ({
+  companyName: 'Alegre Sistemas',
+  developerName: 'Rawston',
+  yearsActive: '',
+  phone: '',
+  whatsapp: '',
+  email: '',
+  website: '',
+  aboutText: 'Soluções para PDV, restaurante por quilo, comanda, balança e caixa.',
+  supportMessage: 'Entre em contato com o suporte para regularização do acesso.',
+  updatedAt: nowIso()
+});
+
+const sanitizeOwnerSettings = (settings?: Partial<PlatformOwnerSettings> | null): PlatformOwnerSettings => {
+  const defaults = createDefaultOwnerSettings();
+
+  return {
+    companyName: String(settings?.companyName ?? defaults.companyName),
+    developerName: String(settings?.developerName ?? defaults.developerName),
+    yearsActive: String(settings?.yearsActive ?? defaults.yearsActive),
+    phone: String(settings?.phone ?? defaults.phone),
+    whatsapp: String(settings?.whatsapp ?? defaults.whatsapp),
+    email: String(settings?.email ?? defaults.email),
+    website: String(settings?.website ?? defaults.website),
+    aboutText: String(settings?.aboutText ?? defaults.aboutText),
+    supportMessage: String(settings?.supportMessage ?? defaults.supportMessage),
+    updatedAt: String(settings?.updatedAt ?? defaults.updatedAt)
+  };
+};
+
 const createDefaultStore = (): StoreSettings => {
   const timestamp = nowIso();
   return {
-    id: 'store-development',
+    id: PLATFORM_OWNER_STORE_ID,
     name: 'Desenvolvimento',
     legalName: 'Desenvolvimento',
     tradeName: 'Desenvolvimento',
@@ -100,6 +184,12 @@ const createDefaultStore = (): StoreSettings => {
     responsibleName: '',
     responsibleCpf: '',
     active: true,
+    commercialStatus: 'EM_DIA',
+    monthlyFee: '',
+    paymentDueDate: '',
+    graceDays: '10',
+    accessBlockedAt: '',
+    commercialNotes: '',
     accessNoticeEnabled: false,
     accessNoticeDays: '10',
     supportCompanyName: '',
@@ -152,6 +242,12 @@ const sanitizeStore = (store: Partial<StoreSettings>): StoreSettings | null => {
     responsibleName: String(store.responsibleName ?? ''),
     responsibleCpf: String(store.responsibleCpf ?? ''),
     active: store.active !== false,
+    commercialStatus: sanitizeCommercialStatus(store.commercialStatus),
+    monthlyFee: String(store.monthlyFee ?? ''),
+    paymentDueDate: String(store.paymentDueDate ?? ''),
+    graceDays: String(store.graceDays ?? store.accessNoticeDays ?? '10'),
+    accessBlockedAt: String(store.accessBlockedAt ?? ''),
+    commercialNotes: String(store.commercialNotes ?? ''),
     accessNoticeEnabled: store.accessNoticeEnabled === true,
     accessNoticeDays: String(store.accessNoticeDays ?? '10'),
     supportCompanyName: String(store.supportCompanyName ?? ''),
@@ -207,12 +303,75 @@ export const findStoreSettingById = (storeId: string) =>
 
 export const getActiveStoreSettings = () => readStoreSettings().filter((store) => store.active);
 
+export const isPlatformOwnerStore = (
+  store?: Partial<Pick<StoreSettings, 'id' | 'name' | 'legalName' | 'tradeName'>> | null
+) => {
+  if (!store) {
+    return false;
+  }
+
+  if (store.id === PLATFORM_OWNER_STORE_ID) {
+    return true;
+  }
+
+  const identity = normalizeIdentity(`${store.name ?? ''} ${store.legalName ?? ''} ${store.tradeName ?? ''}`);
+  return identity.includes('alegre sistemas') || identity === 'desenvolvimento';
+};
+
+export const isStoreCommerciallyBlocked = (store: StoreSettings) =>
+  store.commercialStatus === 'SUSPENSA' || store.commercialStatus === 'CANCELADA';
+
+export const shouldWarnStoreAccess = (store: StoreSettings) =>
+  store.accessNoticeEnabled || store.commercialStatus === 'AVISO_PAGAMENTO' || isStoreCommerciallyBlocked(store);
+
+export const roleIsLinkedToStore = (role: Role, store: StoreSettings) => (
+  store.active && store.allowedRoles.includes(role)
+);
+
 export const roleCanAccessStore = (role: Role, store: StoreSettings) => (
-  store.active && (role === 'ADMIN' || store.allowedRoles.includes(role))
+  roleIsLinkedToStore(role, store) && (isPlatformOwnerStore(store) || !isStoreCommerciallyBlocked(store))
 );
 
 export const getStoreSettingsForRole = (role: Role) =>
   getActiveStoreSettings().filter((store) => roleCanAccessStore(role, store));
+
+export const readPlatformOwnerSettings = (): PlatformOwnerSettings => {
+  if (!hasStorage()) {
+    if (!memoryOwnerSettings) {
+      memoryOwnerSettings = createDefaultOwnerSettings();
+    }
+
+    return memoryOwnerSettings;
+  }
+
+  const raw = window.localStorage.getItem(PLATFORM_OWNER_SETTINGS_STORAGE_KEY);
+  if (!raw) {
+    const defaults = createDefaultOwnerSettings();
+    savePlatformOwnerSettings(defaults);
+    return defaults;
+  }
+
+  try {
+    return sanitizeOwnerSettings(JSON.parse(raw) as Partial<PlatformOwnerSettings>);
+  } catch {
+    return createDefaultOwnerSettings();
+  }
+};
+
+export const savePlatformOwnerSettings = (settings: PlatformOwnerSettings) => {
+  const nextSettings = sanitizeOwnerSettings({
+    ...settings,
+    updatedAt: nowIso()
+  });
+
+  if (hasStorage()) {
+    window.localStorage.setItem(PLATFORM_OWNER_SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+  } else {
+    memoryOwnerSettings = nextSettings;
+  }
+
+  return nextSettings;
+};
 
 const createDefaultScale = (index = 0): ScalePeripheralSettings => ({
   id: `scale-${index + 1}`,

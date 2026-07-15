@@ -5,6 +5,8 @@ import {
   STORE_SETTINGS_STORAGE_KEY,
   readLocalPeripheralSettings,
   readStoreSettings,
+  readPlatformOwnerSettings,
+  isPlatformOwnerStore,
   roleCanAccessStore,
   runScaleCommunicationTest,
   saveLocalPeripheralSettings,
@@ -45,9 +47,19 @@ describe('platform settings locais', () => {
     expect(stores[0].logoUrl).toBe('');
     expect(stores[0].welcomeTitle).toBe('Bem-vindo ao PDV!');
     expect(stores[0].welcomeSubtitle).toBe('Tudo pronto para você realizar ótimas vendas.');
+    expect(stores[0].commercialStatus).toBe('EM_DIA');
+    expect(isPlatformOwnerStore(stores[0])).toBe(true);
     expect(roleCanAccessStore('ADMIN', stores[0])).toBe(true);
     expect(roleCanAccessStore('CAIXA', stores[0])).toBe(true);
     expect(STORE_SETTINGS_STORAGE_KEY).toBe('pdv.platform.stores');
+  });
+
+  it('mantém dados padrão da desenvolvedora para suporte e sobre', () => {
+    const ownerSettings = readPlatformOwnerSettings();
+
+    expect(ownerSettings.companyName).toBe('Alegre Sistemas');
+    expect(ownerSettings.developerName).toBe('Rawston');
+    expect(ownerSettings.aboutText).toContain('PDV');
   });
 
   it('exibe dica de PIN de login sem expor PIN sensível', () => {
@@ -87,9 +99,41 @@ describe('platform settings locais', () => {
       allowedRoles: ['GERENTE']
     }]);
 
-    expect(roleCanAccessStore('ADMIN', savedStores[0])).toBe(true);
+    expect(roleCanAccessStore('ADMIN', savedStores[0])).toBe(false);
     expect(roleCanAccessStore('GERENTE', savedStores[0])).toBe(true);
     expect(roleCanAccessStore('CAIXA', savedStores[0])).toBe(false);
+  });
+
+  it('bloqueia perfil operacional quando a loja está suspensa comercialmente', () => {
+    const [store] = readStoreSettings();
+    const [savedStore] = saveStoreSettings([{
+      ...store,
+      id: 'store-suspended',
+      name: 'Restaurante Suspenso',
+      legalName: 'Restaurante Suspenso LTDA',
+      tradeName: 'Restaurante Suspenso',
+      commercialStatus: 'SUSPENSA',
+      allowedRoles: ['CAIXA']
+    }]);
+
+    expect(roleCanAccessStore('ADMIN', savedStore)).toBe(false);
+    expect(roleCanAccessStore('CAIXA', savedStore)).toBe(false);
+  });
+
+  it('não trata administrador local como administrador da plataforma', () => {
+    const [store] = readStoreSettings();
+    const [savedStore] = saveStoreSettings([{
+      ...store,
+      id: 'store-client',
+      name: 'Restaurante Alegre',
+      legalName: 'Restaurante Alegre LTDA',
+      tradeName: 'Restaurante Alegre',
+      allowedRoles: ['ADMIN']
+    }]);
+
+    expect(isPlatformOwnerStore(savedStore)).toBe(false);
+    expect(roleCanAccessStore('ADMIN', savedStore)).toBe(true);
+    expect(roleCanAccessStore('CAIXA', savedStore)).toBe(false);
   });
 
   it('persiste balanças locais e valida testes mínimos', () => {

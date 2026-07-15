@@ -14,6 +14,7 @@ import {
 import {
   findStoreSettingById,
   getStoreSettingsForRole,
+  isStoreCommerciallyBlocked,
   roleCanAccessStore
 } from '@/modules/admin/infrastructure/local/platformSettings';
 import { logInfo, logWarn } from '@/shared/infrastructure/logging/structuredLogger';
@@ -106,15 +107,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (!roleCanAccessStore(role, selectedStore)) {
+          const isCommercialBlock = isStoreCommerciallyBlocked(selectedStore);
+
           logWarn({
             event: 'AUTH_LOGIN_DENIED',
             module: 'auth',
-            details: { role, storeId: selectedStore.id, reason: 'STORE_ROLE_NOT_LINKED' }
+            details: {
+              role,
+              storeId: selectedStore.id,
+              reason: isCommercialBlock ? 'STORE_COMMERCIAL_BLOCKED' : 'STORE_ROLE_NOT_LINKED'
+            }
           });
 
           return {
             success: false,
-            message: `Perfil ${getRoleLabel(role)} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
+            message: isCommercialBlock
+              ? `A loja ${getStoreDisplayName(selectedStore)} está com acesso bloqueado. Entre em contato com o suporte.`
+              : `Perfil ${getRoleLabel(role)} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
           };
         }
 

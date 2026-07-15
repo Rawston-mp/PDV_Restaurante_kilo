@@ -5,7 +5,8 @@
 
 import '@/modules/cashier/caixa.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, CornerUpLeft, LogOut, UserRound } from 'lucide-react';
+import { Clock3, CornerUpLeft, LockKeyhole, LogOut, Power, UserRound } from 'lucide-react';
+import { AboutSystemButton } from '@/app/AboutSystemButton';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
@@ -49,7 +50,7 @@ import { loadDigitalCertificateSettings } from '@/shared/domain/services/digital
 // CashierPage — tela de caixa unificada
 // ─────────────────────────────────────────────────────────────────────────────
 
-type View = 'pos' | 'payment' | 'cashclose';
+type View = 'pos' | 'payment';
 type CashCloseTab = 'MENU' | 'FECHAMENTO' | 'ADMINISTRATIVO';
 type CashCloseSection = 'INICIO' | 'RECEBIMENTO_FIADO';
 
@@ -80,6 +81,18 @@ type CashierNotice = {
   message: string;
 };
 
+type CashierSessionState = {
+  isOpen: boolean;
+  sequence: number;
+  expectedTotals: Record<string, number>;
+  totalSales: number;
+  attendanceCount: number;
+  openedAt?: string;
+  openedBy?: string;
+  closedAt?: string;
+  closedBy?: string;
+};
+
 type PendingCashierAction =
   | {
       kind: 'CANCEL_COMANDA';
@@ -101,6 +114,8 @@ type PendingCashierAction =
     };
 
 const API_BASE = API_BASE_URL;
+const CASHIER_SESSION_STORAGE_KEY = 'pdv.cashier.active-session';
+const CASHIER_SESSION_CHANGED_EVENT = 'pdv.cashier.session-changed';
 const NON_OPEN_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'];
 const COUNTABLE_CLOSED_COMANDA_STATUSES: HeaderComandaStatus[] = ['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA'];
 const NOTICE_TONE_CLASSES: Record<CashierNotice['tone'], string> = {
@@ -130,6 +145,9 @@ const formatQuantity = (quantity: number, unit: 'KG' | 'UN') =>
     maximumFractionDigits: unit === 'KG' ? 3 : 0
   });
 
+const formatCashierCurrency = (value: number) =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 const formatLaunchDateTime = (date: Date) =>
   date.toLocaleString('pt-BR', {
     day: '2-digit',
@@ -138,6 +156,44 @@ const formatLaunchDateTime = (date: Date) =>
     hour: '2-digit',
     minute: '2-digit'
   });
+
+const readCashierSessionState = (): CashierSessionState => {
+  try {
+    const raw = window.localStorage.getItem(CASHIER_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return { isOpen: false, sequence: 0, expectedTotals: {}, totalSales: 0, attendanceCount: 0 };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CashierSessionState>;
+    return {
+      isOpen: Boolean(parsed.isOpen),
+      sequence: Number(parsed.sequence ?? 0),
+      expectedTotals: parsed.expectedTotals ?? {},
+      totalSales: Number(parsed.totalSales ?? 0),
+      attendanceCount: Number(parsed.attendanceCount ?? 0),
+      openedAt: parsed.openedAt,
+      openedBy: parsed.openedBy,
+      closedAt: parsed.closedAt,
+      closedBy: parsed.closedBy
+    };
+  } catch {
+    return { isOpen: false, sequence: 0, expectedTotals: {}, totalSales: 0, attendanceCount: 0 };
+  }
+};
+
+const persistCashierSessionState = (session: CashierSessionState) => {
+  window.localStorage.setItem(CASHIER_SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.dispatchEvent(new CustomEvent(CASHIER_SESSION_CHANGED_EVENT, { detail: session }));
+};
+
+const CASHIER_PAYMENT_SUMMARY_LABELS: Array<{ method: PaymentEntry['method']; label: string }> = [
+  { method: 'DINHEIRO', label: 'Dinheiro' },
+  { method: 'PIX', label: 'PIX' },
+  { method: 'DEBITO', label: 'Débito' },
+  { method: 'CREDITO', label: 'Crédito' },
+  { method: 'FIADO', label: 'Fiado' },
+  { method: 'TICKET', label: 'Ticket' }
+];
 
 const parseTaxRate = (value?: string) => {
   const trimmed = value?.replace('%', '').trim();
@@ -367,6 +423,8 @@ export function CashierPage() {
   const [isJoinMode, setIsJoinMode] = useState(false);
   const [isJoiningComandas, setIsJoiningComandas] = useState(false);
   const [isCashierKeyboardVisible, setIsCashierKeyboardVisible] = useState(false);
+  const [cashierSession, setCashierSession] = useState<CashierSessionState>(() => readCashierSessionState());
+  const [isCashCloseSpanOpen, setIsCashCloseSpanOpen] = useState(false);
   const [isComandaItemsSyncing, setIsComandaItemsSyncing] = useState(false);
   const [hasUnsyncedItemChanges, setHasUnsyncedItemChanges] = useState(false);
   const [isOpenComandasPanelOpen, setIsOpenComandasPanelOpen] = useState(false);
@@ -376,6 +434,7 @@ export function CashierPage() {
   const comandaLoadRequestRef = useRef(0);
   const skipNextCartSyncRef = useRef(false);
   const pendingCartSyncRef = useRef<Promise<boolean> | null>(null);
+  const isCashierOpen = cashierSession.isOpen;
   const hasActiveComanda = Boolean(comandaNumber.trim()) && openComandas.some((entry) => entry.numero === comandaNumber.trim());
   const activeComandaLabel = hasActiveComanda ? comandaNumber.trim() : 'Sem comanda';
   const joinCandidates = openComandas.filter((entry) => (
@@ -384,6 +443,48 @@ export function CashierPage() {
 
   const showNotice = (message: string, tone: CashierNotice['tone'] = 'info') => {
     setNotice({ message, tone });
+  };
+
+  const ensureCashierOpen = (actionLabel = 'operar o caixa') => {
+    if (isCashierOpen) {
+      return true;
+    }
+
+    showNotice(`Abra o caixa antes de ${actionLabel}.`, 'warning');
+    return false;
+  };
+
+  const handleOpenCashier = () => {
+    const nextSession: CashierSessionState = {
+      isOpen: true,
+      sequence: cashierSession.sequence + 1,
+      expectedTotals: {},
+      totalSales: 0,
+      attendanceCount: 0,
+      openedAt: new Date().toISOString(),
+      openedBy: user?.name ?? user?.role ?? 'Operador',
+      closedAt: undefined,
+      closedBy: undefined
+    };
+
+    persistCashierSessionState(nextSession);
+    setCashierSession(nextSession);
+    setView('pos');
+    setIsCashCloseSpanOpen(false);
+    showNotice('Caixa aberto. As operações de venda estão liberadas.', 'success');
+    focusProductSearchInput();
+  };
+
+  const openCashCloseSpan = (initialTab: CashCloseTab = 'MENU', initialSection: CashCloseSection = 'INICIO') => {
+    if (!ensureCashierOpen('fechar ou administrar o caixa')) {
+      return;
+    }
+
+    setCashCloseInitialTab(initialTab);
+    setCashCloseInitialSection(initialSection);
+    setView('pos');
+    setIsCashierKeyboardVisible(false);
+    setIsCashCloseSpanOpen(true);
   };
 
   const persistCashierCartSnapshot = (
@@ -445,6 +546,10 @@ export function CashierPage() {
   };
 
   const openPayment = (documentMode: PaymentDocumentMode = 'ORCAMENTO') => {
+    if (!ensureCashierOpen('receber pagamento')) {
+      return;
+    }
+
     if (cartItems.length === 0) {
       showNotice('Adicione ao menos um produto antes de receber o pagamento.', 'warning');
       return;
@@ -457,6 +562,10 @@ export function CashierPage() {
   };
 
   const openJoinComandasPanel = () => {
+    if (!ensureCashierOpen('juntar comandas')) {
+      return;
+    }
+
     const activeNumber = comandaNumber.trim();
     if (!activeNumber) {
       showNotice('Abra a comanda principal antes de juntar outras comandas.', 'warning');
@@ -666,6 +775,10 @@ export function CashierPage() {
     showNotice('Selecione uma comanda aberta na lista e confirme o cancelamento.', 'info');
   };
   const loadComandaIntoCashier = async (numero: string) => {
+    if (!ensureCashierOpen('abrir comanda no caixa')) {
+      return;
+    }
+
     const trimmed = numero.trim();
     if (!trimmed) {
       return;
@@ -747,6 +860,10 @@ export function CashierPage() {
   };
 
   const handleSmartInputSubmit = (rawValue: string) => {
+    if (!ensureCashierOpen('buscar produtos ou comandas')) {
+      return;
+    }
+
     if (isJoinMode) {
       submitJoinComandaInput(rawValue);
       return;
@@ -839,6 +956,10 @@ export function CashierPage() {
   };
 
   const leaveCurrentComandaOpen = () => {
+    if (!ensureCashierOpen('manter a comanda aberta')) {
+      return;
+    }
+
     const currentNumber = comandaNumber.trim();
     if (!currentNumber) {
       showNotice('Nenhuma comanda ativa para manter aberta.', 'warning');
@@ -1024,6 +1145,18 @@ export function CashierPage() {
   }, [refreshComandaIndicators]);
 
   const loadCashCloseExpectedTotals = async () => {
+    const sessionSnapshot = readCashierSessionState();
+    if (sessionSnapshot.isOpen && Object.keys(sessionSnapshot.expectedTotals).length > 0) {
+      return {
+        DINHEIRO: sessionSnapshot.expectedTotals.DINHEIRO ?? 0,
+        DEBITO: sessionSnapshot.expectedTotals.DEBITO ?? 0,
+        CREDITO: sessionSnapshot.expectedTotals.CREDITO ?? 0,
+        PIX: sessionSnapshot.expectedTotals.PIX ?? 0,
+        FIADO: sessionSnapshot.expectedTotals.FIADO ?? 0,
+        TICKET: sessionSnapshot.expectedTotals.TICKET ?? 0
+      };
+    }
+
     try {
       const response = await fetch(`${API_BASE}/api/v1/caixa/expected-totals`);
       if (response.ok) {
@@ -1046,7 +1179,37 @@ export function CashierPage() {
     };
   };
 
+  const getOpenComandasBeforeCashClose = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/comandas`);
+      if (!response.ok) {
+        throw new Error('Falha ao consultar comandas abertas antes do fechamento.');
+      }
+
+      const payload = (await response.json()) as { ok?: boolean; comandas?: HeaderComandaRecord[] };
+      if (Array.isArray(payload.comandas)) {
+        return mergeOpenComandas(payload.comandas);
+      }
+    } catch {
+      // Sem backend, usa o cache local para não permitir fechar com comanda aberta nesta estação.
+    }
+
+    return readLocalOpenComandas();
+  };
+
   const handleCashClose = async () => {
+    const openComandasBeforeClose = await getOpenComandasBeforeCashClose();
+    if (openComandasBeforeClose.length > 0) {
+      setOpenComandas(openComandasBeforeClose);
+      setOpenComandasCount(openComandasBeforeClose.length);
+      setIsCashCloseSpanOpen(false);
+      showNotice(
+        `Não é possível fechar o caixa com ${openComandasBeforeClose.length} ${openComandasBeforeClose.length === 1 ? 'comanda aberta' : 'comandas abertas'}. Feche ou cancele as comandas antes do fechamento.`,
+        'warning'
+      );
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE}/api/v1/comandas`);
       if (response.ok) {
@@ -1080,14 +1243,67 @@ export function CashierPage() {
       // mantém fechamento local mesmo sem backend
     }
 
+    for (const locallyCancelledNumber of listLocallyCancelledComandaNumbers()) {
+      unmarkComandaLocallyCancelled(locallyCancelledNumber);
+    }
+
     await refreshComandaIndicators().catch(() => {
       setClosedComandasCount(0);
     });
+    setClosedComandasCount(0);
+
+    const nextSession: CashierSessionState = {
+      ...cashierSession,
+      isOpen: false,
+      closedAt: new Date().toISOString(),
+      closedBy: user?.name ?? user?.role ?? 'Operador'
+    };
+    persistCashierSessionState(nextSession);
+    setCashierSession(nextSession);
+    setCartItems([]);
+    setComandaNumber('');
+    setJoinedComandaNumbers([]);
+    setIsJoinMode(false);
+    setIsCashCloseSpanOpen(false);
     setView('pos');
+    window.dispatchEvent(new CustomEvent('pdv.dashboard-refresh'));
+    showNotice('Caixa fechado. Para vender novamente, abra o caixa.', 'success');
+  };
+
+  const accumulateSaleInCashierSession = (payments: PaymentEntry[], payableTotal: number) => {
+    const currentSession = readCashierSessionState();
+    if (!currentSession.isOpen) {
+      return;
+    }
+
+    const nextTotals = { ...currentSession.expectedTotals };
+    for (const payment of payments) {
+      nextTotals[payment.method] = Number(((nextTotals[payment.method] ?? 0) + payment.amount).toFixed(2));
+    }
+
+    const nextSession: CashierSessionState = {
+      ...currentSession,
+      expectedTotals: nextTotals,
+      totalSales: Number((currentSession.totalSales + payableTotal).toFixed(2)),
+      attendanceCount: currentSession.attendanceCount + 1
+    };
+
+    persistCashierSessionState(nextSession);
+    setCashierSession(nextSession);
+    window.dispatchEvent(new CustomEvent('pdv.dashboard-refresh'));
   };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isCashCloseSpanOpen) {
+        event.preventDefault();
+        setIsCashCloseSpanOpen(false);
+        setIsCashierKeyboardVisible(false);
+        setView('pos');
+        focusProductSearchInput();
+        return;
+      }
+
       if (event.key === 'Escape' && isCashierKeyboardVisible) {
         event.preventDefault();
         setIsCashierKeyboardVisible(false);
@@ -1128,17 +1344,13 @@ export function CashierPage() {
       if (event.key === 'F11') {
         // F11 abre fullscreen no navegador; aqui priorizamos atalho operacional do caixa.
         event.preventDefault();
-        setCashCloseInitialTab('FECHAMENTO');
-        setCashCloseInitialSection('INICIO');
-        setView('cashclose');
+        openCashCloseSpan('FECHAMENTO', 'INICIO');
         return;
       }
 
       if (event.key === 'F4') {
         event.preventDefault();
-        setCashCloseInitialTab('ADMINISTRATIVO');
-        setCashCloseInitialSection('RECEBIMENTO_FIADO');
-        setView('cashclose');
+        openCashCloseSpan('ADMINISTRATIVO', 'RECEBIMENTO_FIADO');
         return;
       }
 
@@ -1435,6 +1647,10 @@ export function CashierPage() {
   };
   // ── Cart mutations ─────────────────────────────────────────────────────────
   const addProduct = (product: CashierProduct) => {
+    if (!ensureCashierOpen('lançar produtos')) {
+      return;
+    }
+
     if (product.isUnavailable) {
       return;
     }
@@ -1614,6 +1830,10 @@ export function CashierPage() {
   };
 
   const handlePaymentConfirm = async ({ payments, fiadoClientId, discountAmount, documentMode, customerDocument }: PaymentConfirmPayload) => {
+    if (!ensureCashierOpen('finalizar pagamento')) {
+      return;
+    }
+
     const currentComandaNumber = [comandaNumber.trim(), ...joinedComandaNumbers]
       .filter(Boolean)
       .map((numero) => `#${numero}`)
@@ -1639,6 +1859,8 @@ export function CashierPage() {
     if (!closed) {
       return;
     }
+
+    accumulateSaleInCashierSession(payments, payableTotal);
 
     if (isFiadoFlow) {
       const clientId = fiadoClientId;
@@ -1787,6 +2009,12 @@ export function CashierPage() {
         </div>
 
         <div className="flex items-center gap-6 text-slate-600">
+          <div className={`rounded-xl border px-3 py-2 ${isCashierOpen ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}>
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">Status do caixa</p>
+            <p className={`text-base font-bold leading-tight ${isCashierOpen ? 'text-emerald-700' : 'text-orange-700'}`}>
+              {isCashierOpen ? 'Aberto' : 'Fechado'}
+            </p>
+          </div>
           <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
             <p className="text-[11px] uppercase tracking-wide text-slate-500">Comanda ativa</p>
             <p className="text-base font-bold leading-tight text-sky-700">{hasActiveComanda ? `#${activeComandaLabel}` : activeComandaLabel}</p>
@@ -1860,26 +2088,34 @@ export function CashierPage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── LEFT 60%: busca + categorias + grid ────────────────────────────── */}
-      <main className={`${view === 'cashclose' ? 'w-full' : 'w-[60%]'} relative bg-slate-50/80 flex flex-col overflow-hidden ${view === 'cashclose' ? '' : 'border-r border-slate-200'}`}>
+      <main className="w-[60%] relative bg-slate-50/80 flex flex-col overflow-hidden border-r border-slate-200">
 
-        {view === 'cashclose' ? (
-          <CashRegisterClose
-            initialTab={cashCloseInitialTab}
-            initialSection={cashCloseInitialSection}
-            onGoToProductSearch={openProductSearch}
-            onReprintReceipt={() => notifyFeaturePending('Reimprimir cupom')}
-            onSendFiscalFiles={() => notifyFeaturePending('Enviar arquivos fiscais')}
-            onConsultStock={() => notifyFeaturePending('Consultar estoque')}
-            onCancelLastSale={handleCancelLastSale}
-            onCancelCoupons={handleCancelCoupons}
-            onClearComandaCache={handleClearComandaCache}
-            loadExpectedTotals={loadCashCloseExpectedTotals}
-            onBack={() => setView('pos')}
-            onClose={() => {
-              void handleCashClose();
-            }}
-            items={cartItems}
-          />
+        {!isCashierOpen ? (
+          <section className="flex flex-1 items-center justify-center px-6 py-8">
+            <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                <LockKeyhole size={32} aria-hidden="true" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Caixa fechado</p>
+              <h2 className="mt-2 text-3xl font-extrabold text-slate-900">Abra o caixa para operar</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+                Nenhuma venda, comanda, pagamento ou lançamento operacional é liberado enquanto o caixa estiver fechado.
+              </p>
+              {cashierSession.closedAt && (
+                <p className="mt-3 text-xs font-semibold text-slate-500">
+                  Último fechamento: {new Date(cashierSession.closedAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleOpenCashier}
+                className="mt-6 inline-flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-base font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-600"
+              >
+                <Power size={20} aria-hidden="true" />
+                Abrir caixa
+              </button>
+            </div>
+          </section>
         ) : view === 'payment' ? (
           <PaymentPanel
             total={subtotal}
@@ -1939,28 +2175,81 @@ export function CashierPage() {
       </main>
 
       {/* ── RIGHT 40%: carrinho + footer ───────────────────────────────────── */}
-      {view !== 'cashclose' && (
-        <aside className="w-[40%] bg-white flex flex-col overflow-hidden">
-          <CartPanel
-            items={cartItems}
-            comandaNumber={comandaNumber}
-            joinedComandaNumbers={joinedComandaNumbers}
-            onIncrement={incrementItem}
-            onDecrement={decrementItem}
-            onRemove={requestRemoveItem}
-            onRefreshComanda={refreshCurrentComanda}
-            isComandaSyncing={isComandaItemsSyncing}
-            onReceive={() => openPayment('ORCAMENTO')}
-            onCashClose={() => {
-              setCashCloseInitialTab('MENU');
-              setCashCloseInitialSection('INICIO');
-              setView('cashclose');
-            }}
-          />
-        </aside>
-      )}
+      <aside className="w-[40%] bg-white flex flex-col overflow-hidden">
+        <CartPanel
+          items={cartItems}
+          comandaNumber={comandaNumber}
+          joinedComandaNumbers={joinedComandaNumbers}
+          onIncrement={incrementItem}
+          onDecrement={decrementItem}
+          onRemove={requestRemoveItem}
+          onRefreshComanda={refreshCurrentComanda}
+          isComandaSyncing={isComandaItemsSyncing}
+          onReceive={() => openPayment('ORCAMENTO')}
+          onCashClose={() => openCashCloseSpan('MENU', 'INICIO')}
+        />
+      </aside>
 
       </div>
+
+      {isCashCloseSpanOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Turno em andamento</p>
+                <p className="text-sm text-slate-600">
+                  {cashierSession.openedAt
+                    ? `Aberto em ${new Date(cashierSession.openedAt).toLocaleString('pt-BR')}`
+                    : 'Caixa aberto'}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Pressione ESC para voltar ao Caixa.</p>
+              </div>
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 text-right sm:grid-cols-[1.3fr_0.7fr]">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Venda total do turno</p>
+                  <p className="text-xl font-extrabold text-emerald-800">
+                    {formatCashierCurrency(cashierSession.totalSales)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-sky-700">Atendimentos</p>
+                  <p className="text-xl font-extrabold text-sky-800">{cashierSession.attendanceCount}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-left sm:col-span-2 sm:grid-cols-3">
+                  {CASHIER_PAYMENT_SUMMARY_LABELS.map(({ method, label }) => (
+                    <div key={method} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                      <p className="text-sm font-extrabold text-slate-800">
+                        {formatCashierCurrency(cashierSession.expectedTotals[method] ?? 0)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <CashRegisterClose
+              initialTab={cashCloseInitialTab}
+              initialSection={cashCloseInitialSection}
+              onGoToProductSearch={openProductSearch}
+              onReprintReceipt={() => notifyFeaturePending('Reimprimir cupom')}
+              onSendFiscalFiles={() => notifyFeaturePending('Enviar arquivos fiscais')}
+              onConsultStock={() => notifyFeaturePending('Consultar estoque')}
+              onCancelLastSale={handleCancelLastSale}
+              onCancelCoupons={handleCancelCoupons}
+              onClearComandaCache={handleClearComandaCache}
+              loadExpectedTotals={loadCashCloseExpectedTotals}
+              onBack={() => setIsCashCloseSpanOpen(false)}
+              onClose={() => {
+                void handleCashClose();
+              }}
+              items={cartItems}
+            />
+          </div>
+        </div>
+      )}
+
+      <AboutSystemButton position="left" />
 
     </div>
   );

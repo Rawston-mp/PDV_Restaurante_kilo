@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
+import { AboutSystemButton } from '@/app/AboutSystemButton';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
@@ -10,6 +11,18 @@ import {
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import { StoreSettingsPanel } from '@/modules/admin/presentation/components/StoreSettingsPanel';
 import { PeripheralSettingsPanel } from '@/modules/admin/presentation/components/PeripheralSettingsPanel';
+import {
+  commercialStatusLabels,
+  findStoreSettingById,
+  isPlatformOwnerStore,
+  readPlatformOwnerSettings,
+  readStoreSettings,
+  savePlatformOwnerSettings,
+  saveStoreSettings,
+  type PlatformOwnerSettings,
+  type StoreCommercialStatus,
+  type StoreSettings
+} from '@/modules/admin/infrastructure/local/platformSettings';
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { SyncQueueTask } from '@/shared/sync/domain/entities/SyncQueueTask';
 import { logInfo } from '@/shared/infrastructure/logging/structuredLogger';
@@ -46,6 +59,14 @@ const outcomeLabels: Record<SensitiveAuditEvent['outcome'] | 'ALL', string> = {
 };
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
+const commercialStatusOptions: StoreCommercialStatus[] = [
+  'EM_DIA',
+  'AVISO_PAGAMENTO',
+  'SUSPENSA',
+  'CANCELADA',
+  'TESTE',
+  'CORTESIA'
+];
 const cnaeOptions = [
   { value: '5611-2/01', label: '5611-2/01 - Restaurantes e similares' },
   { value: '5611-2/02', label: '5611-2/02 - Lanchonetes, casas de chá, de sucos' },
@@ -112,6 +133,11 @@ export function AdminPage() {
   const [isFiscalSettingsOpen, setIsFiscalSettingsOpen] = useState(false);
   const [isOperationalOpen, setIsOperationalOpen] = useState(false);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [isCommercialOpen, setIsCommercialOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [commercialStores, setCommercialStores] = useState<StoreSettings[]>(readStoreSettings);
+  const [selectedCommercialStoreId, setSelectedCommercialStoreId] = useState(commercialStores[0]?.id ?? '');
+  const [ownerSettings, setOwnerSettings] = useState<PlatformOwnerSettings>(readPlatformOwnerSettings);
 
   const refresh = async () => {
     const tasks = await productsContainer.syncTaskQueue.listAll();
@@ -175,6 +201,25 @@ export function AdminPage() {
   }, [syncTasks]);
 
   const pinHealth = useMemo(() => getPinHealth(), [getPinHealth]);
+  const currentAdminStore = useMemo(
+    () => (user?.storeId ? findStoreSettingById(user.storeId) : null),
+    [user?.storeId]
+  );
+  const isPlatformAdmin = useMemo(() => {
+    if (user?.role !== 'ADMIN') {
+      return false;
+    }
+
+    return (
+      isPlatformOwnerStore(currentAdminStore) ||
+      isPlatformOwnerStore({
+        id: user.storeId,
+        name: user.storeName,
+        legalName: user.storeName,
+        tradeName: user.storeName
+      })
+    );
+  }, [currentAdminStore, user?.role, user?.storeId, user?.storeName]);
   const currency = useMemo(
     () => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }),
     []
@@ -422,6 +467,60 @@ export function AdminPage() {
     setMessage(`Exportacao concluida com ${filteredAuditEvents.length} eventos.`);
   };
 
+  const selectedCommercialStore =
+    commercialStores.find((store) => store.id === selectedCommercialStoreId) ?? commercialStores[0] ?? null;
+
+  const refreshCommercialStores = () => {
+    const stores = readStoreSettings();
+    setCommercialStores(stores);
+    setSelectedCommercialStoreId((current) => (
+      stores.some((store) => store.id === current) ? current : stores[0]?.id ?? ''
+    ));
+  };
+
+  const updateCommercialStore = (field: keyof StoreSettings, value: string | boolean) => {
+    if (!selectedCommercialStore) {
+      return;
+    }
+
+    setCommercialStores((current) => current.map((store) => (
+      store.id === selectedCommercialStore.id
+        ? {
+            ...store,
+            [field]: value,
+            accessNoticeEnabled:
+              field === 'commercialStatus'
+                ? value === 'AVISO_PAGAMENTO'
+                : store.accessNoticeEnabled,
+            accessNoticeDays:
+              field === 'graceDays'
+                ? String(value)
+                : store.accessNoticeDays,
+            updatedAt: new Date().toISOString()
+          }
+        : store
+    )));
+  };
+
+  const saveCommercialStore = () => {
+    const savedStores = saveStoreSettings(commercialStores);
+    setCommercialStores(savedStores);
+    setMessage('Controle comercial da loja salvo.');
+  };
+
+  const updateOwnerSettings = (field: keyof PlatformOwnerSettings, value: string) => {
+    setOwnerSettings((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const saveOwnerSupportSettings = () => {
+    const savedSettings = savePlatformOwnerSettings(ownerSettings);
+    setOwnerSettings(savedSettings);
+    setMessage('Dados de suporte da Alegre Sistemas salvos.');
+  };
+
   return (
     <section className="admin-page">
       <header className="card admin-header">
@@ -499,7 +598,9 @@ export function AdminPage() {
                   {message && <p className="admin-message">{message}</p>}
 
                   <p className="admin-message">
-                    A gestão de PINs por usuário fica em Lojas e vínculos, junto ao cadastro da loja selecionada.
+                    {isPlatformAdmin
+                      ? 'A gestão de PINs por usuário fica em Lojas e vínculos, junto ao cadastro da loja selecionada.'
+                      : 'A gestão de lojas, contratos e PINs mestres é restrita à Alegre Sistemas. Este painel mostra apenas a operação da loja atual.'}
                   </p>
                 </div>
               </section>
@@ -507,7 +608,48 @@ export function AdminPage() {
           )}
         </article>
 
-        <StoreSettingsPanel />
+        {isPlatformAdmin && (
+          <>
+            <StoreSettingsPanel />
+
+            <article className="card admin-config-card">
+              <div className="admin-config-header">
+                <div>
+                  <h3>Controle comercial</h3>
+                  <p className="admin-subtitle">
+                    Acompanhe mensalidade, período de acesso e bloqueio comercial das lojas vendidas.
+                  </p>
+                </div>
+                <span>Alegre Sistemas</span>
+              </div>
+              <div className="admin-config-toolbar admin-compact-toolbar">
+                <button
+                  type="button"
+                  onClick={() => {
+                    refreshCommercialStores();
+                    setIsCommercialOpen(true);
+                  }}
+                >
+                  Comercial
+                </button>
+              </div>
+            </article>
+
+            <article className="card admin-config-card">
+              <div className="admin-config-header">
+                <div>
+                  <h3>Suporte</h3>
+                  <p className="admin-subtitle">
+                    Configure os contatos exibidos para clientes com aviso ou bloqueio de acesso.
+                  </p>
+                </div>
+              </div>
+              <div className="admin-config-toolbar admin-compact-toolbar">
+                <button type="button" onClick={() => setIsSupportOpen(true)}>Suporte</button>
+              </div>
+            </article>
+          </>
+        )}
 
         <PeripheralSettingsPanel onOpenFiscalSettings={() => setIsFiscalSettingsOpen(true)} />
 
@@ -671,6 +813,199 @@ export function AdminPage() {
             </li>
           </ul>
         </article>
+
+        {isPlatformAdmin && isCommercialOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+            <section className="w-full max-w-5xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+              <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                  <p className="admin-eyebrow">Alegre Sistemas</p>
+                  <h3>Controle comercial de lojas</h3>
+                  <p className="admin-subtitle">
+                    Controle mensalidade, status de acesso e aviso de regularização sem alterar o cadastro operacional da loja.
+                  </p>
+                </div>
+                <button type="button" className="button-muted" onClick={() => setIsCommercialOpen(false)}>Fechar</button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="admin-config-toolbar">
+                  <label>
+                    Loja
+                    <select
+                      value={selectedCommercialStore?.id ?? ''}
+                      onChange={(event) => setSelectedCommercialStoreId(event.target.value)}
+                    >
+                      {commercialStores.map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.tradeName || store.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className="button-muted" onClick={refreshCommercialStores}>Recarregar lojas</button>
+                </div>
+
+                {selectedCommercialStore ? (
+                  <>
+                    <section className="admin-config-section">
+                      <h4>Contrato e acesso</h4>
+                      <div className="admin-commercial-grid">
+                        <label>
+                          Status comercial
+                          <select
+                            value={selectedCommercialStore.commercialStatus}
+                            onChange={(event) => updateCommercialStore('commercialStatus', event.target.value as StoreCommercialStatus)}
+                          >
+                            {commercialStatusOptions.map((status) => (
+                              <option key={status} value={status}>
+                                {commercialStatusLabels[status]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Mensalidade
+                          <input
+                            value={selectedCommercialStore.monthlyFee}
+                            onChange={(event) => updateCommercialStore('monthlyFee', event.target.value)}
+                            placeholder="Ex.: R$ 199,90"
+                          />
+                        </label>
+                        <label>
+                          Vencimento
+                          <input
+                            type="date"
+                            value={selectedCommercialStore.paymentDueDate}
+                            onChange={(event) => updateCommercialStore('paymentDueDate', event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          Prazo do aviso
+                          <input
+                            value={selectedCommercialStore.graceDays}
+                            onChange={(event) => updateCommercialStore('graceDays', event.target.value.replace(/\D/g, '').slice(0, 3))}
+                            inputMode="numeric"
+                            placeholder="10"
+                          />
+                        </label>
+                        <label>
+                          Bloqueio previsto
+                          <input
+                            type="date"
+                            value={selectedCommercialStore.accessBlockedAt}
+                            onChange={(event) => updateCommercialStore('accessBlockedAt', event.target.value)}
+                          />
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="admin-config-section">
+                      <h4>Observações comerciais</h4>
+                      <textarea
+                        className="admin-textarea"
+                        value={selectedCommercialStore.commercialNotes}
+                        onChange={(event) => updateCommercialStore('commercialNotes', event.target.value)}
+                        placeholder="Ex.: cliente em negociação, boleto reenviado, liberar por cortesia até..."
+                      />
+                    </section>
+
+                    <div className="admin-access-notice-preview">
+                      <strong>Prévia exibida no login</strong>
+                      <p>
+                        {selectedCommercialStore.commercialStatus === 'SUSPENSA' ||
+                        selectedCommercialStore.commercialStatus === 'CANCELADA'
+                          ? 'O acesso desta loja está temporariamente bloqueado. Entre em contato com o suporte para regularização.'
+                          : `Seu acesso será negado em ${selectedCommercialStore.graceDays || '10'} dia(s). Entre em contato com o suporte para regularização.`}
+                      </p>
+                      <span>{ownerSettings.companyName || 'Alegre Sistemas'}</span>
+                      <span>
+                        {ownerSettings.phone || 'Telefone não informado'} | WhatsApp: {ownerSettings.whatsapp || 'não informado'} | {ownerSettings.email || 'E-mail não informado'}
+                      </span>
+                    </div>
+
+                    <div className="admin-actions">
+                      <button type="button" onClick={saveCommercialStore}>Salvar controle comercial</button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="empty-state">Nenhuma loja cadastrada para controle comercial.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {isPlatformAdmin && isSupportOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+            <section className="w-full max-w-4xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+              <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                  <p className="admin-eyebrow">Alegre Sistemas</p>
+                  <h3>Dados de suporte</h3>
+                  <p className="admin-subtitle">Informações exibidas nos avisos de regularização e na página Sobre.</p>
+                </div>
+                <button type="button" className="button-muted" onClick={() => setIsSupportOpen(false)}>Fechar</button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="admin-commercial-grid">
+                  <label>
+                    Nome da empresa
+                    <input value={ownerSettings.companyName} onChange={(event) => updateOwnerSettings('companyName', event.target.value)} />
+                  </label>
+                  <label>
+                    Responsável/desenvolvedor
+                    <input value={ownerSettings.developerName} onChange={(event) => updateOwnerSettings('developerName', event.target.value)} />
+                  </label>
+                  <label>
+                    Tempo de atuação
+                    <input value={ownerSettings.yearsActive} onChange={(event) => updateOwnerSettings('yearsActive', event.target.value)} placeholder="Ex.: 5 anos" />
+                  </label>
+                  <label>
+                    Telefone
+                    <input value={ownerSettings.phone} onChange={(event) => updateOwnerSettings('phone', event.target.value)} />
+                  </label>
+                  <label>
+                    WhatsApp
+                    <input value={ownerSettings.whatsapp} onChange={(event) => updateOwnerSettings('whatsapp', event.target.value)} />
+                  </label>
+                  <label>
+                    E-mail
+                    <input value={ownerSettings.email} onChange={(event) => updateOwnerSettings('email', event.target.value)} />
+                  </label>
+                  <label>
+                    Site
+                    <input value={ownerSettings.website} onChange={(event) => updateOwnerSettings('website', event.target.value)} placeholder="https://..." />
+                  </label>
+                </div>
+
+                <label className="admin-config-field">
+                  Mensagem de suporte
+                  <textarea
+                    className="admin-textarea"
+                    value={ownerSettings.supportMessage}
+                    onChange={(event) => updateOwnerSettings('supportMessage', event.target.value)}
+                  />
+                </label>
+                <label className="admin-config-field">
+                  Texto sobre a empresa
+                  <textarea
+                    className="admin-textarea"
+                    value={ownerSettings.aboutText}
+                    onChange={(event) => updateOwnerSettings('aboutText', event.target.value)}
+                  />
+                </label>
+
+                <div className="admin-actions">
+                  <button type="button" onClick={saveOwnerSupportSettings}>Salvar suporte</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        <AboutSystemButton />
 
         {isFiscalSettingsOpen && (
           <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">

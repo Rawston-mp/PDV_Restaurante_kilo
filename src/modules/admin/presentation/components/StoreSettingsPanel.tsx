@@ -55,6 +55,12 @@ const createBlankStore = (): StoreSettings => {
     responsibleName: '',
     responsibleCpf: '',
     active: true,
+    commercialStatus: 'EM_DIA',
+    monthlyFee: '',
+    paymentDueDate: '',
+    graceDays: '10',
+    accessBlockedAt: '',
+    commercialNotes: '',
     accessNoticeEnabled: false,
     accessNoticeDays: '10',
     supportCompanyName: '',
@@ -470,7 +476,7 @@ export function StoreSettingsPanel() {
               </label>
             ))}
           </div>
-          <p className="admin-help-text">Admin da plataforma mantém acesso total às lojas ativas. Os demais perfis dependem deste vínculo.</p>
+          <p className="admin-help-text">Cada perfil acessa somente as lojas em que estiver vinculado. A empresa desenvolvedora usa a loja Alegre Sistemas para gestão da plataforma.</p>
         </section>
 
         {isAccessNoticeOpen && (
