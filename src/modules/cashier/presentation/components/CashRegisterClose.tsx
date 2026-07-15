@@ -218,6 +218,7 @@ export function CashRegisterClose({
   const [activeRow, setActiveRow] = useState<string>('DINHEIRO');
   const [isLoadingExpected, setIsLoadingExpected] = useState(false);
   const [expectedError, setExpectedError] = useState<string | null>(null);
+  const [isCloseConfirmationOpen, setIsCloseConfirmationOpen] = useState(false);
 
   const filteredClients = useMemo(() => {
     const normalizedQuery = clientQuery.trim().toLowerCase();
@@ -719,14 +720,14 @@ export function CashRegisterClose({
   // ── INPUT step ─────────────────────────────────────────────────────────────
   if (step === 'input') {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="relative flex flex-col h-full bg-slate-50">
         <header className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
           <button type="button" onClick={() => setAdminTab('MENU')} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1">
             <h2 className="font-bold text-slate-800">Fechamento de Caixa</h2>
-            <p className="text-xs text-slate-500">Digite os valores contados na gaveta</p>
+            <p className="text-xs text-slate-500">Acompanhe os valores do turno no resumo superior.</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -746,63 +747,79 @@ export function CashRegisterClose({
           </div>
         </header>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left: rows */}
-          <div className="w-[55%] overflow-y-auto border-r border-slate-200 bg-white">
-            {rows.map((r) => (
-              <button
-                key={r.method}
-                type="button"
-                onClick={() => setActiveRow(r.method)}
-                className={`
-                  w-full flex justify-between items-center px-4 py-3
-                  border-b border-slate-100 text-left transition-colors
-                  ${activeRow === r.method ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'hover:bg-slate-50'}
-                `}
-              >
-                <span className={`text-sm font-medium ${activeRow === r.method ? 'text-blue-700' : 'text-slate-700'}`}>
-                  {r.label}
-                </span>
-                <span className={`text-sm font-bold ${r.counted ? 'text-slate-800' : 'text-slate-300'}`}>
-                  {r.counted ? formatBRL(parseCounted(r.counted)) : '—'}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Right: numpad */}
-          <div className="flex-1 p-3 flex flex-col gap-3">
-            {/* Display */}
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-right">
-              <p className="text-xs text-slate-400 mb-0.5">
-                {rows.find((r) => r.method === activeRow)?.label}
-              </p>
-              <p className="text-2xl font-extrabold text-slate-800">
-                {rows.find((r) => r.method === activeRow)?.counted
-                  ? formatBRL(parseCounted(rows.find((r) => r.method === activeRow)!.counted))
-                  : 'R$ 0,00'}
-              </p>
-            </div>
-            <MiniNumpad onKey={handleKey} />
-            <p className="text-center text-xs text-slate-400">Total contado: {formatBRL(totalCounted)}</p>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Movimento do turno</p>
+            <h3 className="mt-2 text-2xl font-extrabold text-slate-900">Resumo de vendas acumulado</h3>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
+              Os valores vendidos por Dinheiro, PIX, cartões, Fiado e Ticket aparecem no topo desta janela. Use F11 a qualquer momento para acompanhar o turno.
+            </p>
+            <p className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-800">
+              O movimento só será zerado depois de confirmar o fechamento do caixa e abrir uma nova sessão.
+            </p>
             {expectedError && (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {expectedError}
               </p>
             )}
           </div>
         </div>
 
-        <div className="p-4 bg-white border-t border-slate-200">
+        <div className="grid grid-cols-2 gap-3 p-4 bg-white border-t border-slate-200">
           <button
             type="button"
-            onClick={() => void handleConfirmBlindClose()}
+            onClick={onBack}
+            className="h-14 rounded-xl border border-slate-300 text-slate-700 font-bold text-base transition-colors hover:bg-slate-50 active:scale-95"
+          >
+            Voltar ao Caixa
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCloseConfirmationOpen(true)}
             disabled={isLoadingExpected}
             className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base transition-colors active:scale-95"
           >
-            {isLoadingExpected ? 'Carregando conferência...' : 'Confirmar Fechamento'}
+            Fechar Caixa
           </button>
         </div>
+
+        {isCloseConfirmationOpen && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/35 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-600">
+                  <AlertCircle size={28} aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fechamento do caixa</p>
+                  <h3 className="mt-1 text-xl font-extrabold text-slate-900">Confirma o fechamento do caixa?</h3>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Depois de fechado, novas vendas só serão liberadas após abrir o caixa novamente.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCloseConfirmationOpen(false);
+                    onClose();
+                  }}
+                  className="min-h-[52px] rounded-xl bg-emerald-500 px-4 text-sm font-extrabold text-white transition-colors hover:bg-emerald-600"
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCloseConfirmationOpen(false)}
+                  className="min-h-[52px] rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Não
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -819,7 +836,7 @@ export function CashRegisterClose({
     :                            `Quebra de ${formatBRL(Math.abs(totalDiff))}`;
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
+    <div className="relative flex flex-col h-full bg-slate-50 overflow-y-auto">
       <header className="flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
         <button type="button" onClick={() => setStep('input')} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
           <ArrowLeft size={20} />
@@ -943,12 +960,50 @@ export function CashRegisterClose({
         </button>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => setIsCloseConfirmationOpen(true)}
           className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-colors active:scale-95"
         >
           Fechar Caixa
         </button>
       </div>
+
+      {isCloseConfirmationOpen && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/35 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-600">
+                <AlertCircle size={28} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fechamento do caixa</p>
+                <h3 className="mt-1 text-xl font-extrabold text-slate-900">Confirma o fechamento do caixa?</h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  Depois de fechado, novas vendas só serão liberadas após abrir o caixa novamente.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCloseConfirmationOpen(false);
+                  onClose();
+                }}
+                className="min-h-[52px] rounded-xl bg-emerald-500 px-4 text-sm font-extrabold text-white transition-colors hover:bg-emerald-600"
+              >
+                Sim
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCloseConfirmationOpen(false)}
+                className="min-h-[52px] rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Não
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

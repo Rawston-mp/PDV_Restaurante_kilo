@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
-import { DashboardPage } from '@/modules/orders/presentation/pages/DashboardPage';
+import { RestaurantDashboardPage } from '@/modules/orders/presentation/pages/RestaurantDashboardPage';
 import { WelcomePage } from '@/modules/home/presentation/pages/WelcomePage';
 import { NewOrderPage } from '@/modules/orders/presentation/pages/NewOrderPage';
 import { ProductsPage } from '@/modules/products/presentation/pages/ProductsPage';
@@ -21,7 +21,7 @@ export function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const isScaleTerminal = user?.role === 'COMANDA_A' || user?.role === 'COMANDA_B';
-  const canAccessDashboard = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
+  const canAccessDashboard = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
   const previousUserIdRef = useRef<string | null>(user?.id ?? null);
@@ -47,7 +47,7 @@ export function App() {
       <aside className="sidebar">
         <h1>PDV Touch</h1>
         <nav>
-          {canAccessDashboard && <NavLink to="/">Dashboard</NavLink>}
+          {canAccessDashboard && <NavLink to="/dashboard">Dashboard</NavLink>}
           {!isScaleTerminal && <NavLink to="/orders/new">Novo Pedido</NavLink>}
           {!isScaleTerminal && <NavLink to="/products">Produtos</NavLink>}
           <NavLink to="/comanda">Balanças</NavLink>
@@ -72,8 +72,8 @@ export function App() {
           <Route
             path="/dashboard"
             element={
-              <RequireRole allowedRoles={['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE']}>
-                <DashboardPage />
+              <RequireRole allowedRoles={['ADMIN', 'GERENTE']}>
+                <RestaurantDashboardPage />
               </RequireRole>
             }
           />

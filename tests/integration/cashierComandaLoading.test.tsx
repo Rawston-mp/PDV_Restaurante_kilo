@@ -40,12 +40,34 @@ describe('Carregamento da comanda no caixa', () => {
         clear: () => storage.clear()
       }
     });
+    storage.set('pdv.cashier.active-session', JSON.stringify({
+      isOpen: true,
+      sequence: 1,
+      openedAt: '2026-07-15T12:00:00.000Z',
+      openedBy: 'Administrador'
+    }));
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it('bloqueia operações do caixa até abrir uma sessão', async () => {
+    storage.delete('pdv.cashier.active-session');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, comandas: [] }), { status: 200 }))));
+
+    render(<CashierPage />);
+
+    expect(screen.getByText('Caixa fechado')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Abrir caixa' })).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Digite produto, código ou comanda e pressione Enter')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir caixa' }));
+
+    expect(await screen.findByPlaceholderText('Digite produto, código ou comanda e pressione Enter')).toBeTruthy();
+    expect(screen.getByText('Caixa aberto. As operações de venda estão liberadas.')).toBeTruthy();
   });
 
   it('não sobrescreve os itens do backend com um carrinho vazio durante a abertura', async () => {
@@ -323,6 +345,27 @@ describe('Carregamento da comanda no caixa', () => {
   });
 
   it('abre o recebimento em NFC-e pelo atalho F3', async () => {
+    productsQueryMock.products = [{
+      id: 'product-self-service',
+      productCode: '001',
+      name: 'Self-Service',
+      category: 'Por quilo',
+      price: 59.9,
+      byWeight: true,
+      stock: 10,
+      ncm: '2106.90.29',
+      cfop: '5102 - VENDA',
+      taxSituationCode: '500',
+      cstIcms: '0',
+      fiscalType: 'Sem substituição tributária',
+      aliqIcms: '0,00',
+      aliqPis: '0,00',
+      aliqCofins: '0,00',
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }];
+
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const method = init?.method ?? 'GET';

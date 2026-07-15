@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
+  isStoreCommerciallyBlocked,
+  readPlatformOwnerSettings,
   readStoreSettings,
-  roleCanAccessStore,
+  roleIsLinkedToStore,
+  shouldWarnStoreAccess,
   type StoreSettings
 } from '@/modules/admin/infrastructure/local/platformSettings';
 import { getDefaultPinHint } from '@/modules/auth/infrastructure/local/pinPolicy';
@@ -16,20 +19,24 @@ export function AuthAccessPanel() {
 
   const [role, setRole] = useState<Role>('CAIXA');
   const [stores, setStores] = useState<StoreSettings[]>(readStoreSettings);
+  const [ownerSettings, setOwnerSettings] = useState(readPlatformOwnerSettings);
   const [selectedStoreId, setSelectedStoreId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const accessibleStores = useMemo(
-    () => stores.filter((store) => roleCanAccessStore(role, store)),
+    () => stores.filter((store) => roleIsLinkedToStore(role, store)),
     [role, stores]
   );
   const selectedStore = accessibleStores.find((store) => store.id === selectedStoreId) ?? null;
+  const selectedStoreIsBlocked = selectedStore ? isStoreCommerciallyBlocked(selectedStore) : false;
+  const selectedStoreHasWarning = selectedStore ? shouldWarnStoreAccess(selectedStore) : false;
 
   useEffect(() => {
     if (!user) {
       setStores(readStoreSettings());
+      setOwnerSettings(readPlatformOwnerSettings());
     }
   }, [user]);
 
@@ -111,17 +118,19 @@ export function AuthAccessPanel() {
             )}
           </select>
 
-          {selectedStore?.accessNoticeEnabled && (
+          {selectedStoreHasWarning && selectedStore && (
             <div className="auth-access-notice">
-              <strong>Aviso de regularização</strong>
+              <strong>{selectedStoreIsBlocked ? 'Acesso bloqueado' : 'Aviso de regularização'}</strong>
               <p>
-                Seu acesso será negado em {selectedStore.accessNoticeDays || '10'} dia(s). Entre em contato com o suporte para regularização.
+                {selectedStoreIsBlocked
+                  ? 'O acesso desta loja está temporariamente bloqueado. Entre em contato com o suporte para regularização.'
+                  : `Seu acesso será negado em ${selectedStore.graceDays || selectedStore.accessNoticeDays || '10'} dia(s). Entre em contato com o suporte para regularização.`}
               </p>
-              <span>{selectedStore.supportCompanyName || 'Suporte'}</span>
+              <span>{ownerSettings.companyName || selectedStore.supportCompanyName || 'Suporte'}</span>
               <span>
-                {selectedStore.supportPhone || 'Telefone não informado'} | WhatsApp: {selectedStore.supportWhatsapp || 'não informado'}
+                {ownerSettings.phone || selectedStore.supportPhone || 'Telefone não informado'} | WhatsApp: {ownerSettings.whatsapp || selectedStore.supportWhatsapp || 'não informado'}
               </span>
-              <span>{selectedStore.supportEmail || 'E-mail não informado'}</span>
+              <span>{ownerSettings.email || selectedStore.supportEmail || 'E-mail não informado'}</span>
             </div>
           )}
 
@@ -163,7 +172,7 @@ export function AuthAccessPanel() {
             </button>
           </div>
 
-          <button type="submit" className="auth-submit" disabled={!selectedStoreId}>Entrar</button>
+          <button type="submit" className="auth-submit" disabled={!selectedStoreId || selectedStoreIsBlocked}>Entrar</button>
         </form>
 
         {message && <p className="auth-message">{message}</p>}
