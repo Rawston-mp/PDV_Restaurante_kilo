@@ -24,6 +24,12 @@ export type StoreSettings = {
   responsibleName: string;
   responsibleCpf: string;
   active: boolean;
+  accessNoticeEnabled: boolean;
+  accessNoticeDays: string;
+  supportCompanyName: string;
+  supportPhone: string;
+  supportWhatsapp: string;
+  supportEmail: string;
   allowedRoles: Role[];
   createdAt: string;
   updatedAt: string;
@@ -94,6 +100,12 @@ const createDefaultStore = (): StoreSettings => {
     responsibleName: '',
     responsibleCpf: '',
     active: true,
+    accessNoticeEnabled: false,
+    accessNoticeDays: '10',
+    supportCompanyName: '',
+    supportPhone: '',
+    supportWhatsapp: '',
+    supportEmail: '',
     allowedRoles: defaultStoreRoles,
     createdAt: timestamp,
     updatedAt: timestamp
@@ -140,6 +152,12 @@ const sanitizeStore = (store: Partial<StoreSettings>): StoreSettings | null => {
     responsibleName: String(store.responsibleName ?? ''),
     responsibleCpf: String(store.responsibleCpf ?? ''),
     active: store.active !== false,
+    accessNoticeEnabled: store.accessNoticeEnabled === true,
+    accessNoticeDays: String(store.accessNoticeDays ?? '10'),
+    supportCompanyName: String(store.supportCompanyName ?? ''),
+    supportPhone: String(store.supportPhone ?? ''),
+    supportWhatsapp: String(store.supportWhatsapp ?? ''),
+    supportEmail: String(store.supportEmail ?? ''),
     allowedRoles: sanitizeRoleList(store.allowedRoles),
     createdAt: String(store.createdAt ?? timestamp),
     updatedAt: String(store.updatedAt ?? timestamp)

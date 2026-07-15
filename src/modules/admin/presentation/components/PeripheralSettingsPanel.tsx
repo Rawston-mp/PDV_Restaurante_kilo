@@ -106,7 +106,7 @@ export function PeripheralSettingsPanel({ onOpenFiscalSettings }: PeripheralSett
 
       <div className="admin-config-toolbar admin-peripheral-toolbar">
         <PrinterConfig />
-        <button type="button" onClick={openScaleConfig}>+ Adicionar balança</button>
+        <button type="button" onClick={openScaleConfig}>Balanças</button>
         <button type="button" onClick={onOpenFiscalSettings}>Fiscal NFC-e</button>
       </div>
 

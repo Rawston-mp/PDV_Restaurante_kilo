@@ -7,6 +7,7 @@ export type PinChangeInput = {
   role: Role;
   currentPin: string;
   nextPin: string;
+  storeId?: string;
 };
 
 export type PinOperationResult = {
@@ -45,6 +46,14 @@ const hasStorage = () =>
 
 const getStorageKey = (kind: PinKind) => (kind === 'LOGIN' ? loginStorageKey : sensitiveStorageKey);
 
+const getStoreStorageKey = (kind: PinKind, storeId?: string) => {
+  if (!storeId) {
+    return getStorageKey(kind);
+  }
+
+  return `${getStorageKey(kind)}.${storeId}`;
+};
+
 const getDefaultPins = (kind: PinKind) => (kind === 'LOGIN' ? defaultLoginPins : defaultSensitivePins);
 
 const getMemoryPins = (kind: PinKind) => (kind === 'LOGIN' ? memoryLoginPins : memorySensitivePins);
@@ -58,12 +67,13 @@ const setMemoryPins = (kind: PinKind, nextPins: Record<Role, string>) => {
   memorySensitivePins = nextPins;
 };
 
-const readPins = (kind: PinKind): Record<Role, string> => {
+const readPins = (kind: PinKind, storeId?: string): Record<Role, string> => {
   if (!hasStorage()) {
     return getMemoryPins(kind);
   }
 
-  const raw = window.localStorage.getItem(getStorageKey(kind));
+  const scopedRaw = storeId ? window.localStorage.getItem(getStoreStorageKey(kind, storeId)) : null;
+  const raw = scopedRaw ?? window.localStorage.getItem(getStorageKey(kind));
   if (!raw) {
     return { ...getDefaultPins(kind) };
   }
@@ -94,13 +104,13 @@ const migrateLegacyDefaultPins = (kind: PinKind, pins: Record<Role, string>) => 
   };
 };
 
-const persistPins = (kind: PinKind, pins: Record<Role, string>) => {
+const persistPins = (kind: PinKind, pins: Record<Role, string>, storeId?: string) => {
   if (!hasStorage()) {
     setMemoryPins(kind, pins);
     return;
   }
 
-  window.localStorage.setItem(getStorageKey(kind), JSON.stringify(pins));
+  window.localStorage.setItem(getStoreStorageKey(kind, storeId), JSON.stringify(pins));
 };
 
 const isPinStrongEnough = (pin: string) => {
@@ -115,18 +125,32 @@ const isPinStrongEnough = (pin: string) => {
   return true;
 };
 
-export const verifyLoginPin = (role: Role, pin: string): boolean => {
-  const pins = readPins('LOGIN');
+export const isPinFormatValid = (pin: string) => /^\d{4,8}$/.test(pin);
+
+export const readStorePins = (kind: PinKind, storeId?: string): Record<Role, string> => readPins(kind, storeId);
+
+export const saveStorePins = (kind: PinKind, storeId: string, pins: Record<Role, string>) => {
+  const nextPins = {
+    ...getDefaultPins(kind),
+    ...pins
+  };
+
+  persistPins(kind, nextPins, storeId);
+  return nextPins;
+};
+
+export const verifyLoginPin = (role: Role, pin: string, storeId?: string): boolean => {
+  const pins = readPins('LOGIN', storeId);
   return pins[role] === pin;
 };
 
-export const verifySensitivePin = (role: Role, pin: string): boolean => {
-  const pins = readPins('SENSITIVE');
+export const verifySensitivePin = (role: Role, pin: string, storeId?: string): boolean => {
+  const pins = readPins('SENSITIVE', storeId);
   return pins[role] === pin;
 };
 
 export const changeRolePin = (input: PinChangeInput): PinOperationResult => {
-  const pins = readPins(input.kind);
+  const pins = readPins(input.kind, input.storeId);
 
   if (pins[input.role] !== input.currentPin) {
     return {
@@ -154,17 +178,17 @@ export const changeRolePin = (input: PinChangeInput): PinOperationResult => {
     [input.role]: input.nextPin
   };
 
-  persistPins(input.kind, nextPins);
+  persistPins(input.kind, nextPins, input.storeId);
 
   return {
     success: true,
-    message: `PIN ${input.kind === 'LOGIN' ? 'de login' : 'sensível'} atualizado com sucesso.`
+    message: `PIN ${input.kind === 'LOGIN' ? 'de login' : 'sensível'} atualizado com sucesso${input.storeId ? ' para esta loja' : ''}.`
   };
 };
 
-export const getPinPolicySummary = () => {
-  const loginPins = readPins('LOGIN');
-  const sensitivePins = readPins('SENSITIVE');
+export const getPinPolicySummary = (storeId?: string) => {
+  const loginPins = readPins('LOGIN', storeId);
+  const sensitivePins = readPins('SENSITIVE', storeId);
 
   return {
     loginStrengthIssues: Object.values(loginPins).filter((pin) => !isPinStrongEnough(pin)).length,

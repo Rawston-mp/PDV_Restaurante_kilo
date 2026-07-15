@@ -2,6 +2,13 @@ import { useMemo, useState, type ChangeEvent } from 'react';
 
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
 import {
+  defaultLoginPins,
+  defaultSensitivePins,
+  isPinFormatValid,
+  readStorePins,
+  saveStorePins
+} from '@/modules/auth/infrastructure/local/pinPolicy';
+import {
   readStoreSettings,
   saveStoreSettings,
   storeRoleOptions,
@@ -21,6 +28,7 @@ import {
 import { lookupCepAddress } from '@/shared/infrastructure/cep/viaCepLookup';
 
 const getStoreRoleLabel = (role: Role) => (role === 'ADMIN' ? 'Admin da plataforma' : getRoleLabel(role));
+const pinRoleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
 
 const nowIso = () => new Date().toISOString();
 
@@ -47,6 +55,12 @@ const createBlankStore = (): StoreSettings => {
     responsibleName: '',
     responsibleCpf: '',
     active: true,
+    accessNoticeEnabled: false,
+    accessNoticeDays: '10',
+    supportCompanyName: '',
+    supportPhone: '',
+    supportWhatsapp: '',
+    supportEmail: '',
     allowedRoles: ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'],
     createdAt: timestamp,
     updatedAt: timestamp
@@ -62,6 +76,9 @@ export function StoreSettingsPanel() {
   const [cepMessage, setCepMessage] = useState<string | null>(null);
   const [isCepLoading, setIsCepLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isAccessNoticeOpen, setIsAccessNoticeOpen] = useState(false);
+  const [loginPins, setLoginPins] = useState<Record<Role, string>>(() => readStorePins('LOGIN', stores[0]?.id));
+  const [sensitivePins, setSensitivePins] = useState<Record<Role, string>>(() => readStorePins('SENSITIVE', stores[0]?.id));
 
   const filteredStores = useMemo(() => {
     const query = storeSearch
@@ -151,6 +168,8 @@ export function StoreSettingsPanel() {
   const selectStore = (store: StoreSettings) => {
     setSelectedStoreId(store.id);
     setForm({ ...store });
+    setLoginPins(readStorePins('LOGIN', store.id));
+    setSensitivePins(readStorePins('SENSITIVE', store.id));
     setMessage(null);
   };
 
@@ -158,6 +177,8 @@ export function StoreSettingsPanel() {
     const blank = createBlankStore();
     setSelectedStoreId(blank.id);
     setForm(blank);
+    setLoginPins({ ...defaultLoginPins });
+    setSensitivePins({ ...defaultSensitivePins });
     setStoreSearch('');
     setMessage(null);
   };
@@ -183,6 +204,22 @@ export function StoreSettingsPanel() {
         allowedRoles: nextRoles.length > 0 ? nextRoles : ['ADMIN']
       };
     });
+  };
+
+  const updateLoginPin = (role: Role, pin: string) => {
+    const normalizedPin = pin.replace(/\D/g, '').slice(0, 8);
+    setLoginPins((current) => ({
+      ...current,
+      [role]: normalizedPin
+    }));
+  };
+
+  const updateSensitivePin = (role: Role, pin: string) => {
+    const normalizedPin = pin.replace(/\D/g, '').slice(0, 8);
+    setSensitivePins((current) => ({
+      ...current,
+      [role]: normalizedPin
+    }));
   };
 
   const onSaveStore = (event: React.FormEvent) => {
@@ -215,6 +252,14 @@ export function StoreSettingsPanel() {
       return;
     }
 
+    const invalidPinRole = pinRoleOptions.find((role) => (
+      !isPinFormatValid(loginPins[role] ?? '') || !isPinFormatValid(sensitivePins[role] ?? '')
+    ));
+    if (invalidPinRole) {
+      setMessage(`Informe PIN de login e PIN sensível com 4 a 8 dígitos para ${getRoleLabel(invalidPinRole)}.`);
+      return;
+    }
+
     const nextStore: StoreSettings = {
       ...form,
       name: tradeName,
@@ -235,7 +280,9 @@ export function StoreSettingsPanel() {
     setStores(savedStores);
     setSelectedStoreId(nextStore.id);
     setForm(nextStore);
-    setMessage(`Loja ${nextStore.tradeName} salva para login multi-loja.`);
+    setLoginPins(saveStorePins('LOGIN', nextStore.id, loginPins));
+    setSensitivePins(saveStorePins('SENSITIVE', nextStore.id, sensitivePins));
+    setMessage(`Loja ${nextStore.tradeName} salva com vínculos e PINs de acesso.`);
   };
 
   return (
@@ -249,7 +296,7 @@ export function StoreSettingsPanel() {
       </div>
 
       <div className="admin-config-toolbar admin-compact-toolbar">
-        <button type="button" onClick={() => setIsOpen(true)}>Abrir lojas</button>
+        <button type="button" onClick={() => setIsOpen(true)}>Lojas</button>
       </div>
 
       {message && <p className="admin-message">{message}</p>}
@@ -406,6 +453,9 @@ export function StoreSettingsPanel() {
               />
               Loja ativa para login
             </label>
+            <button type="button" className="button-muted" onClick={() => setIsAccessNoticeOpen(true)}>
+              Aviso de acesso
+            </button>
           </div>
 
           <div className="admin-role-grid">
@@ -421,6 +471,118 @@ export function StoreSettingsPanel() {
             ))}
           </div>
           <p className="admin-help-text">Admin da plataforma mantém acesso total às lojas ativas. Os demais perfis dependem deste vínculo.</p>
+        </section>
+
+        {isAccessNoticeOpen && (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+            <section className="w-full max-w-3xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+              <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                  <p className="admin-eyebrow">Lojas e vínculos</p>
+                  <h3>Aviso de regularização de acesso</h3>
+                  <p className="admin-subtitle">Configure a mensagem exibida para a loja antes de negar o acesso.</p>
+                </div>
+                <button type="button" className="button-muted" onClick={() => setIsAccessNoticeOpen(false)}>Fechar</button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <label className="admin-inline-check">
+                  <input
+                    type="checkbox"
+                    checked={form.accessNoticeEnabled}
+                    onChange={(event) => updateField('accessNoticeEnabled', event.target.checked)}
+                  />
+                  Exibir aviso para esta loja
+                </label>
+
+                <div className="admin-config-grid">
+                  <label>
+                    Prazo para regularização
+                    <input
+                      value={form.accessNoticeDays}
+                      onChange={(event) => updateField('accessNoticeDays', event.target.value.replace(/\D/g, '').slice(0, 3))}
+                      inputMode="numeric"
+                      placeholder="10"
+                    />
+                  </label>
+                  <label>
+                    Nome da empresa de suporte
+                    <input
+                      value={form.supportCompanyName}
+                      onChange={(event) => updateField('supportCompanyName', event.target.value)}
+                      placeholder="Ex.: Alegre Sistemas"
+                    />
+                  </label>
+                  <label>
+                    Telefone
+                    <input
+                      value={form.supportPhone}
+                      onChange={(event) => updateField('supportPhone', event.target.value)}
+                      placeholder="(00) 0000-0000"
+                    />
+                  </label>
+                  <label>
+                    WhatsApp
+                    <input
+                      value={form.supportWhatsapp}
+                      onChange={(event) => updateField('supportWhatsapp', event.target.value)}
+                      placeholder="(00) 00000-0000"
+                    />
+                  </label>
+                  <label>
+                    E-mail
+                    <input
+                      value={form.supportEmail}
+                      onChange={(event) => updateField('supportEmail', event.target.value)}
+                      placeholder="suporte@empresa.com.br"
+                    />
+                  </label>
+                </div>
+
+                <div className="admin-access-notice-preview">
+                  <strong>Prévia do aviso</strong>
+                  <p>
+                    Seu acesso será negado em {form.accessNoticeDays || '10'} dia(s). Entre em contato com o suporte para regularização.
+                  </p>
+                  <span>{form.supportCompanyName || 'Empresa de suporte'}</span>
+                  <span>{form.supportPhone || 'Telefone não informado'} | WhatsApp: {form.supportWhatsapp || 'não informado'} | {form.supportEmail || 'E-mail não informado'}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        <section className="admin-config-section">
+          <h4>Usuários e PINs da loja</h4>
+          <p className="admin-help-text">
+            Cadastre os PINs que serão usados no login desta loja. Use estes campos ao vender o sistema e configurar as senhas com o dono.
+          </p>
+
+          <div className="admin-store-pin-grid">
+            {pinRoleOptions.map((roleOption) => (
+              <div key={roleOption} className="admin-store-pin-card">
+                <strong>{getRoleLabel(roleOption)}</strong>
+                <label>
+                  PIN de login
+                  <input
+                    value={loginPins[roleOption] ?? ''}
+                    onChange={(event) => updateLoginPin(roleOption, event.target.value)}
+                    inputMode="numeric"
+                    placeholder="4 a 8 dígitos"
+                  />
+                </label>
+                <label>
+                  PIN sensível
+                  <input
+                    value={sensitivePins[roleOption] ?? ''}
+                    onChange={(event) => updateSensitivePin(roleOption, event.target.value)}
+                    inputMode="numeric"
+                    placeholder="4 a 8 dígitos"
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
         </section>
 
         <div className="admin-actions">

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
-import type { PinKind } from '@/modules/auth/infrastructure/local/pinPolicy';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
   clearSensitiveAuditEvents,
@@ -70,7 +69,7 @@ const getProductDisplayName = (product: Product) => {
 };
 
 export function AdminPage() {
-  const { user, changePin, getPinHealth } = useAuth();
+  const { user, getPinHealth } = useAuth();
   const [syncTasks, setSyncTasks] = useState<SyncQueueTask[]>([]);
   const [auditEvents, setAuditEvents] = useState<SensitiveAuditEvent[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,12 +79,6 @@ export function AdminPage() {
   const [roleFilter, setRoleFilter] = useState<'ALL' | Role>('ALL');
   const [textFilter, setTextFilter] = useState('');
 
-  const [pinRole, setPinRole] = useState<Role>('CAIXA');
-  const [pinKind, setPinKind] = useState<PinKind>('LOGIN');
-  const [currentPin, setCurrentPin] = useState('');
-  const [nextPin, setNextPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [pinMessage, setPinMessage] = useState<string | null>(null);
   const [certificateFormError, setCertificateFormError] = useState<string | null>(null);
   const [certificateAlias, setCertificateAlias] = useState('');
   const [certificateCompanyName, setCertificateCompanyName] = useState('');
@@ -429,26 +422,6 @@ export function AdminPage() {
     setMessage(`Exportacao concluida com ${filteredAuditEvents.length} eventos.`);
   };
 
-  const onChangePin = (event: FormEvent) => {
-    event.preventDefault();
-
-    const result = changePin({
-      kind: pinKind,
-      role: pinRole,
-      currentPin,
-      nextPin,
-      confirmPin
-    });
-
-    setPinMessage(result.message);
-
-    if (result.success) {
-      setCurrentPin('');
-      setNextPin('');
-      setConfirmPin('');
-    }
-  };
-
   return (
     <section className="admin-page">
       <header className="card admin-header">
@@ -464,7 +437,7 @@ export function AdminPage() {
           <h3>Operacional</h3>
           <p className="admin-subtitle">Monitore fila, pendências e segurança dos PINs.</p>
           <div className="admin-config-toolbar admin-compact-toolbar">
-            <button type="button" onClick={() => setIsOperationalOpen(true)}>Abrir Operacional</button>
+            <button type="button" onClick={() => setIsOperationalOpen(true)}>Operacional</button>
           </div>
 
           {isOperationalOpen && (
@@ -525,58 +498,9 @@ export function AdminPage() {
 
                   {message && <p className="admin-message">{message}</p>}
 
-                  <form onSubmit={onChangePin} className="admin-pin-form" autoComplete="off">
-                    <h4>Gestão de PIN</h4>
-
-                    <label htmlFor="pin-role">Perfil</label>
-                    <select id="pin-role" value={pinRole} onChange={(e) => setPinRole(e.target.value as Role)}>
-                      {roleOptions.map((role) => (
-                        <option key={role} value={role}>
-                          {getRoleLabel(role)}
-                        </option>
-                      ))}
-                    </select>
-
-                    <label htmlFor="pin-kind">Tipo</label>
-                    <select
-                      id="pin-kind"
-                      value={pinKind}
-                      onChange={(e) => setPinKind(e.target.value as PinKind)}
-                    >
-                      <option value="LOGIN">LOGIN</option>
-                      <option value="SENSITIVE">SENSITIVE</option>
-                    </select>
-
-                    <label htmlFor="pin-current">PIN atual</label>
-                    <input
-                      id="pin-current"
-                      type="password"
-                      value={currentPin}
-                      onChange={(e) => setCurrentPin(e.target.value)}
-                      required
-                    />
-
-                    <label htmlFor="pin-next">Novo PIN</label>
-                    <input
-                      id="pin-next"
-                      type="password"
-                      value={nextPin}
-                      onChange={(e) => setNextPin(e.target.value)}
-                      required
-                    />
-
-                    <label htmlFor="pin-confirm">Confirmar novo PIN</label>
-                    <input
-                      id="pin-confirm"
-                      type="password"
-                      value={confirmPin}
-                      onChange={(e) => setConfirmPin(e.target.value)}
-                      required
-                    />
-
-                    <button type="submit">Atualizar PIN</button>
-                    {pinMessage && <p className="admin-message">{pinMessage}</p>}
-                  </form>
+                  <p className="admin-message">
+                    A gestão de PINs por usuário fica em Lojas e vínculos, junto ao cadastro da loja selecionada.
+                  </p>
                 </div>
               </section>
             </div>
@@ -593,7 +517,7 @@ export function AdminPage() {
             Consulte aprovações e recusas em operações críticas.
           </p>
           <div className="admin-config-toolbar admin-compact-toolbar">
-            <button type="button" onClick={() => setIsAuditOpen(true)}>Abrir auditoria</button>
+            <button type="button" onClick={() => setIsAuditOpen(true)}>Auditoria</button>
           </div>
 
           {isAuditOpen && (
@@ -721,6 +645,31 @@ export function AdminPage() {
               </section>
             </div>
           )}
+        </article>
+
+        <article className="card admin-home-summary">
+          <div>
+            <h3>Resumo do sistema</h3>
+            <p className="admin-subtitle">Visão rápida dos pontos que merecem atenção antes da operação.</p>
+          </div>
+          <ul>
+            <li>
+              <span>Fila pendente</span>
+              <strong>{queueSummary.total}</strong>
+            </li>
+            <li>
+              <span>Produtos cadastrados</span>
+              <strong>{products.length}</strong>
+            </li>
+            <li>
+              <span>Eventos auditados</span>
+              <strong>{auditEvents.length}</strong>
+            </li>
+            <li>
+              <span>PINs com alerta</span>
+              <strong>{pinHealth.loginStrengthIssues + pinHealth.sensitiveStrengthIssues}</strong>
+            </li>
+          </ul>
         </article>
 
         {isFiscalSettingsOpen && (
