@@ -154,6 +154,9 @@ const isFinanceIncomeSettled = (entry: FinanceEntry) =>
 const isFinanceExpenseSettled = (entry: FinanceEntry) =>
   entry.tab === 'DESPESAS' && entry.status === 'PAGO';
 
+const requiresFinanceReverseBeforeDelete = (entry: FinanceEntry) =>
+  entry.tab === 'DESPESAS' || entry.tab === 'RECEITA';
+
 const normalizeXmlValue = (value: string) =>
   value
     .normalize('NFD')
@@ -1547,7 +1550,7 @@ export function CadastroPage() {
   }, [financeRows]);
 
   const financeAccountMovementRows = useMemo(() => {
-    if (!financeAccountFilter) {
+    if (!financeAccountFilter && activeFinanceTab === 'CONTA_CORRENTE') {
       return [];
     }
 
@@ -1558,7 +1561,7 @@ export function CadastroPage() {
     const rangeEndDate = startDate && endDate && startDate > endDate ? startDate : endDate;
 
     return financeRows
-      .filter((entry) => entry.accountName === financeAccountFilter)
+      .filter((entry) => !financeAccountFilter || entry.accountName === financeAccountFilter)
       .filter((entry) => entry.status !== 'ESTORNADO')
       .filter((entry) => {
         if (activeFinanceTab === 'DESPESAS') {
@@ -1614,9 +1617,48 @@ export function CadastroPage() {
     [financeAccountMovementRows]
   );
 
+  const financeRevenueSummary = useMemo(() => {
+    const totalIssued = searchedFinanceEntries.reduce(
+      (sum, entry) => sum + parseFinanceAmount(entry.amount),
+      0
+    );
+    const totalReceived = searchedFinanceEntries.reduce(
+      (sum, entry) => sum + (isFinanceIncomeSettled(entry) ? parseFinanceAmount(entry.amount) : 0),
+      0
+    );
+
+    return {
+      totalIssued,
+      totalReceived,
+      totalPending: Math.max(totalIssued - totalReceived, 0)
+    };
+  }, [searchedFinanceEntries]);
+
+  const financeExpenseSummary = useMemo(() => {
+    const totalIssued = searchedFinanceEntries.reduce(
+      (sum, entry) => sum + parseFinanceAmount(entry.amount),
+      0
+    );
+    const totalPaid = searchedFinanceEntries.reduce(
+      (sum, entry) => sum + (isFinanceExpenseSettled(entry) ? parseFinanceAmount(entry.amount) : 0),
+      0
+    );
+
+    return {
+      totalIssued,
+      totalPaid,
+      totalPending: Math.max(totalIssued - totalPaid, 0)
+    };
+  }, [searchedFinanceEntries]);
+
   const duplicateFinanceSourceEntry = useMemo(
     () => financeEntries.find((entry) => entry.id === duplicateFinanceSourceEntryId) ?? null,
     [financeEntries, duplicateFinanceSourceEntryId]
+  );
+
+  const editingFinanceEntry = useMemo(
+    () => financeEntries.find((entry) => entry.id === editingFinanceEntryId) ?? null,
+    [editingFinanceEntryId, financeEntries]
   );
 
   const duplicateFinancePreview = useMemo(() => {
@@ -1753,10 +1795,14 @@ export function CadastroPage() {
       return;
     }
 
+    if ((activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS') && !financeAccountFilter) {
+      return;
+    }
+
     if (!financeAccountOptions.includes(financeAccountFilter)) {
       setFinanceAccountFilter(financeAccountOptions[0]);
     }
-  }, [financeAccountFilter, financeAccountOptions]);
+  }, [activeFinanceTab, financeAccountFilter, financeAccountOptions]);
 
   const openPersonFormFromFinance = () => {
     const initialName = financeSupplierName.trim();
@@ -2354,15 +2400,14 @@ export function CadastroPage() {
     }
 
     clearFinanceForm(generateRandomCode(new Set([...usedCodes, generatedCode])));
+    setFinanceSearchExecutedByTab((current) => ({
+      ...current,
+      [activeFinanceTab]: true
+    }));
     setShowCadastroSpan(false);
   };
 
-  const onEditFinanceEntry = (entryId: string) => {
-    const entry = financeEntries.find((item) => item.id === entryId);
-    if (!entry) {
-      return;
-    }
-
+  const openFinanceEntryForEdit = (entry: FinanceEntry) => {
     setEditingFinanceEntryId(entry.id);
     setActiveFinanceTab(entry.tab);
     setShowCadastroSpan(true);
@@ -2381,9 +2426,64 @@ export function CadastroPage() {
     setFinanceNotes(entry.notes);
   };
 
+  const onEditFinanceEntry = (entryId: string) => {
+    const entry = financeEntries.find((item) => item.id === entryId);
+    if (!entry) {
+      return;
+    }
+
+    openFinanceEntryForEdit(entry);
+  };
+
+  const reverseFinanceEntryForReview = (target: FinanceEntry, reason: string, shouldOpenForEdit = true) => {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const trimmedReason = reason.trim();
+    const notePrefix = trimmedReason
+      ? `Estornado em ${now.toLocaleString('pt-BR')}: ${trimmedReason}`
+      : `Estornado em ${now.toLocaleString('pt-BR')}`;
+    let reversedEntry: FinanceEntry | null = null;
+
+    const reversedEntries = financeEntries.map<FinanceEntry>((entry) => {
+      if (entry.id !== target.id) {
+        return entry;
+      }
+
+      reversedEntry = {
+        ...entry,
+        status: 'ESTORNADO' as const,
+        notes: appendFinanceAuditNote(entry.notes, notePrefix),
+        updatedAt: nowIso,
+        version: entry.version + 1
+      };
+
+      return reversedEntry;
+    });
+
+    saveFinanceEntriesLocal(reversedEntries);
+
+    if (shouldOpenForEdit && reversedEntry) {
+      openFinanceEntryForEdit(reversedEntry);
+      setFinanceFormError('Lançamento estornado. Revise as informações, salve a edição se necessário e depois exclua o lançamento.');
+    }
+  };
+
   const onDeleteFinanceEntry = (entryId: string) => {
     const target = financeEntries.find((entry) => entry.id === entryId);
     if (!target) {
+      return;
+    }
+
+    if (requiresFinanceReverseBeforeDelete(target) && target.status !== 'ESTORNADO') {
+      const confirmedReverse = window.confirm(
+        `Antes de excluir o lançamento "${target.description}", ele precisa ser estornado. Deseja estornar agora?`
+      );
+      if (!confirmedReverse) {
+        return;
+      }
+
+      const reason = window.prompt('Comentário do estorno antes da exclusão (opcional):', '') ?? '';
+      reverseFinanceEntryForReview(target, reason);
       return;
     }
 
@@ -2524,25 +2624,8 @@ export function CadastroPage() {
       return;
     }
 
-    const nowIso = new Date().toISOString();
-    const notePrefix = `Estornado em ${new Date().toLocaleString('pt-BR')}`;
-    const reversedEntries = financeEntries.map<FinanceEntry>((entry) => {
-      if (entry.id !== entryId) {
-        return entry;
-      }
-
-      return {
-        ...entry,
-        status: 'ESTORNADO' as const,
-        notes: entry.notes ? `${notePrefix}\n${entry.notes}` : notePrefix,
-        updatedAt: nowIso,
-        version: entry.version + 1
-      };
-    });
-
-    saveFinanceEntriesLocal(reversedEntries);
-    onEditFinanceEntry(entryId);
-    setFinanceNotes((current) => current || notePrefix);
+    const reason = window.prompt('Comentário do estorno (opcional):', '') ?? '';
+    reverseFinanceEntryForReview(target, reason);
   };
 
   const onSubmitStockEntry = async (event: FormEvent) => {
@@ -4740,17 +4823,23 @@ export function CadastroPage() {
                 </div>
                 <div>
                   <label htmlFor="finance-status">Status</label>
-                  <select
-                    id="finance-status"
-                    value={financeStatus}
-                    onChange={(event) => setFinanceStatus(event.target.value as typeof financeStatus)}
-                  >
-                    {financeStatusOptionsByTab[activeFinanceTab].map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
+                  {financeStatus === 'ESTORNADO' ? (
+                    <input id="finance-status" value="ESTORNADO" readOnly />
+                  ) : (
+                    <select
+                      id="finance-status"
+                      value={financeStatus}
+                      onChange={(event) => setFinanceStatus(event.target.value as typeof financeStatus)}
+                    >
+                      {financeStatusOptionsByTab[activeFinanceTab]
+                        .filter((status) => status !== 'ESTORNADO')
+                        .map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -4768,6 +4857,15 @@ export function CadastroPage() {
 
             <div className="products-cadastro-footer">
               <button type="submit">{editingFinanceEntryId ? 'Salvar edição' : 'Salvar lançamento'}</button>
+              {editingFinanceEntry?.status === 'ESTORNADO' && (
+                <button
+                  type="button"
+                  className="products-delete-button"
+                  onClick={() => onDeleteFinanceEntry(editingFinanceEntry.id)}
+                >
+                  Excluir
+                </button>
+              )}
               <button
                 type="button"
                 className="button-muted"
@@ -4775,6 +4873,18 @@ export function CadastroPage() {
               >
                 Duplicar conta
               </button>
+              {editingFinanceEntry &&
+                editingFinanceEntry.status !== 'ESTORNADO' &&
+                !isFinanceIncomeSettled(editingFinanceEntry) &&
+                !isFinanceExpenseSettled(editingFinanceEntry) && (
+                  <button
+                    type="button"
+                    className="button-muted"
+                    onClick={() => onReverseFinanceEntry(editingFinanceEntry.id)}
+                  >
+                    Estornar
+                  </button>
+                )}
               <button
                 type="button"
                 className="button-muted"
@@ -5906,9 +6016,9 @@ export function CadastroPage() {
                 </h4>
                 <p className="products-subtitle">
                   {activeFinanceTab === 'DESPESAS'
-                    ? 'Escolha a conta e o período para conferir gastos, pagamentos e compensações.'
+                    ? 'Use Todas as contas para conferir todos os lançamentos ou filtre por banco.'
                     : activeFinanceTab === 'RECEITA'
-                      ? 'Escolha a conta e o período para conferir entradas, recebimentos e compensações.'
+                      ? 'Use Todas as contas para conferir todos os lançamentos ou filtre por banco.'
                       : 'Escolha a conta para conferir débito, crédito e saldo. Lançamentos em aberto não movimentam saldo.'}
                 </p>
               </div>
@@ -5922,6 +6032,7 @@ export function CadastroPage() {
                 value={financeAccountFilter}
                 onChange={(event) => setFinanceAccountFilter(event.target.value)}
               >
+                {(activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS') && <option value="">Todas as contas</option>}
                 {financeAccountOptions.map((account) => (
                   <option key={account} value={account}>
                     {account}
@@ -5959,9 +6070,119 @@ export function CadastroPage() {
             </div>
 
             {!financeSearchExecutedByTab[activeFinanceTab] ? (
-              <p className="empty-state">Informe a conta e o período, depois clique em Buscar para visualizar os lançamentos.</p>
+              <p className="empty-state">
+                {activeFinanceTab === 'RECEITA'
+                  ? 'Clique em Buscar para visualizar todos os lançamentos ou filtre por conta corrente.'
+                  : activeFinanceTab === 'DESPESAS'
+                    ? 'Clique em Buscar para visualizar todas as despesas ou filtre por conta corrente.'
+                  : 'Informe a conta e o período, depois clique em Buscar para visualizar os lançamentos.'}
+              </p>
             ) : !financeAccountOptions.length ? (
               <p className="empty-state">Cadastre bancos/contas em Convênios para consultar saldo por conta corrente.</p>
+            ) : activeFinanceTab === 'RECEITA' ? (
+              <div className="finance-revenue-ledger">
+                <div className="finance-revenue-ledger-head">
+                  <span>Tipo documento</span>
+                  <span>Cliente</span>
+                  <span>Banco</span>
+                  <span>Vencimento</span>
+                  <span>Valor emissão</span>
+                  <span>Valor recebido</span>
+                  <span>Recebimento</span>
+                  <span>Comp.</span>
+                  <span>Ações</span>
+                </div>
+
+                {financeAccountMovementRows.length ? (
+                  financeAccountMovementRows.map(({ entry, credit }) => {
+                    const isReceived = isFinanceIncomeSettled(entry);
+                    const receivedDate = isReceived ? formatDateTimeDisplayDate(entry.updatedAt || entry.createdAt) : '-';
+
+                    return (
+                      <div className={`finance-revenue-ledger-row ${isReceived ? 'is-received' : 'is-open'}`} key={entry.id}>
+                        <strong data-label="Tipo documento">{entry.documentRef || '-'}</strong>
+                        <strong data-label="Cliente">{entry.supplierName || entry.description || '-'}</strong>
+                        <span data-label="Banco">{entry.accountName || '-'}</span>
+                        <span data-label="Vencimento">{formatDateInputDisplay(entry.dueDate)}</span>
+                        <b data-label="Valor emissão">{currencyFormatter.format(parseFinanceAmount(entry.amount))}</b>
+                        <b data-label="Valor recebido" className={isReceived ? 'is-credit' : 'is-pending'}>
+                          {isReceived ? currencyFormatter.format(credit || parseFinanceAmount(entry.amount)) : currencyFormatter.format(0)}
+                        </b>
+                        <span data-label="Recebimento">{receivedDate}</span>
+                        <span data-label="Comp.">{isReceived ? 'Sim' : 'Não'}</span>
+                        <div className="finance-ledger-actions" data-label="Ações">
+                          <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
+                            Editar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="empty-state">Nenhum lançamento encontrado para esta conta.</p>
+                )}
+
+                <div className="finance-revenue-totals" aria-label="Totais de receita pesquisada">
+                  <span>Total emitido:</span>
+                  <b>{currencyFormatter.format(financeRevenueSummary.totalIssued)}</b>
+                  <span>Total recebido:</span>
+                  <b>{currencyFormatter.format(financeRevenueSummary.totalReceived)}</b>
+                  <span className="is-pending">Total a receber:</span>
+                  <b className="is-pending">{currencyFormatter.format(financeRevenueSummary.totalPending)}</b>
+                </div>
+              </div>
+            ) : activeFinanceTab === 'DESPESAS' ? (
+              <div className="finance-revenue-ledger">
+                <div className="finance-revenue-ledger-head">
+                  <span>Tipo documento</span>
+                  <span>Fornecedor</span>
+                  <span>Banco</span>
+                  <span>Vencimento</span>
+                  <span>Valor emissão</span>
+                  <span>Valor pago</span>
+                  <span>Pagamento</span>
+                  <span>Comp.</span>
+                  <span>Ações</span>
+                </div>
+
+                {financeAccountMovementRows.length ? (
+                  financeAccountMovementRows.map(({ entry, debit }) => {
+                    const isPaid = isFinanceExpenseSettled(entry);
+                    const paidDate = isPaid ? formatDateTimeDisplayDate(entry.updatedAt || entry.createdAt) : '-';
+
+                    return (
+                      <div className={`finance-revenue-ledger-row ${isPaid ? 'is-received' : 'is-open'}`} key={entry.id}>
+                        <strong data-label="Tipo documento">{entry.documentRef || '-'}</strong>
+                        <strong data-label="Fornecedor">{entry.supplierName || entry.description || '-'}</strong>
+                        <span data-label="Banco">{entry.accountName || '-'}</span>
+                        <span data-label="Vencimento">{formatDateInputDisplay(entry.dueDate)}</span>
+                        <b data-label="Valor emissão">{currencyFormatter.format(parseFinanceAmount(entry.amount))}</b>
+                        <b data-label="Valor pago" className={isPaid ? 'is-credit' : 'is-pending'}>
+                          {isPaid ? currencyFormatter.format(debit || parseFinanceAmount(entry.amount)) : currencyFormatter.format(0)}
+                        </b>
+                        <span data-label="Pagamento">{paidDate}</span>
+                        <span data-label="Comp.">{isPaid ? 'Sim' : 'Não'}</span>
+                        <div className="finance-ledger-actions" data-label="Ações">
+                          <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
+                            Editar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="empty-state">Nenhum lançamento encontrado para esta conta.</p>
+                )}
+
+                <div className="finance-revenue-totals" aria-label="Totais de despesas pesquisadas">
+                  <span>Total emitido:</span>
+                  <b>{currencyFormatter.format(financeExpenseSummary.totalIssued)}</b>
+                  <span>Total pago:</span>
+                  <b>{currencyFormatter.format(financeExpenseSummary.totalPaid)}</b>
+                  <span className="is-pending">Total a pagar:</span>
+                  <b className="is-pending">{currencyFormatter.format(financeExpenseSummary.totalPending)}</b>
+                </div>
+              </div>
             ) : (
               <div className="finance-account-ledger">
                 <div className="finance-account-ledger-head">
@@ -5978,6 +6199,7 @@ export function CadastroPage() {
                   <span>Pago</span>
                   <span>Status</span>
                   <span>Comp.</span>
+                  <span>Ações</span>
                 </div>
 
                 {financeAccountMovementRows.length ? (
@@ -6003,6 +6225,11 @@ export function CadastroPage() {
                         <span data-label="Pago">{paidDate}</span>
                         <span data-label="Status">{entry.status}</span>
                         <span data-label="Comp.">{isCompensated ? 'Sim' : 'Não'}</span>
+                        <div className="finance-ledger-actions" data-label="Ações">
+                          <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
+                            Editar
+                          </button>
+                        </div>
                       </div>
                     );
                   })
@@ -6013,11 +6240,11 @@ export function CadastroPage() {
                 <div className="finance-account-ledger-row is-total">
                   <strong data-label="#ID">Saldo</strong>
                   <span data-label="Documento">-</span>
-                  <span data-label="Histórico financeiro">{financeAccountFilter || '-'}</span>
+                  <span data-label="Histórico financeiro">{financeAccountFilter || 'Todas as contas'}</span>
                   <span data-label="Tipo documento">-</span>
                   <span data-label="Nº Nota">-</span>
                   <span data-label="Fornecedor">-</span>
-                  <span data-label="Banco">{financeAccountFilter || '-'}</span>
+                  <span data-label="Banco">{financeAccountFilter || 'Todas'}</span>
                   <span data-label="Vencimento">-</span>
                   <b data-label="Valor emissão">
                     {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + parseFinanceAmount(row.entry.amount), 0))}
@@ -6028,15 +6255,16 @@ export function CadastroPage() {
                   <span data-label="Pago">-</span>
                   <span data-label="Status">-</span>
                   <span data-label="Comp.">-</span>
+                  <span data-label="Ações">-</span>
                 </div>
               </div>
             )}
           </section>
 
-          {!financeSearchExecutedByTab[activeFinanceTab] ? (
+          {activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS' ? null : !financeSearchExecutedByTab[activeFinanceTab] ? (
             <p className="empty-state">Nenhum lançamento será exibido antes da pesquisa.</p>
           ) : searchedFinanceEntries.length === 0 ? (
-            <p className="empty-state">Nenhum lançamento em {activeFinanceTab === 'DESPESAS' ? 'Despesas' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}.</p>
+            <p className="empty-state">Nenhum lançamento em Conta Corrente.</p>
           ) : (
             <ul className="products-list suppliers-list">
               {searchedFinanceEntries.map((entry) => (
@@ -6069,23 +6297,8 @@ export function CadastroPage() {
                       >
                         Duplicar conta
                       </button>
-                      <button
-                        type="button"
-                        className="button-muted"
-                        onClick={() => onReverseFinanceEntry(entry.id)}
-                        disabled={entry.status === 'ESTORNADO'}
-                      >
-                        Estornar
-                      </button>
                       <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
                         Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="products-delete-button"
-                        onClick={() => onDeleteFinanceEntry(entry.id)}
-                      >
-                        Excluir
                       </button>
                     </div>
                   </div>
