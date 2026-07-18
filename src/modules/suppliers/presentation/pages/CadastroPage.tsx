@@ -1661,6 +1661,11 @@ export function CadastroPage() {
     [editingFinanceEntryId, financeEntries]
   );
 
+  const isEditingFinanceEntryLocked =
+    !!editingFinanceEntry &&
+    editingFinanceEntry.status !== 'ESTORNADO' &&
+    (isFinanceIncomeSettled(editingFinanceEntry) || isFinanceExpenseSettled(editingFinanceEntry));
+
   const duplicateFinancePreview = useMemo(() => {
     const installmentCount = Number(duplicateFinanceInstallmentCount);
     const intervalDays = Number(duplicateFinanceIntervalDays);
@@ -4619,6 +4624,11 @@ export function CadastroPage() {
                     ? 'Lançamento de receita'
                     : 'Movimentação em conta corrente'}
               </h4>
+              {isEditingFinanceEntryLocked && (
+                <p className="products-form-warning">
+                  Lançamento já compensado. Para alterar valor, pessoa, datas, conta, documento ou status, estorne primeiro.
+                </p>
+              )}
 
               <div className="suppliers-row-3">
                 <div>
@@ -4640,9 +4650,9 @@ export function CadastroPage() {
                         : activeFinanceTab === 'DESPESAS'
                           ? 'Digite 3 letras para buscar fornecedor'
                           : 'Não se aplica'}
-                      disabled={activeFinanceTab === 'CONTA_CORRENTE'}
+                      disabled={activeFinanceTab === 'CONTA_CORRENTE' || isEditingFinanceEntryLocked}
                     />
-                    {filteredFinancePersonOptions.length > 0 && (
+                    {!isEditingFinanceEntryLocked && filteredFinancePersonOptions.length > 0 && (
                       <div className="finance-person-suggestions" role="listbox">
                         {filteredFinancePersonOptions.map((person) => (
                           <button
@@ -4669,7 +4679,7 @@ export function CadastroPage() {
                       className="products-supplier-picker-button"
                       onClick={openPersonFormFromFinance}
                       aria-label={activeFinanceTab === 'RECEITA' ? 'Cadastrar cliente rápido' : 'Cadastrar fornecedor rápido'}
-                      disabled={activeFinanceTab === 'CONTA_CORRENTE'}
+                      disabled={activeFinanceTab === 'CONTA_CORRENTE' || isEditingFinanceEntryLocked}
                     >
                       +
                     </button>
@@ -4688,6 +4698,7 @@ export function CadastroPage() {
                     id="finance-description"
                     value={financeDescription}
                     onChange={(e) => setFinanceDescription(e.target.value)}
+                    disabled={isEditingFinanceEntryLocked}
                   />
                 </div>
                 <div>
@@ -4699,6 +4710,7 @@ export function CadastroPage() {
                     onChange={onCurrencyInputChange(setFinanceAmount)}
                     onBlur={() => onCurrencyInputBlur(setFinanceAmount, financeAmount)}
                     placeholder="0,00"
+                    disabled={isEditingFinanceEntryLocked}
                   />
                 </div>
                 <div>
@@ -4708,6 +4720,7 @@ export function CadastroPage() {
                     type="date"
                     value={financeDueDate}
                     onChange={(e) => setFinanceDueDate(e.target.value)}
+                    disabled={isEditingFinanceEntryLocked}
                   />
                 </div>
                 <div>
@@ -4717,6 +4730,7 @@ export function CadastroPage() {
                     type="date"
                     value={financeCompetenceDate}
                     onChange={(e) => setFinanceCompetenceDate(e.target.value)}
+                    disabled={isEditingFinanceEntryLocked}
                   />
                 </div>
               </div>
@@ -4737,6 +4751,7 @@ export function CadastroPage() {
                       setFinanceAccountName(event.target.value);
                       setFinanceFormError(null);
                     }}
+                    disabled={isEditingFinanceEntryLocked}
                   >
                     <option value="">Selecione a conta</option>
                     {financeAccountOptions.map((option) => (
@@ -4754,6 +4769,7 @@ export function CadastroPage() {
                       }}
                       placeholder="Nova conta, banco ou operadora"
                       aria-label="Nova conta corrente"
+                      disabled={isEditingFinanceEntryLocked}
                     />
                     <button
                       type="button"
@@ -4761,6 +4777,7 @@ export function CadastroPage() {
                       onClick={() => void onAddFinanceAccountOption()}
                       title="Cadastrar conta corrente"
                       aria-label="Cadastrar conta corrente"
+                      disabled={isEditingFinanceEntryLocked}
                     >
                       +
                     </button>
@@ -4782,6 +4799,7 @@ export function CadastroPage() {
                       setFinanceDocumentRef(event.target.value);
                       setFinanceFormError(null);
                     }}
+                    disabled={isEditingFinanceEntryLocked}
                   >
                     <option value="">Selecione o documento</option>
                     {financeDocumentTypeOptions.map((option) => (
@@ -4799,6 +4817,7 @@ export function CadastroPage() {
                       }}
                       placeholder="Novo tipo de documento"
                       aria-label="Novo tipo de documento"
+                      disabled={isEditingFinanceEntryLocked}
                     />
                     <button
                       type="button"
@@ -4809,6 +4828,7 @@ export function CadastroPage() {
                       }}
                       title="Gerenciar documento/referência"
                       aria-label="Gerenciar documento/referência"
+                      disabled={isEditingFinanceEntryLocked}
                     >
                       +
                     </button>
@@ -4830,6 +4850,7 @@ export function CadastroPage() {
                       id="finance-status"
                       value={financeStatus}
                       onChange={(event) => setFinanceStatus(event.target.value as typeof financeStatus)}
+                      disabled={isEditingFinanceEntryLocked}
                     >
                       {financeStatusOptionsByTab[activeFinanceTab]
                         .filter((status) => status !== 'ESTORNADO')
@@ -4851,12 +4872,15 @@ export function CadastroPage() {
                   onChange={(e) => setFinanceNotes(e.target.value)}
                   rows={4}
                   placeholder="Notas sobre o lançamento financeiro"
+                  disabled={isEditingFinanceEntryLocked}
                 />
               </div>
             </section>
 
             <div className="products-cadastro-footer">
-              <button type="submit">{editingFinanceEntryId ? 'Salvar edição' : 'Salvar lançamento'}</button>
+              <button type="submit" disabled={isEditingFinanceEntryLocked}>
+                {editingFinanceEntryId ? 'Salvar edição' : 'Salvar lançamento'}
+              </button>
               {editingFinanceEntry?.status === 'ESTORNADO' && (
                 <button
                   type="button"
@@ -4875,8 +4899,7 @@ export function CadastroPage() {
               </button>
               {editingFinanceEntry &&
                 editingFinanceEntry.status !== 'ESTORNADO' &&
-                !isFinanceIncomeSettled(editingFinanceEntry) &&
-                !isFinanceExpenseSettled(editingFinanceEntry) && (
+                (editingFinanceEntry.tab === 'RECEITA' || editingFinanceEntry.tab === 'DESPESAS') && (
                   <button
                     type="button"
                     className="button-muted"
