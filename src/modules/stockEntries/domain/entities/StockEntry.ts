@@ -28,11 +28,17 @@ export type StockEntry = {
   stockLocation: string;
   purchaseOrder: string;
   freightByAccount: string;
+  purchaseQuantity?: number;
+  purchaseUnit?: string;
+  saleUnit?: string;
+  conversionFactor?: number;
+  purchaseUnitCost?: number;
   quantity: number;
   unitCost: number;
   totalCost: number;
   notes: string;
   receivedAt: Date;
+  reversedAt?: Date;
   version: number;
   createdAt: Date;
   updatedAt: Date;

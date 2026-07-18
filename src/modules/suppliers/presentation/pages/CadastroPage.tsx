@@ -9,7 +9,15 @@ import { useConveniosQuery } from '@/modules/convenios/presentation/hooks/useCon
 import { useCreateConvenio } from '@/modules/convenios/presentation/hooks/useCreateConvenio';
 import { employeesContainer } from '@/modules/employees/infrastructure/container/employeesContainer';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
+import { ProductsPage } from '@/modules/products/presentation/pages/ProductsPage';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
+import {
+  clearNfeProductDraft,
+  clearNfeProductDraftResult,
+  writeNfeProductDraft,
+  type NfeProductDraft,
+  type NfeProductDraftResult
+} from '@/modules/products/infrastructure/local/nfeProductDraft';
 import { suppliersContainer } from '@/modules/suppliers/infrastructure/container/suppliersContainer';
 import { useCreateEmployee } from '@/modules/employees/presentation/hooks/useCreateEmployee';
 import { useEmployeesQuery } from '@/modules/employees/presentation/hooks/useEmployeesQuery';
@@ -187,9 +195,11 @@ const findFirstXmlTextWithinLocalName = (root: ParentNode, ancestorLocalName: st
 };
 
 const parseXmlNumber = (value: string) => {
-  const numericValue = Number(value.replace(/\./g, '').replace(',', '.'));
+  const numericValue = Number(value.replace(',', '.'));
   return Number.isFinite(numericValue) ? numericValue : null;
 };
+
+const formatXmlDecimalForInput = (value: string) => value.trim().replace('.', ',');
 
 const formatDateTimeLocalInput = (date: Date) => {
   const year = String(date.getFullYear()).padStart(4, '0');
@@ -259,6 +269,17 @@ type ImportedStockEntryItem = {
   quantity: string;
   unitCost: string;
   xmlProductCode: string;
+  barcode: string;
+  unit: string;
+  ncm: string;
+  cfop: string;
+  origin: string;
+  cstOrCsosn: string;
+  aliqIcms: string;
+  cstPis: string;
+  aliqPis: string;
+  cstCofins: string;
+  aliqCofins: string;
 };
 
 type CardManagerSettings = {
@@ -631,7 +652,7 @@ export function CadastroPage() {
   const { createClient, saving: savingClient } = useCreateClient();
   const { convenios, setConvenios } = useConveniosQuery();
   const { createConvenio, saving: savingConvenio } = useCreateConvenio();
-  const { products } = useProductsQuery();
+  const { products, reload: reloadProducts } = useProductsQuery();
   const { stockEntries, setStockEntries } = useStockEntriesQuery();
   const { createStockEntry, saving: savingStockEntry } = useCreateStockEntry();
 
@@ -766,6 +787,8 @@ export function CadastroPage() {
   const [showFinanceDocumentManager, setShowFinanceDocumentManager] = useState(false);
   const [editingFinanceDocumentType, setEditingFinanceDocumentType] = useState<string | null>(null);
   const [financeAccountDraft, setFinanceAccountDraft] = useState('');
+  const [showFinanceAccountManager, setShowFinanceAccountManager] = useState(false);
+  const [editingFinanceAccountId, setEditingFinanceAccountId] = useState<string | null>(null);
   const [financeDocumentTypeCatalog, setFinanceDocumentTypeCatalog] = useState<FinanceDocumentTypeCatalog>({
     DESPESAS: [...defaultFinanceDocumentTypesByTab.DESPESAS],
     RECEITA: [...defaultFinanceDocumentTypesByTab.RECEITA],
@@ -830,6 +853,12 @@ export function CadastroPage() {
   const [stockEntryReceivedAt, setStockEntryReceivedAt] = useState('');
   const [stockEntryNotes, setStockEntryNotes] = useState('');
   const [stockEntryImportedItems, setStockEntryImportedItems] = useState<ImportedStockEntryItem[]>([]);
+  const [showNfeProductRegistration, setShowNfeProductRegistration] = useState(false);
+  const [stockNotePeriodStart, setStockNotePeriodStart] = useState('');
+  const [stockNotePeriodEnd, setStockNotePeriodEnd] = useState('');
+  const [stockNoteSupplierFilter, setStockNoteSupplierFilter] = useState('');
+  const [stockNoteBarcodeFilter, setStockNoteBarcodeFilter] = useState('');
+  const [viewingStockNoteKey, setViewingStockNoteKey] = useState<string | null>(null);
   const stockEntryXmlInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -1232,7 +1261,11 @@ export function CadastroPage() {
     setFinanceAccountName('');
     setFinanceDocumentRef('');
     setFinanceDocumentTypeDraft('');
+    setShowFinanceDocumentManager(false);
+    setEditingFinanceDocumentType(null);
     setFinanceAccountDraft('');
+    setShowFinanceAccountManager(false);
+    setEditingFinanceAccountId(null);
     setFinanceStatus(targetTab === 'DESPESAS' ? 'ABERTO' : 'RECEBIDO');
     setFinanceNotes('');
   };
@@ -1292,6 +1325,49 @@ export function CadastroPage() {
     setStockEntryImportedItems((prev) =>
       prev.map((item, index) => (index === itemIndex ? { ...item, ...patch } : item))
     );
+  };
+
+  const openProductRegistrationFromNfe = (item: ImportedStockEntryItem) => {
+    const draft: NfeProductDraft = {
+      sourceItemId: item.id,
+      xmlProductCode: item.xmlProductCode,
+      name: item.productName,
+      barcode: item.barcode,
+      unit: item.unit,
+      unitCost: item.unitCost,
+      ncm: item.ncm,
+      cfop: item.cfop,
+      origin: item.origin,
+      cstOrCsosn: item.cstOrCsosn,
+      aliqIcms: item.aliqIcms,
+      cstPis: item.cstPis,
+      aliqPis: item.aliqPis,
+      cstCofins: item.cstCofins,
+      aliqCofins: item.aliqCofins
+    };
+
+    writeNfeProductDraft(draft);
+    setShowNfeProductRegistration(true);
+    setStockEntryFormError(`Complete e salve o cadastro do produto "${item.productName}" para continuar a nota.`);
+  };
+
+  const onNfeProductSaved = (result: NfeProductDraftResult) => {
+    void reloadProducts().then(() => {
+      setStockEntryImportedItems((current) => current.map((item) => (
+        item.id === result.sourceItemId
+          ? { ...item, productId: result.productId, productName: result.productName }
+          : item
+      )));
+      clearNfeProductDraftResult();
+      setShowNfeProductRegistration(false);
+      setStockEntryFormError(null);
+    });
+  };
+
+  const closeNfeProductRegistration = () => {
+    clearNfeProductDraft();
+    clearNfeProductDraftResult();
+    setShowNfeProductRegistration(false);
   };
 
   const filteredStockEntrySuppliers = useMemo(() => {
@@ -1355,10 +1431,28 @@ export function CadastroPage() {
         const productName = findFirstXmlText(detElement, 'xProd');
         const quantity = findFirstXmlText(detElement, 'qCom');
         const unitCost = findFirstXmlText(detElement, 'vUnCom');
+        const barcode = findFirstXmlText(detElement, 'cEAN') || findFirstXmlText(detElement, 'cEANTrib');
+        const unit = findFirstXmlText(detElement, 'uCom');
+        const ncm = findFirstXmlText(detElement, 'NCM');
+        const cfop = findFirstXmlText(detElement, 'CFOP');
+        const icmsElement = getXmlElementsByLocalName(detElement, 'ICMS')[0];
+        const pisElement = getXmlElementsByLocalName(detElement, 'PIS')[0];
+        const cofinsElement = getXmlElementsByLocalName(detElement, 'COFINS')[0];
+        const origin = icmsElement ? findFirstXmlText(icmsElement, 'orig') : '';
+        const cstOrCsosn = icmsElement
+          ? findFirstXmlText(icmsElement, 'CSOSN') || findFirstXmlText(icmsElement, 'CST')
+          : '';
+        const aliqIcms = icmsElement ? findFirstXmlText(icmsElement, 'pICMS') : '';
+        const cstPis = pisElement ? findFirstXmlText(pisElement, 'CST') : '';
+        const aliqPis = pisElement ? findFirstXmlText(pisElement, 'pPIS') : '';
+        const cstCofins = cofinsElement ? findFirstXmlText(cofinsElement, 'CST') : '';
+        const aliqCofins = cofinsElement ? findFirstXmlText(cofinsElement, 'pCOFINS') : '';
         const matchedProduct = products.find((product) => {
           const normalizedProductName = normalizeXmlValue(product.name);
           const normalizedImportedProduct = normalizeXmlValue(productName);
           return (
+            Boolean(productCode && product.productCode === productCode) ||
+            Boolean(barcode && barcode !== 'SEM GTIN' && product.barcode === barcode) ||
             normalizedProductName === normalizedImportedProduct ||
             normalizedProductName.includes(normalizedImportedProduct) ||
             normalizedImportedProduct.includes(normalizedProductName)
@@ -1370,8 +1464,19 @@ export function CadastroPage() {
           productId: matchedProduct?.id ?? '',
           productName,
           quantity,
-          unitCost,
-          xmlProductCode: productCode
+          unitCost: formatXmlDecimalForInput(unitCost),
+          xmlProductCode: productCode,
+          barcode: barcode === 'SEM GTIN' ? '' : barcode,
+          unit,
+          ncm,
+          cfop,
+          origin,
+          cstOrCsosn,
+          aliqIcms,
+          cstPis,
+          aliqPis,
+          cstCofins,
+          aliqCofins
         } satisfies ImportedStockEntryItem;
       });
 
@@ -1385,17 +1490,17 @@ export function CadastroPage() {
       setStockEntryIssueDate(importedIssueDate ? parseXmlDate(importedIssueDate) : '');
       setStockEntryDeliveryDate(importedDeliveryDate ? parseXmlDate(importedDeliveryDate) : '');
       setStockEntryReceivedAt(importedDeliveryDate ? parseXmlDate(importedDeliveryDate) : importedIssueDate ? parseXmlDate(importedIssueDate) : '');
-      setStockEntryIcmsBase(importedTotalBase);
-      setStockEntryIcmsValue(importedTotalIcms);
-      setStockEntryIcmsSubstitutionBase(importedTotalIcmsStBase);
-      setStockEntryIcmsSubstitutionValue(importedTotalIcmsStValue);
-      setStockEntryProductsValue(importedTotalProducts);
-      setStockEntryFreightValue(importedTotalFreight);
-      setStockEntryInsuranceValue(importedTotalInsurance);
-      setStockEntryDiscountValue(importedTotalDiscount);
-      setStockEntryAdditionalExpensesValue(importedTotalAdditional);
-      setStockEntryIpiValue(importedTotalIpi);
-      setStockEntryTotalInvoiceValue(importedInvoiceTotal);
+      setStockEntryIcmsBase(formatXmlDecimalForInput(importedTotalBase));
+      setStockEntryIcmsValue(formatXmlDecimalForInput(importedTotalIcms));
+      setStockEntryIcmsSubstitutionBase(formatXmlDecimalForInput(importedTotalIcmsStBase));
+      setStockEntryIcmsSubstitutionValue(formatXmlDecimalForInput(importedTotalIcmsStValue));
+      setStockEntryProductsValue(formatXmlDecimalForInput(importedTotalProducts));
+      setStockEntryFreightValue(formatXmlDecimalForInput(importedTotalFreight));
+      setStockEntryInsuranceValue(formatXmlDecimalForInput(importedTotalInsurance));
+      setStockEntryDiscountValue(formatXmlDecimalForInput(importedTotalDiscount));
+      setStockEntryAdditionalExpensesValue(formatXmlDecimalForInput(importedTotalAdditional));
+      setStockEntryIpiValue(formatXmlDecimalForInput(importedTotalIpi));
+      setStockEntryTotalInvoiceValue(formatXmlDecimalForInput(importedInvoiceTotal));
       setStockEntryDocumentModel(importedDocumentModel);
       setStockEntryPaymentCondition(importedPaymentCondition);
       setStockEntryPurchaseOrder(importedPurchaseOrder);
@@ -1768,29 +1873,33 @@ export function CadastroPage() {
       .slice(0, 12);
   }, [activeFinanceTab, financePersonOptions, financeSupplierName]);
 
-  const financeAccountOptions = useMemo(() => {
-    const suggestions = convenios.flatMap((convenio) => {
+  const financeAccountRecords = useMemo(() => {
+    const records = convenios.flatMap((convenio) => {
       const bankName = convenio.bankName?.trim();
       const accountName = convenio.accountName?.trim();
       const convenioName = convenio.name?.trim();
       const combinedAccount = [bankName, accountName].filter(Boolean).join(' - ');
+      const label = combinedAccount || bankName || accountName || convenioName;
 
-      return [combinedAccount, bankName, accountName, convenioName]
-        .filter((label): label is string => Boolean(label?.trim()));
+      return label ? [{ id: convenio.id, label, convenio }] : [];
     });
 
-    const uniqueSuggestions = suggestions.reduce<string[]>((accumulator, label) => {
+    return records.reduce<typeof records>((accumulator, record) => {
       const alreadyExists = accumulator.some(
-        (item) => normalizeSearchText(item) === normalizeSearchText(label)
+        (item) => normalizeSearchText(item.label) === normalizeSearchText(record.label)
       );
 
-      return alreadyExists ? accumulator : [...accumulator, label];
+      return alreadyExists ? accumulator : [...accumulator, record];
     }, []);
+  }, [convenios]);
 
-    return financeAccountName && !uniqueSuggestions.includes(financeAccountName)
-      ? [financeAccountName, ...uniqueSuggestions]
-      : uniqueSuggestions;
-  }, [convenios, financeAccountName]);
+  const financeAccountOptions = useMemo(() => {
+    const suggestions = financeAccountRecords.map((record) => record.label);
+
+    return financeAccountName && !suggestions.includes(financeAccountName)
+      ? [financeAccountName, ...suggestions]
+      : suggestions;
+  }, [financeAccountName, financeAccountRecords]);
 
   useEffect(() => {
     if (!financeAccountOptions.length) {
@@ -1895,14 +2004,66 @@ export function CadastroPage() {
     }
   };
 
-  const stockEntryRows = useMemo(
-    () =>
-      [...stockEntries].sort((a, b) => {
-        const aCode = Number(a.stockEntryCode ?? parseLegacyStockEntryCode(`${a.productName} - ${a.invoiceNumber}`) ?? '0');
-        const bCode = Number(b.stockEntryCode ?? parseLegacyStockEntryCode(`${b.productName} - ${b.invoiceNumber}`) ?? '0');
-        return aCode - bCode;
-      }),
-    [stockEntries]
+  const stockEntryNoteRows = useMemo(() => {
+    const notesByKey = new Map<string, typeof stockEntries>();
+
+    for (const entry of stockEntries) {
+      const noteKey = entry.accessKey.trim() || [entry.invoiceNumber, entry.series, entry.supplierName, entry.noteCode].join('|');
+      notesByKey.set(noteKey, [...(notesByKey.get(noteKey) ?? []), entry]);
+    }
+
+    return Array.from(notesByKey.entries())
+      .map(([key, entries]) => {
+        const firstEntry = entries[0];
+        const entryCode = firstEntry.stockEntryCode
+          ?? parseLegacyStockEntryCode(`${firstEntry.productName} - ${firstEntry.invoiceNumber}`)
+          ?? '--';
+        const invoiceValue = firstEntry.invoiceTotalValue > 0
+          ? firstEntry.invoiceTotalValue
+          : entries.reduce((total, entry) => total + entry.totalCost, 0);
+
+        return {
+          key,
+          entryIds: entries.map((entry) => entry.id),
+          entryCode: entryCode.replace(/-\d+$/, ''),
+          invoiceNumber: firstEntry.invoiceNumber,
+          series: firstEntry.series,
+          purchaseOrder: firstEntry.purchaseOrder || '0000',
+          issueDate: firstEntry.issueDate instanceof Date ? firstEntry.issueDate : new Date(firstEntry.issueDate),
+          supplierName: firstEntry.supplierName || '-',
+          invoiceValue,
+          accessKey: firstEntry.accessKey,
+          authorizationProtocol: firstEntry.authorizationProtocol,
+          itemCount: entries.length,
+          entries,
+          barcodes: entries
+            .map((entry) => products.find((product) => product.id === entry.productId)?.barcode ?? '')
+            .filter(Boolean),
+          reversed: entries.every((entry) => Boolean(entry.reversedAt)),
+          reversedAt: entries.find((entry) => entry.reversedAt)?.reversedAt
+        };
+      })
+      .sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime());
+  }, [products, stockEntries]);
+
+  const filteredStockEntryNoteRows = useMemo(() => {
+    const supplierFilter = normalizeSearchText(stockNoteSupplierFilter).trim();
+    const barcodeFilter = stockNoteBarcodeFilter.replace(/\D/g, '');
+    const startDate = stockNotePeriodStart ? new Date(`${stockNotePeriodStart}T00:00:00`) : null;
+    const endDate = stockNotePeriodEnd ? new Date(`${stockNotePeriodEnd}T23:59:59`) : null;
+
+    return stockEntryNoteRows.filter((note) => {
+      if (startDate && note.issueDate < startDate) return false;
+      if (endDate && note.issueDate > endDate) return false;
+      if (supplierFilter && !normalizeSearchText(note.supplierName).includes(supplierFilter)) return false;
+      if (barcodeFilter && !note.barcodes.some((barcode) => barcode.replace(/\D/g, '').includes(barcodeFilter))) return false;
+      return true;
+    });
+  }, [stockEntryNoteRows, stockNoteBarcodeFilter, stockNotePeriodEnd, stockNotePeriodStart, stockNoteSupplierFilter]);
+
+  const viewingStockNote = useMemo(
+    () => stockEntryNoteRows.find((note) => note.key === viewingStockNoteKey) ?? null,
+    [stockEntryNoteRows, viewingStockNoteKey]
   );
 
   const filteredClientConsumptionHistory = useMemo(() => {
@@ -2158,19 +2319,52 @@ export function CadastroPage() {
     setFinanceFormError(null);
   };
 
-  const onAddFinanceAccountOption = async () => {
+  const onSaveFinanceAccountOption = async () => {
     const accountName = financeAccountDraft.trim();
     if (!accountName) {
       setFinanceFormError('Informe a conta corrente antes de adicionar.');
       return;
     }
 
-    const existingOption = financeAccountOptions.find(
-      (option) => normalizeSearchText(option) === normalizeSearchText(accountName)
+    const existingRecord = financeAccountRecords.find(
+      (record) =>
+        normalizeSearchText(record.label) === normalizeSearchText(accountName)
+        && record.id !== editingFinanceAccountId
     );
 
-    if (existingOption) {
-      setFinanceAccountName(existingOption);
+    if (existingRecord) {
+      setFinanceFormError('Conta corrente já cadastrada.');
+      return;
+    }
+
+    if (editingFinanceAccountId) {
+      const existingAccount = convenios.find((convenio) => convenio.id === editingFinanceAccountId);
+      const currentRecord = financeAccountRecords.find((record) => record.id === editingFinanceAccountId);
+
+      if (!existingAccount || !currentRecord) {
+        setFinanceFormError('A conta corrente selecionada não foi encontrada.');
+        return;
+      }
+
+      const updatedAccount = {
+        ...existingAccount,
+        name: accountName,
+        bankName: accountName,
+        accountName: '',
+        updatedAt: new Date(),
+        version: existingAccount.version + 1
+      };
+
+      await conveniosContainer.convenioRepository.save(updatedAccount);
+      setConvenios((current) => current.map((convenio) => (
+        convenio.id === editingFinanceAccountId ? updatedAccount : convenio
+      )));
+
+      if (financeAccountName === currentRecord.label) {
+        setFinanceAccountName(accountName);
+      }
+
+      setEditingFinanceAccountId(null);
       setFinanceAccountDraft('');
       setFinanceFormError(null);
       return;
@@ -2193,6 +2387,44 @@ export function CadastroPage() {
     setConvenios((prev) => [...prev, convenio]);
     setFinanceAccountName(accountName);
     setFinanceAccountDraft('');
+    setFinanceFormError(null);
+  };
+
+  const onEditFinanceAccountOption = (accountId: string) => {
+    const account = financeAccountRecords.find((record) => record.id === accountId);
+    if (!account) {
+      return;
+    }
+
+    setEditingFinanceAccountId(accountId);
+    setFinanceAccountDraft(account.label);
+    setShowFinanceAccountManager(true);
+    setFinanceFormError(null);
+  };
+
+  const onDeleteFinanceAccountOption = async (accountId: string) => {
+    const account = financeAccountRecords.find((record) => record.id === accountId);
+    if (!account) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja excluir a conta corrente "${account.label}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await conveniosContainer.convenioRepository.delete(accountId);
+    setConvenios((current) => current.filter((convenio) => convenio.id !== accountId));
+
+    if (financeAccountName === account.label) {
+      setFinanceAccountName('');
+    }
+
+    if (editingFinanceAccountId === accountId) {
+      setEditingFinanceAccountId(null);
+      setFinanceAccountDraft('');
+    }
+
     setFinanceFormError(null);
   };
 
@@ -2683,9 +2915,43 @@ export function CadastroPage() {
             productName: '',
             quantity: stockEntryQuantity,
             unitCost: stockEntryUnitCost,
-            xmlProductCode: ''
+            xmlProductCode: '',
+            barcode: '',
+            unit: '',
+            ncm: '',
+            cfop: '',
+            origin: '',
+            cstOrCsosn: '',
+            aliqIcms: '',
+            cstPis: '',
+            aliqPis: '',
+            cstCofins: '',
+            aliqCofins: ''
           }
         ];
+
+    if (!isFilled(stockEntrySupplierName) || !isFilled(stockEntryInvoiceNumber)) {
+      setStockEntryFormError('Preencha o fornecedor e o número da nota antes de salvar.');
+      return;
+    }
+
+    for (let index = 0; index < importedItems.length; index += 1) {
+      const item = importedItems[index];
+      const selectedProduct = products.find((candidate) => candidate.id === item.productId);
+
+      if (!selectedProduct) {
+        setStockEntryFormError(`O produto da linha ${index + 1} não está cadastrado. Complete o cadastro aberto na nova aba.`);
+        openProductRegistrationFromNfe(item);
+        return;
+      }
+
+      const quantity = Number(item.quantity.replace(',', '.'));
+      const unitCost = parseCurrencyInput(item.unitCost);
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost <= 0) {
+        setStockEntryFormError(`Informe quantidade e custo unitário válidos na linha ${index + 1}.`);
+        return;
+      }
+    }
 
     const createdEntries = [] as Awaited<ReturnType<typeof createStockEntry>>[];
 
@@ -2727,29 +2993,72 @@ export function CadastroPage() {
     setShowCadastroSpan(false);
   };
 
-  const onDeleteStockEntry = async (stockEntryId: string) => {
-    const target = stockEntries.find((entry) => entry.id === stockEntryId);
-    if (!target) {
+  const onReverseStockEntryNote = async (entryIds: string[], invoiceNumber: string) => {
+    const targets = stockEntries.filter((entry) => entryIds.includes(entry.id));
+    if (!targets.length) {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja excluir a entrada de mercadoria "${target.invoiceNumber}"?`);
+    if (targets.every((entry) => entry.reversedAt)) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja estornar a nota fiscal "${invoiceNumber}" e retirar todos os seus itens do estoque?`);
     if (!confirmed) {
       return;
     }
 
-    const product = await productsContainer.productRepository.findById(target.productId);
-    if (product) {
-      await productsContainer.productRepository.save({
-        ...product,
-        stock: Math.max(0, product.stock - target.quantity),
-        updatedAt: new Date(),
-        version: product.version + 1
+    const reversedAt = new Date();
+    for (const target of targets) {
+      if (target.reversedAt) {
+        continue;
+      }
+
+      const product = await productsContainer.productRepository.findById(target.productId);
+      if (product) {
+        await productsContainer.productRepository.save({
+          ...product,
+          stock: Math.max(0, product.stock - target.quantity),
+          updatedAt: new Date(),
+          version: product.version + 1
+        });
+      }
+
+      await stockEntriesContainer.stockEntryRepository.save({
+        ...target,
+        reversedAt,
+        updatedAt: reversedAt,
+        version: target.version + 1
       });
     }
 
-    await stockEntriesContainer.stockEntryRepository.delete(stockEntryId);
-    setStockEntries((prev) => prev.filter((entry) => entry.id !== stockEntryId));
+    const reversedIds = new Set(targets.filter((target) => !target.reversedAt).map((target) => target.id));
+    setStockEntries((current) => current.map((entry) => (
+      reversedIds.has(entry.id)
+        ? { ...entry, reversedAt, updatedAt: reversedAt, version: entry.version + 1 }
+        : entry
+    )));
+  };
+
+  const onDeleteStockEntryNote = async (entryIds: string[], invoiceNumber: string) => {
+    const targets = stockEntries.filter((entry) => entryIds.includes(entry.id));
+    if (!targets.length || !targets.every((entry) => entry.reversedAt)) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Deseja excluir definitivamente a nota fiscal estornada "${invoiceNumber}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await Promise.all(targets.map((target) => stockEntriesContainer.stockEntryRepository.delete(target.id)));
+    const deletedIds = new Set(entryIds);
+    setStockEntries((current) => current.filter((entry) => !deletedIds.has(entry.id)));
+    if (viewingStockNoteKey && targets.some((target) => (
+      target.accessKey.trim() || [target.invoiceNumber, target.series, target.supplierName, target.noteCode].join('|')
+    ) === viewingStockNoteKey)) {
+      setViewingStockNoteKey(null);
+    }
   };
 
   const onSubmitSupplier = async (event: FormEvent) => {
@@ -4774,9 +5083,12 @@ export function CadastroPage() {
                     <button
                       type="button"
                       className="products-supplier-picker-button"
-                      onClick={() => void onAddFinanceAccountOption()}
-                      title="Cadastrar conta corrente"
-                      aria-label="Cadastrar conta corrente"
+                      onClick={() => {
+                        setShowFinanceAccountManager(true);
+                        setFinanceFormError(null);
+                      }}
+                      title="Gerenciar conta corrente"
+                      aria-label="Gerenciar conta corrente"
                       disabled={isEditingFinanceEntryLocked}
                     >
                       +
@@ -4922,6 +5234,103 @@ export function CadastroPage() {
 
             {financeFormError && <p className="products-form-warning">{financeFormError}</p>}
           </form>
+          {showFinanceAccountManager && (
+            <div className="finance-document-manager-overlay" role="dialog" aria-modal="true" aria-labelledby="finance-account-manager-title">
+              <section className="finance-document-manager-span">
+                <header className="finance-document-manager-header">
+                  <div>
+                    <p className="products-eyebrow">Financeiro</p>
+                    <h4 id="finance-account-manager-title">
+                      {activeFinanceTab === 'DESPESAS'
+                        ? 'Conta corrente de saída'
+                        : activeFinanceTab === 'RECEITA'
+                          ? 'Conta corrente de entrada'
+                          : 'Conta corrente'}
+                    </h4>
+                    <span>{activeFinanceTab === 'DESPESAS' ? 'Despesa' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta corrente'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="finance-document-manager-close"
+                    aria-label="Fechar gerenciador de conta corrente"
+                    onClick={() => {
+                      setShowFinanceAccountManager(false);
+                      setEditingFinanceAccountId(null);
+                      setFinanceAccountDraft('');
+                    }}
+                  >
+                    ×
+                  </button>
+                </header>
+
+                <div className="finance-document-manager">
+                  <div className="finance-document-manager-editor">
+                    <label htmlFor="finance-account-manager-draft">
+                      {editingFinanceAccountId ? 'Editando conta corrente' : 'Nova conta corrente'}
+                    </label>
+                    <input
+                      id="finance-account-manager-draft"
+                      value={financeAccountDraft}
+                      onChange={(event) => {
+                        setFinanceAccountDraft(event.target.value);
+                        setFinanceFormError(null);
+                      }}
+                      placeholder="Ex.: Banco, caixa ou operadora"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="finance-document-manager-actions">
+                    <button type="button" onClick={() => void onSaveFinanceAccountOption()}>
+                      {editingFinanceAccountId ? 'Salvar edição' : 'Criar'}
+                    </button>
+                    {editingFinanceAccountId && (
+                      <button
+                        type="button"
+                        className="button-muted"
+                        onClick={() => {
+                          setEditingFinanceAccountId(null);
+                          setFinanceAccountDraft('');
+                        }}
+                      >
+                        Cancelar edição
+                      </button>
+                    )}
+                  </div>
+                  {financeFormError && <p className="products-form-warning">{financeFormError}</p>}
+                  <ul className="finance-document-manager-list">
+                    {financeAccountRecords.map((account) => (
+                      <li key={account.id}>
+                        <span>{account.label}</span>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onEditFinanceAccountOption(account.id);
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="button-danger"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void onDeleteFinanceAccountOption(account.id);
+                            }}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            </div>
+          )}
           {showFinanceDocumentManager && (
             <div className="finance-document-manager-overlay" role="dialog" aria-modal="true" aria-labelledby="finance-document-manager-title">
               <section className="finance-document-manager-span">
@@ -5502,7 +5911,22 @@ export function CadastroPage() {
                           <span>Item {index + 1}</span>
                           <strong>{currencyFormatter.format(itemTotal)}</strong>
                           <small>{selectedProduct ? selectedProduct.name : 'Produto não vinculado'}</small>
-                          {item.xmlProductCode && <small>XML {item.xmlProductCode}</small>}
+                          {item.xmlProductCode && <small>XML {item.xmlProductCode}{item.unit ? ` | ${item.unit}` : ''}</small>}
+                          {selectedProduct && (selectedProduct.unitsPerPurchase ?? 1) > 1 && (
+                            <small>
+                              1 {selectedProduct.purchaseUnit ?? item.unit} = {selectedProduct.unitsPerPurchase} {selectedProduct.saleUnit ?? 'UN'}
+                              {' | '}entrada {quantityValue * (selectedProduct.unitsPerPurchase ?? 1)} {selectedProduct.saleUnit ?? 'UN'}
+                            </small>
+                          )}
+                          {!selectedProduct && (
+                            <button
+                              type="button"
+                              className="products-secondary-button"
+                              onClick={() => openProductRegistrationFromNfe(item)}
+                            >
+                              Cadastrar produto
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -5532,40 +5956,134 @@ export function CadastroPage() {
         </article>
       )}
 
+      {showNfeProductRegistration && (
+        <div className="nfe-product-registration-overlay" role="dialog" aria-modal="true" aria-labelledby="nfe-product-registration-title">
+          <section className="nfe-product-registration-modal">
+            <header className="nfe-product-registration-header">
+              <div>
+                <p className="products-eyebrow">Entrada de estoque</p>
+                <h3 id="nfe-product-registration-title">Cadastrar produto da NF-e</h3>
+                <span>A nota continuará aberta enquanto você completa o produto.</span>
+              </div>
+              <button
+                type="button"
+                className="finance-document-manager-close"
+                aria-label="Fechar cadastro de produto"
+                onClick={closeNfeProductRegistration}
+              >
+                ×
+              </button>
+            </header>
+            <div className="nfe-product-registration-content">
+              <ProductsPage onNfeProductSaved={onNfeProductSaved} />
+            </div>
+          </section>
+        </div>
+      )}
+
       {activeTab === 'ESTOQUE' && (
         <article className="card products-list-card">
           <h3>Entradas de mercadorias</h3>
 
-          {stockEntryRows.length === 0 ? (
+          <div className="stock-notes-filter-bar">
+            <label>
+              <span>Período:</span>
+              <input type="date" value={stockNotePeriodStart} onChange={(event) => setStockNotePeriodStart(event.target.value)} />
+            </label>
+            <span>até</span>
+            <label>
+              <input type="date" value={stockNotePeriodEnd} onChange={(event) => setStockNotePeriodEnd(event.target.value)} aria-label="Fim do período" />
+            </label>
+            <label className="stock-notes-filter-grow">
+              <span>Fornecedor:</span>
+              <input
+                value={stockNoteSupplierFilter}
+                onChange={(event) => setStockNoteSupplierFilter(event.target.value)}
+                placeholder="Nome do fornecedor"
+                list="stock-note-suppliers"
+              />
+            </label>
+            <datalist id="stock-note-suppliers">
+              {Array.from(new Set(stockEntryNoteRows.map((note) => note.supplierName))).map((supplierName) => (
+                <option value={supplierName} key={supplierName} />
+              ))}
+            </datalist>
+            <label>
+              <span>Código de barras:</span>
+              <input
+                value={stockNoteBarcodeFilter}
+                onChange={(event) => setStockNoteBarcodeFilter(event.target.value)}
+                inputMode="numeric"
+                placeholder="EAN do produto"
+              />
+            </label>
+            <button
+              type="button"
+              className="button-muted"
+              onClick={() => {
+                setStockNotePeriodStart('');
+                setStockNotePeriodEnd('');
+                setStockNoteSupplierFilter('');
+                setStockNoteBarcodeFilter('');
+              }}
+            >
+              Limpar
+            </button>
+          </div>
+
+          {stockEntryNoteRows.length === 0 ? (
             <p className="empty-state">Nenhuma entrada de mercadoria lancada ainda.</p>
+          ) : filteredStockEntryNoteRows.length === 0 ? (
+            <p className="empty-state">Nenhuma nota encontrada para os filtros informados.</p>
           ) : (
-            <ul className="products-list suppliers-list">
-              {stockEntryRows.map((entry) => (
-                <li key={entry.id}>
+            <ul className="products-list suppliers-list stock-notes-list">
+              {filteredStockEntryNoteRows.map((note) => (
+                <li key={note.key}>
                   <div>
                     <strong>
-                      <span className="products-id-tag">ID {entry.stockEntryCode ?? parseLegacyStockEntryCode(`${entry.productName} - ${entry.invoiceNumber}`) ?? '--'}</span>{' '}
-                      {entry.productName}
+                      <span className="products-id-tag">ID {note.entryCode}</span>{' '}
+                      Nota fiscal {note.invoiceNumber}{note.series ? ` / Série ${note.series}` : ''}
                     </strong>
                     <span>
-                      NF {entry.invoiceNumber} | Fornecedor: {entry.supplierName || '-'}
+                      Fornecedor: {note.supplierName} | Emissão: {Number.isNaN(note.issueDate.getTime()) ? '-' : note.issueDate.toLocaleDateString('pt-BR')}
                     </span>
                     <span>
-                      Quantidade: {entry.quantity} | Custo unitario: {currencyFormatter.format(entry.unitCost)} | Total: {currencyFormatter.format(entry.totalCost)}
+                      Ordem de compra: {note.purchaseOrder} | Valor da nota: {currencyFormatter.format(note.invoiceValue)}
+                      {' | '}Situação: {note.reversed ? 'Estornado' : 'Processado'} | {note.itemCount} {note.itemCount === 1 ? 'item' : 'itens'}
                     </span>
-                    <span>Recebimento: {entry.receivedAt instanceof Date ? entry.receivedAt.toLocaleString('pt-BR') : new Date(entry.receivedAt).toLocaleString('pt-BR')}</span>
-                    <span>{entry.notes || 'Sem observações'}</span>
+                    <span>Chave NF-e: {note.accessKey || '-'}</span>
+                    <span>Protocolo: {note.authorizationProtocol || '-'}</span>
                   </div>
                   <div>
-                    <span>Produto vinculado e estoque ajustado automaticamente.</span>
+                    <span className={note.reversed ? 'stock-note-reversed' : 'stock-note-processed'}>
+                      {note.reversed ? 'Estornado' : 'Processado'}
+                    </span>
                     <div className="products-row-actions">
                       <button
                         type="button"
+                        className="button-muted"
+                        onClick={() => setViewingStockNoteKey(note.key)}
+                      >
+                        Visualizar
+                      </button>
+                      {!note.reversed && (
+                        <button
+                          type="button"
+                          className="button-muted"
+                          onClick={() => void onReverseStockEntryNote(note.entryIds, note.invoiceNumber)}
+                        >
+                          Estornar
+                        </button>
+                      )}
+                      {note.reversed && (
+                      <button
+                        type="button"
                         className="products-delete-button"
-                        onClick={() => void onDeleteStockEntry(entry.id)}
+                        onClick={() => void onDeleteStockEntryNote(note.entryIds, note.invoiceNumber)}
                       >
                         Excluir
                       </button>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -5573,6 +6091,78 @@ export function CadastroPage() {
             </ul>
           )}
         </article>
+      )}
+
+      {viewingStockNote && (
+        <div className="finance-document-manager-overlay" role="dialog" aria-modal="true" aria-labelledby="stock-note-view-title">
+          <section className="stock-note-view-modal">
+            <header className="finance-document-manager-header">
+              <div>
+                <p className="products-eyebrow">Entrada de mercadorias</p>
+                <h4 id="stock-note-view-title">NF-e {viewingStockNote.invoiceNumber}</h4>
+                <span className={viewingStockNote.reversed ? 'stock-note-reversed' : 'stock-note-processed'}>
+                  {viewingStockNote.reversed ? 'Estornado' : 'Processado'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="finance-document-manager-close"
+                aria-label="Fechar visualização da nota"
+                onClick={() => setViewingStockNoteKey(null)}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="stock-note-view-content">
+              <div className="stock-note-view-summary">
+                <span><b>ID:</b> {viewingStockNote.entryCode}</span>
+                <span><b>Série:</b> {viewingStockNote.series || '-'}</span>
+                <span><b>Emissão:</b> {Number.isNaN(viewingStockNote.issueDate.getTime()) ? '-' : viewingStockNote.issueDate.toLocaleDateString('pt-BR')}</span>
+                <span><b>Fornecedor:</b> {viewingStockNote.supplierName}</span>
+                <span><b>Ordem de compra:</b> {viewingStockNote.purchaseOrder}</span>
+                <span><b>Valor:</b> {currencyFormatter.format(viewingStockNote.invoiceValue)}</span>
+                <span className="stock-note-view-wide"><b>Chave NF-e:</b> {viewingStockNote.accessKey || '-'}</span>
+                <span className="stock-note-view-wide"><b>Protocolo:</b> {viewingStockNote.authorizationProtocol || '-'}</span>
+              </div>
+
+              <div className="stock-note-items-table">
+                <div className="stock-note-items-head">
+                  <span>Produto</span><span>Compra</span><span>Estoque</span><span>Custo</span><span>Total</span>
+                </div>
+                {viewingStockNote.entries.map((entry) => (
+                  <div className="stock-note-items-row" key={entry.id}>
+                    <span>{entry.productName}</span>
+                    <span>{entry.purchaseQuantity ?? entry.quantity} {entry.purchaseUnit ?? 'UN'}</span>
+                    <span>{entry.quantity} {entry.saleUnit ?? 'UN'}</span>
+                    <span>{currencyFormatter.format(entry.unitCost)}</span>
+                    <span>{currencyFormatter.format(entry.totalCost)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="products-row-actions stock-note-view-actions">
+                {!viewingStockNote.reversed ? (
+                  <button
+                    type="button"
+                    className="button-muted"
+                    onClick={() => void onReverseStockEntryNote(viewingStockNote.entryIds, viewingStockNote.invoiceNumber)}
+                  >
+                    Estornar nota
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="products-delete-button"
+                    onClick={() => void onDeleteStockEntryNote(viewingStockNote.entryIds, viewingStockNote.invoiceNumber)}
+                  >
+                    Excluir nota
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
       )}
 
       {activeTab === 'FORNECEDORES' && (

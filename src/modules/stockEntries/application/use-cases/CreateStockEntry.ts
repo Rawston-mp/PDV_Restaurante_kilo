@@ -18,10 +18,20 @@ export class CreateStockEntry {
     }
 
     const now = new Date();
+    const conversionFactor = product.unitsPerPurchase && product.unitsPerPurchase > 0
+      ? product.unitsPerPurchase
+      : 1;
+    const convertedQuantity = input.quantity * conversionFactor;
+    const convertedUnitCost = input.unitCost / conversionFactor;
+    const updatedMarginProfit = convertedUnitCost > 0 && product.price > 0
+      ? Number((((product.price - convertedUnitCost) / convertedUnitCost) * 100).toFixed(2))
+      : 0;
     const updatedProduct = {
       ...product,
-      stock: calculateNewStock(product.stock, input.quantity),
-      costValue: input.unitCost,
+      stock: calculateNewStock(product.stock, convertedQuantity),
+      purchaseCostValue: input.unitCost,
+      costValue: convertedUnitCost,
+      marginProfit: updatedMarginProfit,
       version: product.version + 1,
       updatedAt: now
     };
@@ -56,8 +66,13 @@ export class CreateStockEntry {
       stockLocation: input.stockLocation,
       purchaseOrder: input.purchaseOrder,
       freightByAccount: input.freightByAccount,
-      quantity: input.quantity,
-      unitCost: input.unitCost,
+      purchaseQuantity: input.quantity,
+      purchaseUnit: product.purchaseUnit ?? 'UN',
+      saleUnit: product.saleUnit ?? product.purchaseUnit ?? 'UN',
+      conversionFactor,
+      purchaseUnitCost: input.unitCost,
+      quantity: convertedQuantity,
+      unitCost: convertedUnitCost,
       totalCost: input.quantity * input.unitCost,
       notes: input.notes,
       receivedAt: input.receivedAt,
