@@ -12,7 +12,21 @@ import {
   readStoredProductCategories,
   sanitizeCategoryOptions
 } from '@/modules/products/domain/services/productCategories';
+import {
+  calculateSaleUnitCost,
+  inferUnitsPerPurchase,
+  isPackageUnit,
+  normalizeProductUnit,
+  productUnitOptions,
+  type ProductUnit
+} from '@/modules/products/domain/services/productUnits';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
+import {
+  clearNfeProductDraft,
+  readNfeProductDraft,
+  writeNfeProductDraftResult,
+  type NfeProductDraftResult
+} from '@/modules/products/infrastructure/local/nfeProductDraft';
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 
@@ -248,12 +262,17 @@ const compressImageToDataUrl = async (file: File): Promise<string> => {
 
 const isFilled = (value: string) => value.trim().length > 0;
 
-export function ProductsPage() {
+type ProductsPageProps = {
+  onNfeProductSaved?: (result: NfeProductDraftResult) => void;
+};
+
+export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
   const { products, setProducts, reload } = useProductsQuery();
   const { createProduct, saving } = useCreateProduct();
   const { can } = useAuth();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const nfeDraftAppliedRef = useRef(false);
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
@@ -282,6 +301,10 @@ export function ProductsPage() {
   const [salePrice, setSalePrice] = useState(0);
   const [stock, setStock] = useState(0);
   const [byWeight, setByWeight] = useState(false);
+  const [purchaseUnit, setPurchaseUnit] = useState<ProductUnit>('UN');
+  const [saleUnit, setSaleUnit] = useState<ProductUnit>('UN');
+  const [unitsPerPurchase, setUnitsPerPurchase] = useState(1);
+  const [purchaseCostValue, setPurchaseCostValue] = useState(0);
 
   const [cfop, setCfop] = useState(cfopOptions[0]);
   const [cstIcms, setCstIcms] = useState(cstIcmsOptions[0]);
@@ -292,11 +315,69 @@ export function ProductsPage() {
   const [cstCofins, setCstCofins] = useState(cstPisCofinsOptions[0]);
   const [aliqCofins, setAliqCofins] = useState('');
   const [fiscalType, setFiscalType] = useState(fiscalTypeOptions[0]);
+  const [nfeDraftSourceItemId, setNfeDraftSourceItemId] = useState<string | null>(null);
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const canEditOrDelete = can('products:manage');
   const isNewCadastro = editingProductId === null;
+
+  useEffect(() => {
+    if (!canEditOrDelete || nfeDraftAppliedRef.current) {
+      return;
+    }
+
+    const draft = readNfeProductDraft();
+    if (!draft) {
+      return;
+    }
+
+    const importedPurchaseCost = parseDecimalInput(draft.unitCost);
+    const importedPurchaseUnit = normalizeProductUnit(draft.unit);
+    const importedUnitsPerPurchase = inferUnitsPerPurchase(draft.name, importedPurchaseUnit);
+    const importedSaleUnit = isPackageUnit(importedPurchaseUnit) ? 'UN' : importedPurchaseUnit;
+    const importedSaleUnitCost = calculateSaleUnitCost(importedPurchaseCost, importedUnitsPerPurchase);
+    const importedOrigin = cstIcmsOptions.find((option) => option.startsWith(`${draft.origin} -`)) ?? cstIcmsOptions[0];
+    const importedFiscalType = ['10', '30', '60', '70', '201', '202', '203', '500'].includes(draft.cstOrCsosn)
+      ? 'Com substituicao tributaria'
+      : fiscalTypeOptions[0];
+
+    nfeDraftAppliedRef.current = true;
+    setNfeDraftSourceItemId(draft.sourceItemId);
+    setEditingProductId(null);
+    setShowCadastroSpan(true);
+    setActiveTab('PRODUTO');
+    setFormError(null);
+    setProductCode(generateRandomProductCode(getUsedProductCodes(products)));
+    setName(draft.name);
+    setDescription([
+      draft.xmlProductCode ? `Código do fornecedor: ${draft.xmlProductCode}` : '',
+      draft.unit ? `Unidade: ${draft.unit}` : ''
+    ].filter(Boolean).join(' | '));
+    setBarcode(draft.barcode);
+    setCategory(categoryOptions[0] ?? defaultProductCategories[0]);
+    setNcm(formatNcmCode(draft.ncm));
+    setNcmSearchQuery(draft.ncm);
+    setPurchaseUnit(importedPurchaseUnit);
+    setSaleUnit(importedSaleUnit);
+    setUnitsPerPurchase(importedUnitsPerPurchase);
+    setPurchaseCostValue(importedPurchaseCost);
+    setCostValue(importedSaleUnitCost);
+    setMarginProfit(0);
+    setSalePrice(importedSaleUnitCost);
+    setStock(0);
+    setByWeight(importedSaleUnit === 'KG');
+    setCfop(draft.cfop || cfopOptions[0]);
+    setCstIcms(importedOrigin);
+    setTaxSituationCode(draft.cstOrCsosn || taxSituationCodeOptions[0]);
+    setAliqIcms(draft.aliqIcms || '0');
+    setCstPis(draft.cstPis || cstPisCofinsOptions[0]);
+    setAliqPis(draft.aliqPis || '0');
+    setCstCofins(draft.cstCofins || cstPisCofinsOptions[0]);
+    setAliqCofins(draft.aliqCofins || '0');
+    setFiscalType(importedFiscalType);
+    setSyncMessage('Produto preenchido automaticamente com os dados da NF-e. Confira Produto e Fiscal antes de salvar.');
+  }, [canEditOrDelete, categoryOptions, products]);
 
   const getNumericInputValue = (value: number) => {
     if (isNewCadastro && value === 0) {
@@ -362,6 +443,10 @@ export function ProductsPage() {
     setSalePrice(0);
     setStock(0);
     setByWeight(false);
+    setPurchaseUnit('UN');
+    setSaleUnit('UN');
+    setUnitsPerPurchase(1);
+    setPurchaseCostValue(0);
     setCfop(cfopOptions[0]);
     setCstIcms(cstIcmsOptions[0]);
     setTaxSituationCode(taxSituationCodeOptions[0]);
@@ -583,6 +668,7 @@ export function ProductsPage() {
     const generatedCode = productCode && !usedCodes.has(productCode)
       ? productCode
       : generateRandomProductCode(usedCodes);
+    let savedProductId = editingProductId;
 
     if (editingProductId) {
       const existingProduct = products.find((product) => product.id === editingProductId);
@@ -612,6 +698,10 @@ export function ProductsPage() {
         cstCofins,
         aliqCofins,
         fiscalType,
+        purchaseUnit,
+        saleUnit,
+        unitsPerPurchase,
+        purchaseCostValue,
         costValue,
         marginProfit,
         price: salePrice,
@@ -643,6 +733,10 @@ export function ProductsPage() {
         cstCofins,
         aliqCofins,
         fiscalType,
+        purchaseUnit,
+        saleUnit,
+        unitsPerPurchase,
+        purchaseCostValue,
         costValue,
         marginProfit,
         price: salePrice,
@@ -651,6 +745,20 @@ export function ProductsPage() {
       });
 
       setProducts((prev) => [...prev, product]);
+      savedProductId = product.id;
+    }
+
+    if (nfeDraftSourceItemId && savedProductId) {
+      const result = {
+        sourceItemId: nfeDraftSourceItemId,
+        productId: savedProductId,
+        productName: name
+      };
+      writeNfeProductDraftResult(result);
+      clearNfeProductDraft();
+      setNfeDraftSourceItemId(null);
+      setSyncMessage('Produto cadastrado e vinculado à entrada de estoque.');
+      onNfeProductSaved?.(result);
     }
 
     resetCadastroForm();
@@ -688,6 +796,10 @@ export function ProductsPage() {
     setShowNcmLookup(false);
     setStock(product.stock);
     setByWeight(product.byWeight);
+    setPurchaseUnit(normalizeProductUnit(product.purchaseUnit));
+    setSaleUnit(normalizeProductUnit(product.saleUnit));
+    setUnitsPerPurchase(product.unitsPerPurchase && product.unitsPerPurchase > 0 ? product.unitsPerPurchase : 1);
+    setPurchaseCostValue(product.purchaseCostValue ?? product.costValue ?? 0);
     setCostValue(product.costValue ?? 0);
     setMarginProfit(product.marginProfit ?? 0);
     setSalePrice(product.price);
@@ -1078,28 +1190,92 @@ export function ProductsPage() {
                 </div>
 
                 <div className="products-cost-block">
-                  <h4>Custo inicial</h4>
-                  <div className="products-row-3">
+                  <h4>Unidades e conversão</h4>
+                  <div className="products-row-4">
                     <div className="products-field-compact">
-                      <label htmlFor="cost-value">Valor R$</label>
+                      <label htmlFor="purchase-unit">Unidade de compra</label>
+                      <select
+                        id="purchase-unit"
+                        value={purchaseUnit}
+                        onChange={(event) => {
+                          const nextUnit = event.target.value as ProductUnit;
+                          const nextConversion = isPackageUnit(nextUnit) ? unitsPerPurchase : 1;
+                          const nextSaleUnit = isPackageUnit(nextUnit) ? saleUnit : nextUnit;
+                          const nextUnitCost = calculateSaleUnitCost(purchaseCostValue, nextConversion);
+                          setPurchaseUnit(nextUnit);
+                          setSaleUnit(nextSaleUnit);
+                          setUnitsPerPurchase(nextConversion);
+                          setCostValue(nextUnitCost);
+                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
+                          setByWeight(nextSaleUnit === 'KG');
+                        }}
+                      >
+                        {productUnitOptions.map((unitOption) => <option key={unitOption} value={unitOption}>{unitOption}</option>)}
+                      </select>
+                      <small className="products-help-note">Lida automaticamente da NF-e.</small>
+                    </div>
+                    <div className="products-field-compact">
+                      <label htmlFor="units-per-purchase">Conteúdo da embalagem</label>
                       <input
-                        id="cost-value"
+                        id="units-per-purchase"
                         type="number"
-                        min={0}
-                        step="0.01"
-                        value={getNumericInputValue(costValue)}
-                        onChange={(e) => {
-                          const nextCost = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
-                          setCostValue(nextCost);
-
-                          if (salePrice > 0) {
-                            setMarginProfit(calculateMarginProfit(nextCost, salePrice));
-                            return;
-                          }
-
-                          setSalePrice(calculateSalePrice(nextCost, marginProfit));
+                        min="0.001"
+                        step="0.001"
+                        value={unitsPerPurchase}
+                        onChange={(event) => {
+                          const nextConversion = Math.max(0.001, parseDecimalInput(event.target.value) || 1);
+                          const nextUnitCost = calculateSaleUnitCost(purchaseCostValue, nextConversion);
+                          setUnitsPerPurchase(nextConversion);
+                          setCostValue(nextUnitCost);
+                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
                         }}
                       />
+                      <small className="products-help-note">Quantas unidades de venda existem na compra.</small>
+                    </div>
+                    <div className="products-field-compact">
+                      <label htmlFor="sale-unit">Unidade de venda</label>
+                      <select
+                        id="sale-unit"
+                        value={saleUnit}
+                        onChange={(event) => {
+                          const nextUnit = event.target.value as ProductUnit;
+                          setSaleUnit(nextUnit);
+                          setByWeight(nextUnit === 'KG');
+                        }}
+                      >
+                        {productUnitOptions.map((unitOption) => <option key={unitOption} value={unitOption}>{unitOption}</option>)}
+                      </select>
+                    </div>
+                    <div className="products-conversion-summary">
+                      <span>Conversão aplicada</span>
+                      <strong>1 {purchaseUnit} = {unitsPerPurchase} {saleUnit}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="products-cost-block">
+                  <h4>Custo e margem por unidade de venda</h4>
+                  <div className="products-row-4">
+                    <div className="products-field-compact">
+                      <label htmlFor="purchase-cost-value">Custo por {purchaseUnit}</label>
+                      <input
+                        id="purchase-cost-value"
+                        type="number"
+                        min={0}
+                        step="0.000001"
+                        value={getNumericInputValue(purchaseCostValue)}
+                        onChange={(e) => {
+                          const nextPurchaseCost = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
+                          const nextUnitCost = calculateSaleUnitCost(nextPurchaseCost, unitsPerPurchase);
+                          setPurchaseCostValue(nextPurchaseCost);
+                          setCostValue(nextUnitCost);
+                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
+                        }}
+                      />
+                    </div>
+                    <div className="products-field-compact">
+                      <label htmlFor="cost-value">Custo por {saleUnit}</label>
+                      <input id="cost-value" type="number" value={costValue} readOnly />
                     </div>
                     <div className="products-field-compact">
                       <label htmlFor="margin-profit">Margem lucro %</label>
@@ -1138,7 +1314,7 @@ export function ProductsPage() {
                 <div className="products-row-2">
                   <div>
                     <small className="products-help-note">
-                      O sistema calcula automaticamente o preço de venda por custo + margem e também recalcula a margem quando você informa custo + preço de venda.
+                      O custo de venda é calculado dividindo o custo da compra pelo conteúdo da embalagem. A margem e o preço usam esse custo convertido.
                     </small>
                   </div>
                 </div>
@@ -1176,6 +1352,7 @@ export function ProductsPage() {
                   <div>
                     <label htmlFor="cfop">CFOP</label>
                     <select id="cfop" value={cfop} onChange={(e) => setCfop(e.target.value)}>
+                      {cfop && !cfopOptions.includes(cfop) && <option value={cfop}>{cfop} - Importado da NF-e</option>}
                       {cfopOptions.map((option) => (
                         <option key={option} value={option}>
                           {cstIcmsLabels[option] ?? option}
@@ -1201,6 +1378,9 @@ export function ProductsPage() {
                       value={taxSituationCode}
                       onChange={(e) => setTaxSituationCode(e.target.value)}
                     >
+                      {taxSituationCode && !taxSituationCodeOptions.includes(taxSituationCode) && (
+                        <option value={taxSituationCode}>{taxSituationCode} - Importado da NF-e</option>
+                      )}
                       {taxSituationCodeOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1223,6 +1403,7 @@ export function ProductsPage() {
                   <div>
                     <label htmlFor="cst-pis">CST PIS</label>
                     <select id="cst-pis" value={cstPis} onChange={(e) => setCstPis(e.target.value)}>
+                      {cstPis && !cstPisCofinsOptions.includes(cstPis) && <option value={cstPis}>{cstPis} - Importado da NF-e</option>}
                       {cstPisCofinsOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1242,6 +1423,7 @@ export function ProductsPage() {
                   <div>
                     <label htmlFor="cst-cofins">CST COFINS</label>
                     <select id="cst-cofins" value={cstCofins} onChange={(e) => setCstCofins(e.target.value)}>
+                      {cstCofins && !cstPisCofinsOptions.includes(cstCofins) && <option value={cstCofins}>{cstCofins} - Importado da NF-e</option>}
                       {cstPisCofinsOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1318,7 +1500,10 @@ export function ProductsPage() {
                   </div>
                   <div>
                     <strong>{currency.format(product.price)}</strong>
-                    <span>estoque {product.stock}</span>
+                    <span>estoque {product.stock} {product.saleUnit ?? 'UN'}</span>
+                    <span>
+                      compra {product.purchaseUnit ?? 'UN'} | 1 {product.purchaseUnit ?? 'UN'} = {product.unitsPerPurchase ?? 1} {product.saleUnit ?? 'UN'}
+                    </span>
                     <span>
                       {product.isUnavailable ? 'indisponível' : 'disponível'} | {product.isHidden ? 'oculto' : 'visível'}
                     </span>

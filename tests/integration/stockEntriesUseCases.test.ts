@@ -69,6 +69,78 @@ describe('Stock entries use cases', () => {
     expect(loadedProduct?.costValue).toBe(18.5);
   });
 
+  it('converte caixas compradas em unidades de venda e calcula o custo unitário', async () => {
+    const stockEntryRepository = new InMemoryStockEntryRepository();
+    const productRepository = new InMemoryProductRepository();
+    const createStockEntry = new CreateStockEntry(stockEntryRepository, productRepository);
+    const now = new Date();
+
+    await productRepository.save({
+      id: 'prod-cx',
+      productCode: '002',
+      name: 'Refrigerante 12 UN',
+      category: 'Bebidas',
+      purchaseUnit: 'CX',
+      saleUnit: 'UN',
+      unitsPerPurchase: 12,
+      purchaseCostValue: 24,
+      costValue: 2,
+      price: 3.5,
+      byWeight: false,
+      stock: 0,
+      version: 1,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const entry = await createStockEntry.execute({
+      id: 'stock-cx',
+      stockEntryCode: 'ENT-CX',
+      noteCode: '000003',
+      natureOfOperation: 'Compra para revenda',
+      productId: 'prod-cx',
+      productName: 'Refrigerante 12 UN',
+      supplierName: 'Fornecedor',
+      invoiceNumber: 'NF-789',
+      series: '1',
+      accessKey: '',
+      authorizationProtocol: '',
+      issueDate: now,
+      deliveryDate: now,
+      icmsBase: 0,
+      icmsValue: 0,
+      icmsSubstitutionBase: 0,
+      icmsSubstitutionValue: 0,
+      productsValue: 240,
+      freightValue: 0,
+      insuranceValue: 0,
+      discountValue: 0,
+      additionalExpensesValue: 0,
+      ipiValue: 0,
+      invoiceTotalValue: 240,
+      documentModel: '55',
+      paymentCondition: 'À vista',
+      stockLocation: 'PADRAO',
+      purchaseOrder: '',
+      freightByAccount: '',
+      quantity: 10,
+      unitCost: 24,
+      notes: '',
+      receivedAt: now
+    });
+
+    const product = await productRepository.findById('prod-cx');
+
+    expect(entry.purchaseQuantity).toBe(10);
+    expect(entry.quantity).toBe(120);
+    expect(entry.purchaseUnitCost).toBe(24);
+    expect(entry.unitCost).toBe(2);
+    expect(entry.totalCost).toBe(240);
+    expect(product?.stock).toBe(120);
+    expect(product?.costValue).toBe(2);
+    expect(product?.marginProfit).toBe(75);
+  });
+
   it('atualiza e remove entrada', async () => {
     const stockEntryRepository = new InMemoryStockEntryRepository();
     const now = new Date();
