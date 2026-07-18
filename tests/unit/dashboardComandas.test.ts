@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { mapClosedSalesToOrders } from '@/modules/orders/presentation/hooks/useOrdersQuery';
 
 describe('Comandas fechadas no Dashboard', () => {
-  it('converte apenas vendas fiscais e usa a data de fechamento', () => {
+  it('converte vendas fiscais e orçamentos fechados usando a data de fechamento', () => {
     const orders = mapClosedSalesToOrders([
       {
         numero: '1',
@@ -35,18 +35,84 @@ describe('Comandas fechadas no Dashboard', () => {
         status: 'FECHADA_ORCAMENTO',
         createdAt: '2026-06-22T02:25:10.451Z',
         updatedAt: '2026-06-22T03:09:08.900Z',
-        items: []
+        transitions: [{ to: 'FECHADA_ORCAMENTO', at: '2026-06-22T03:09:08.900Z' }],
+        items: [
+          {
+            id: 'item-3',
+            nome: 'Coca lata zero',
+            precoUnitario: 7.5,
+            quantidade: 1,
+            subtotal: 7.5,
+            porUnidade: true
+          }
+        ]
+      },
+      {
+        numero: '7',
+        status: 'ARQUIVADA',
+        createdAt: '2026-07-15T16:00:00.000Z',
+        updatedAt: '2026-07-16T01:30:00.000Z',
+        transitions: [
+          { to: 'FECHADA_VENDA', at: '2026-07-15T21:20:00.000Z' },
+          { to: 'ARQUIVADA', at: '2026-07-16T01:30:00.000Z' }
+        ],
+        items: [
+          {
+            id: 'item-4',
+            nome: 'Venda de ontem',
+            precoUnitario: 15,
+            quantidade: 1,
+            subtotal: 15,
+            porUnidade: true
+          }
+        ]
+      },
+      {
+        numero: '9',
+        status: 'ARQUIVADA',
+        createdAt: '2026-07-15T16:00:00.000Z',
+        updatedAt: '2026-07-16T01:30:00.000Z',
+        transitions: [
+          { to: 'CANCELADA', at: '2026-07-15T21:20:00.000Z' },
+          { to: 'ARQUIVADA', at: '2026-07-16T01:30:00.000Z' }
+        ],
+        items: [
+          {
+            id: 'item-5',
+            nome: 'Cancelada arquivada',
+            precoUnitario: 99,
+            quantidade: 1,
+            subtotal: 99,
+            porUnidade: true
+          }
+        ]
       }
     ]);
 
-    expect(orders).toHaveLength(1);
+    expect(orders).toHaveLength(3);
     expect(orders[0]).toMatchObject({
-      id: 'comanda-1',
+      id: 'comanda-1-fechada_venda',
       table: 'Comanda 1',
       status: 'ENTREGUE',
       total: 32.5,
       createdBy: 'CAIXA'
     });
     expect(orders[0].createdAt.toISOString()).toBe('2026-06-22T03:08:34.199Z');
+    expect(orders[1]).toMatchObject({
+      id: 'comanda-4-fechada_orcamento',
+      table: 'Orçamento 4',
+      status: 'ENTREGUE',
+      total: 7.5,
+      createdBy: 'CAIXA'
+    });
+    expect(orders[1].createdAt.toISOString()).toBe('2026-06-22T03:09:08.900Z');
+    expect(orders[2]).toMatchObject({
+      id: 'comanda-7-fechada_venda',
+      table: 'Comanda 7',
+      status: 'ENTREGUE',
+      total: 15,
+      createdBy: 'CAIXA'
+    });
+    expect(orders[2].createdAt.toISOString()).toBe('2026-07-15T21:20:00.000Z');
   });
 });

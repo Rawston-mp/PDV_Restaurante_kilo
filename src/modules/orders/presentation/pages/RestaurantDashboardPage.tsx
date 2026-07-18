@@ -21,7 +21,11 @@ import {
   readCashMovementCategoryCatalog,
   type CashMovementCategoryCatalog
 } from '@/modules/finance/infrastructure/local/cashMovementCategories';
-import { financeContainer } from '@/modules/finance/infrastructure/container/financeContainer';
+import {
+  financeEntriesStorageKey,
+  financeEntriesUpdatedEvent,
+  readFinanceEntriesLocal
+} from '@/modules/finance/infrastructure/local/financeEntries';
 import { useCashMovementsQuery } from '@/modules/finance/presentation/hooks/useCashMovementsQuery';
 import { useCreateCashMovement } from '@/modules/finance/presentation/hooks/useCreateCashMovement';
 import { ordersContainer } from '@/modules/orders/infrastructure/container/ordersContainer';
@@ -193,6 +197,8 @@ export function RestaurantDashboardPage() {
   const { products } = useProductsQuery();
   const { convenios } = useConveniosQuery();
   const { createCashMovement, saving: savingCashMovement } = useCreateCashMovement();
+  const [draftPeriodStartInput, setDraftPeriodStartInput] = useState('');
+  const [draftPeriodEndInput, setDraftPeriodEndInput] = useState('');
   const [periodStartInput, setPeriodStartInput] = useState('');
   const [periodEndInput, setPeriodEndInput] = useState('');
   const [movementType, setMovementType] = useState<'ENTRADA' | 'SAIDA'>('ENTRADA');
@@ -207,6 +213,7 @@ export function RestaurantDashboardPage() {
   const [movementError, setMovementError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [financeEntries, setFinanceEntries] = useState(() => readFinanceEntriesLocal());
 
   const period = useMemo(
     () => (periodStartInput || periodEndInput
@@ -220,11 +227,15 @@ export function RestaurantDashboardPage() {
       buildDashboardMetrics({
         orders,
         cashMovements,
+        financeEntries,
         products,
         period,
-        openComandas: Math.max(0, orders.filter((order) => order.status !== 'ENTREGUE').length)
+        openComandas: Math.max(
+          0,
+          orders.filter((order) => order.status !== 'ENTREGUE' && isWithinPeriod(order.createdAt, period.start, period.end)).length
+        )
       }),
-    [cashMovements, orders, period, products]
+    [cashMovements, financeEntries, orders, period, products]
   );
 
   const movementCategoryOptions = movementCategoryCatalog[movementType];
@@ -248,21 +259,28 @@ export function RestaurantDashboardPage() {
 
   useEffect(() => {
     const syncCategoryCatalog = () => setMovementCategoryCatalog(readCashMovementCategoryCatalog());
+    const syncFinanceEntries = () => setFinanceEntries(readFinanceEntriesLocal());
     const reloadDashboardData = () => {
+      syncFinanceEntries();
       void Promise.all([reloadOrders(), reloadCashMovements()]);
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key === cashMovementCategoriesStorageKey) {
         syncCategoryCatalog();
       }
+      if (event.key === financeEntriesStorageKey) {
+        syncFinanceEntries();
+      }
     };
 
     window.addEventListener(cashMovementCategoriesUpdatedEvent, syncCategoryCatalog);
+    window.addEventListener(financeEntriesUpdatedEvent, syncFinanceEntries);
     window.addEventListener('pdv.dashboard-refresh', reloadDashboardData);
     window.addEventListener('storage', onStorage);
 
     return () => {
       window.removeEventListener(cashMovementCategoriesUpdatedEvent, syncCategoryCatalog);
+      window.removeEventListener(financeEntriesUpdatedEvent, syncFinanceEntries);
       window.removeEventListener('pdv.dashboard-refresh', reloadDashboardData);
       window.removeEventListener('storage', onStorage);
     };
@@ -287,6 +305,18 @@ export function RestaurantDashboardPage() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const onSearchPeriod = () => {
+    setPeriodStartInput(draftPeriodStartInput);
+    setPeriodEndInput(draftPeriodEndInput);
+  };
+
+  const onResetPeriodToToday = () => {
+    setDraftPeriodStartInput('');
+    setDraftPeriodEndInput('');
+    setPeriodStartInput('');
+    setPeriodEndInput('');
   };
 
   const onCreateMovement = async (event: FormEvent) => {
@@ -320,11 +350,6 @@ export function RestaurantDashboardPage() {
     setMovementCategory(movementCategoryCatalog[movementType][0]);
     setMovementLaunchedAt(formatDateTimeInput(new Date()));
     setMovementError(null);
-  };
-
-  const onDeleteMovement = async (movementId: string) => {
-    await financeContainer.cashMovementRepository.delete(movementId);
-    await reloadCashMovements();
   };
 
   const exportClosingCsv = (kind: 'diario' | 'mensal') => {
@@ -386,8 +411,8 @@ export function RestaurantDashboardPage() {
             <span className="sr-only">Período</span>
             <input
               type="date"
-              value={periodStartInput}
-              onChange={(event) => setPeriodStartInput(event.target.value)}
+              value={draftPeriodStartInput}
+              onChange={(event) => setDraftPeriodStartInput(event.target.value)}
               aria-label="Data inicial"
             />
           </label>
@@ -395,15 +420,15 @@ export function RestaurantDashboardPage() {
             <span className="sr-only">Data final</span>
             <input
               type="date"
-              value={periodEndInput}
-              onChange={(event) => setPeriodEndInput(event.target.value)}
+              value={draftPeriodEndInput}
+              onChange={(event) => setDraftPeriodEndInput(event.target.value)}
               aria-label="Data final"
             />
           </label>
-          <button type="button" onClick={() => {
-            setPeriodStartInput('');
-            setPeriodEndInput('');
-          }}>
+          <button type="button" onClick={onSearchPeriod}>
+            Buscar
+          </button>
+          <button type="button" onClick={onResetPeriodToToday}>
             Hoje, {dateFormatter.format(today)}
           </button>
           <div className="restaurant-dashboard-user" title={user?.name ?? 'Operador'}>
@@ -420,9 +445,9 @@ export function RestaurantDashboardPage() {
         <MetricCard
           tone="accent"
           icon={<BarChart3 size={28} />}
-          label="Faturamento hoje"
+          label={period.label === 'Hoje' ? 'Faturamento hoje' : 'Faturamento do período'}
           value={currencyFormatter.format(dashboard.revenueToday)}
-          helper={`${dashboard.activeSales.length} venda(s) fiscal(is) no período`}
+          helper={`${dashboard.activeSales.length} fechamento(s) no período`}
         />
         <MetricCard
           icon={<ShoppingCart size={28} />}
@@ -440,7 +465,7 @@ export function RestaurantDashboardPage() {
           icon={<UsersRound size={28} />}
           label="Comandas abertas"
           value={String(dashboard.openComandas)}
-          helper="Comandas ainda não entregues no painel local"
+          helper="Comandas abertas dentro do período pesquisado"
         />
       </section>
 
@@ -451,7 +476,7 @@ export function RestaurantDashboardPage() {
           <div className="restaurant-dashboard-card-header">
             <div>
               <h3>Vendas por horário</h3>
-              <p>Valores filtrados pelo fechamento selecionado.</p>
+              <p>Tempo real das vendas diretas no caixa e comandas fechadas no período.</p>
             </div>
             <button type="button" onClick={onSync} disabled={isSyncing}>
               <RefreshCw size={16} aria-hidden="true" />
@@ -460,7 +485,7 @@ export function RestaurantDashboardPage() {
           </div>
 
           {dashboard.activeSales.length === 0 ? (
-            <DashboardEmptyState>Nenhuma venda fiscal fechada neste período.</DashboardEmptyState>
+            <DashboardEmptyState>Nenhuma venda direta ou comanda fechada neste período.</DashboardEmptyState>
           ) : (
             <div className="restaurant-dashboard-hour-chart" aria-label="Gráfico de vendas por horário">
               {dashboard.hourlySales.map((hour) => (
@@ -480,7 +505,7 @@ export function RestaurantDashboardPage() {
           <div className="restaurant-dashboard-card-header">
             <div>
               <h3>Formas de pagamento</h3>
-              <p>Usa lançamentos financeiros reais; se a venda não informar meio, aparece como não informado.</p>
+              <p>Usa Financeiro &gt; Receita com status recebido/pago no período pesquisado.</p>
             </div>
           </div>
           <PaymentDonut metrics={dashboard} />
@@ -495,7 +520,15 @@ export function RestaurantDashboardPage() {
             </div>
           </article>
 
-          <article className="restaurant-dashboard-card restaurant-dashboard-alert">
+          <article
+            className="restaurant-dashboard-card restaurant-dashboard-alert"
+            tabIndex={dashboard.lowStockProducts.length > 0 ? 0 : undefined}
+            aria-label={
+              dashboard.lowStockProducts.length > 0
+                ? `${dashboard.lowStockProducts.length} produtos com estoque baixo`
+                : 'Nenhum alerta de estoque baixo'
+            }
+          >
             <AlertTriangle size={34} aria-hidden="true" />
             <div>
               <h3>Atenção</h3>
@@ -504,6 +537,24 @@ export function RestaurantDashboardPage() {
                   ? `${dashboard.lowStockCount} produto(s) com estoque baixo`
                   : 'Nenhum alerta de estoque baixo'}
               </p>
+              {dashboard.lowStockProducts.length > 0 && (
+                <div className="restaurant-dashboard-low-stock-popover" role="tooltip">
+                  <strong>Produtos com estoque baixo</strong>
+                  <ul>
+                    {dashboard.lowStockProducts.slice(0, 8).map((product) => (
+                      <li key={product.productId}>
+                        <span>{product.name}</span>
+                        <small>
+                          {product.category} · {product.stock.toLocaleString('pt-BR')} un.
+                        </small>
+                      </li>
+                    ))}
+                  </ul>
+                  {dashboard.lowStockProducts.length > 8 && (
+                    <em>+ {dashboard.lowStockProducts.length - 8} produto(s)</em>
+                  )}
+                </div>
+              )}
             </div>
           </article>
 
@@ -688,7 +739,6 @@ export function RestaurantDashboardPage() {
                   </div>
                   <div>
                     <strong>{currencyFormatter.format(movement.amount)}</strong>
-                    <button type="button" onClick={() => void onDeleteMovement(movement.id)}>Excluir</button>
                   </div>
                 </li>
               ))}
