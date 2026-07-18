@@ -4893,10 +4893,10 @@ body {
 .finance-account-ledger-head,
 .finance-account-ledger-row {
     display: grid;
-    grid-template-columns: 48px 82px minmax(118px, 1fr) 96px 64px 92px 76px 82px 92px 88px 72px 68px 48px;
+    grid-template-columns: 48px 82px minmax(118px, 1fr) 96px 64px 92px 76px 82px 92px 88px 72px 68px 48px 72px;
     gap: 0.32rem;
     align-items: center;
-    min-width: 1060px;
+    min-width: 1125px;
     padding: 0.38rem 0.45rem;
 }
 
@@ -4948,19 +4948,129 @@ body {
     font-weight: 800;
 }
 
+.finance-revenue-ledger {
+    display: grid;
+    gap: 0;
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    overflow-x: auto;
+    background: #ffffff;
+}
+
+.finance-revenue-ledger-head,
+.finance-revenue-ledger-row {
+    display: grid;
+    grid-template-columns: 130px minmax(180px, 1.2fr) minmax(120px, 0.85fr) 100px 120px 120px 110px 58px 72px;
+    gap: 0.45rem;
+    align-items: center;
+    min-width: 1005px;
+    padding: 0.42rem 0.55rem;
+}
+
+.finance-revenue-ledger-head {
+    background: #60a5fa;
+    color: #ffffff;
+    font-size: 0.74rem;
+    font-weight: 900;
+}
+
+.finance-revenue-ledger-row {
+    border-top: 1px solid #cbd5e1;
+    color: #0f172a;
+    font-size: 0.78rem;
+}
+
+.finance-revenue-ledger-row.is-open {
+    background: #fef9c3;
+}
+
+.finance-revenue-ledger-row.is-received {
+    background: #e0e1f0;
+    font-weight: 800;
+}
+
+.finance-revenue-ledger-row span,
+.finance-revenue-ledger-row strong,
+.finance-revenue-ledger-row b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.finance-revenue-ledger-row b {
+    text-align: right;
+}
+
+.finance-revenue-ledger-row .is-credit {
+    color: #0f172a;
+}
+
+.finance-revenue-ledger-row .is-pending {
+    color: #dc2626;
+}
+
+.finance-ledger-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.finance-ledger-actions button {
+    min-height: 30px;
+    border-radius: 7px;
+    padding: 0 0.5rem;
+    font-size: 0.68rem;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.finance-ledger-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.finance-revenue-totals {
+    justify-self: end;
+    display: grid;
+    grid-template-columns: auto minmax(130px, auto);
+    gap: 0.18rem 1.25rem;
+    padding: 1rem 1rem 0.85rem;
+    color: #0f172a;
+    font-size: 1.05rem;
+}
+
+.finance-revenue-totals span {
+    text-align: right;
+}
+
+.finance-revenue-totals b {
+    text-align: right;
+    font-size: 1.08rem;
+}
+
+.finance-revenue-totals .is-pending {
+    color: #dc2626;
+}
+
 @media (max-width: 1180px) {
-    .finance-account-ledger {
+    .finance-account-ledger,
+    .finance-revenue-ledger {
         gap: 0.65rem;
         overflow-x: visible;
         border: 0;
         background: transparent;
     }
 
-    .finance-account-ledger-head {
+    .finance-account-ledger-head,
+    .finance-revenue-ledger-head {
         display: none;
     }
 
-    .finance-account-ledger-row {
+    .finance-account-ledger-row,
+    .finance-revenue-ledger-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         min-width: 0;
         gap: 0.5rem 0.75rem;
@@ -4980,7 +5090,12 @@ body {
 
     .finance-account-ledger-row span,
     .finance-account-ledger-row strong,
-    .finance-account-ledger-row b {
+    .finance-account-ledger-row b,
+    .finance-account-ledger-row .finance-ledger-actions,
+    .finance-revenue-ledger-row span,
+    .finance-revenue-ledger-row strong,
+    .finance-revenue-ledger-row b,
+    .finance-revenue-ledger-row .finance-ledger-actions {
         display: grid;
         gap: 0.16rem;
         overflow: visible;
@@ -4991,7 +5106,12 @@ body {
 
     .finance-account-ledger-row span::before,
     .finance-account-ledger-row strong::before,
-    .finance-account-ledger-row b::before {
+    .finance-account-ledger-row b::before,
+    .finance-account-ledger-row .finance-ledger-actions::before,
+    .finance-revenue-ledger-row span::before,
+    .finance-revenue-ledger-row strong::before,
+    .finance-revenue-ledger-row b::before,
+    .finance-revenue-ledger-row .finance-ledger-actions::before {
         content: attr(data-label);
         color: #64748b;
         font-size: 0.66rem;
@@ -4999,11 +5119,43 @@ body {
         line-height: 1.1;
         text-transform: uppercase;
     }
+
+    .finance-ledger-actions {
+        align-items: stretch;
+        justify-content: stretch;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .finance-ledger-actions::before {
+        grid-column: 1 / -1;
+    }
+
+    .finance-ledger-actions button {
+        min-height: 38px;
+        width: 100%;
+    }
+
+    .finance-revenue-totals {
+        justify-self: stretch;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        background: #ffffff;
+    }
 }
 
 @media (max-width: 640px) {
-    .finance-account-ledger-row {
+    .finance-account-ledger-row,
+    .finance-revenue-ledger-row {
         grid-template-columns: 1fr;
+    }
+
+    .finance-revenue-totals {
+        grid-template-columns: 1fr;
+    }
+
+    .finance-revenue-totals span,
+    .finance-revenue-totals b {
+        text-align: left;
     }
 }
 
