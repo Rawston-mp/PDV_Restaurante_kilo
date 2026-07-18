@@ -29,6 +29,10 @@ import {
   type CashMovementCategoryType
 } from '@/modules/finance/infrastructure/local/cashMovementCategories';
 import {
+  financeEntriesStorageKey,
+  writeFinanceEntriesLocal
+} from '@/modules/finance/infrastructure/local/financeEntries';
+import {
   formatCep as formatCepValue,
   formatCpf as formatCpfValue,
   formatCpfCnpj as formatCpfCnpjValue,
@@ -77,7 +81,6 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
 });
 const nfeXmlPortalUrl = 'https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ%20gAVw2g=';
 const cardManagersStorageKey = 'pdv.cardManagers.settings';
-const financeEntriesStorageKey = 'pdv.finance.entries';
 const financeDocumentTypesStorageKey = 'pdv.finance.documentTypes';
 const defaultFinanceDocumentTypesByTab = {
   DESPESAS: ['Adiantamento', 'Boleto', 'Conducao', 'Dinheiro', 'Ferias', 'Pix', 'Ted'],
@@ -270,6 +273,96 @@ type CardManagerSettings = {
   version: number;
 };
 
+type ConvenioDetails = {
+  stateRegistration: string;
+  tradeName: string;
+  personType: 'FISICA' | 'JURIDICA';
+  birthDate: string;
+  rg: string;
+  municipalRegistration: string;
+  gender: string;
+  entryOrigin: string;
+  deliveryServiceFee: string;
+  customerConvenio: string;
+  managerName: string;
+  phone: string;
+  mobile: string;
+  email: string;
+  cep: string;
+  address: string;
+  number: string;
+  neighborhood: string;
+  state: string;
+  city: string;
+  complement: string;
+  stateTaxpayerType: string;
+  activityType: string;
+  freightMode: string;
+  creditLimit: string;
+  debitLimit: string;
+  fiadoLimit: string;
+  creditCardLimit: string;
+  discountPercent: string;
+  commissionPercent: string;
+  visitDay: string;
+  visitRegion: string;
+  printLocation: string;
+  crt: string;
+  cnae: string;
+  priceTable: string;
+  cei: string;
+  constructionRegistration: string;
+  category: string;
+  suframa: string;
+  billingCondition: string;
+  carrierName: string;
+};
+
+const createEmptyConvenioDetails = (): ConvenioDetails => ({
+  stateRegistration: '',
+  tradeName: '',
+  personType: 'FISICA',
+  birthDate: '',
+  rg: '',
+  municipalRegistration: '',
+  gender: '',
+  entryOrigin: 'Atendente',
+  deliveryServiceFee: '',
+  customerConvenio: '',
+  managerName: '',
+  phone: '',
+  mobile: '',
+  email: '',
+  cep: '',
+  address: '',
+  number: '',
+  neighborhood: '',
+  state: 'SP',
+  city: '',
+  complement: '',
+  stateTaxpayerType: 'Não informado',
+  activityType: 'Não informado',
+  freightMode: 'Sem Ocorrência de Transporte',
+  creditLimit: '0,00',
+  debitLimit: '0,00',
+  fiadoLimit: '0,00',
+  creditCardLimit: '0,00',
+  discountPercent: '0,00',
+  commissionPercent: '0,00',
+  visitDay: '',
+  visitRegion: '',
+  printLocation: '',
+  crt: 'Não informado',
+  cnae: '',
+  priceTable: '',
+  cei: '',
+  constructionRegistration: '',
+  category: '',
+  suframa: '',
+  billingCondition: '',
+  carrierName: ''
+});
+
 type FinanceTab = (typeof financeTabs)[number];
 
 type FinanceDocumentTypeCatalog = Record<FinanceTab, string[]>;
@@ -321,6 +414,11 @@ const appendFinanceAuditNote = (notes: string, auditNote: string) => {
   const trimmedNotes = notes.trim();
   return trimmedNotes ? `${auditNote}\n${trimmedNotes}` : auditNote;
 };
+
+const pickConvenioDetails = (convenio: Partial<ConvenioDetails>): ConvenioDetails => ({
+  ...createEmptyConvenioDetails(),
+  ...Object.fromEntries(Object.entries(convenio).filter(([, value]) => value !== undefined && value !== null))
+}) as ConvenioDetails;
 
 const findStockEntryForFinanceEntry = (entry: FinanceEntry, stockEntries: StockEntry[]) => {
   const normalizedDocument = normalizeSearchText(entry.documentRef);
@@ -619,6 +717,7 @@ export function CadastroPage() {
   const [convenioAccountName, setConvenioAccountName] = useState('');
   const [convenioActive, setConvenioActive] = useState(true);
   const [convenioNotes, setConvenioNotes] = useState('');
+  const [convenioDetails, setConvenioDetails] = useState<ConvenioDetails>(() => createEmptyConvenioDetails());
   const [convenioFilterId, setConvenioFilterId] = useState('');
   const [convenioFilterName, setConvenioFilterName] = useState('');
   const [convenioFilterCpfCnpj, setConvenioFilterCpfCnpj] = useState('');
@@ -654,8 +753,15 @@ export function CadastroPage() {
   const [financeAccountEndDateInput, setFinanceAccountEndDateInput] = useState('');
   const [financeAccountStartDateFilter, setFinanceAccountStartDateFilter] = useState('');
   const [financeAccountEndDateFilter, setFinanceAccountEndDateFilter] = useState('');
+  const [financeSearchExecutedByTab, setFinanceSearchExecutedByTab] = useState<Record<FinanceTab, boolean>>({
+    DESPESAS: false,
+    RECEITA: false,
+    CONTA_CORRENTE: false
+  });
   const [financeDocumentRef, setFinanceDocumentRef] = useState('');
   const [financeDocumentTypeDraft, setFinanceDocumentTypeDraft] = useState('');
+  const [showFinanceDocumentManager, setShowFinanceDocumentManager] = useState(false);
+  const [editingFinanceDocumentType, setEditingFinanceDocumentType] = useState<string | null>(null);
   const [financeAccountDraft, setFinanceAccountDraft] = useState('');
   const [financeDocumentTypeCatalog, setFinanceDocumentTypeCatalog] = useState<FinanceDocumentTypeCatalog>({
     DESPESAS: [...defaultFinanceDocumentTypesByTab.DESPESAS],
@@ -1085,6 +1191,14 @@ export function CadastroPage() {
     setConvenioAccountName('');
     setConvenioActive(true);
     setConvenioNotes('');
+    setConvenioDetails(createEmptyConvenioDetails());
+  };
+
+  const updateConvenioDetail = <Key extends keyof ConvenioDetails>(key: Key, value: ConvenioDetails[Key]) => {
+    setConvenioDetails((current) => ({
+      ...current,
+      [key]: value
+    }));
   };
 
   const clearCardManagerForm = (nextCode?: string) => {
@@ -1495,6 +1609,11 @@ export function CadastroPage() {
       });
   }, [activeFinanceTab, financeAccountEndDateFilter, financeAccountFilter, financeAccountStartDateFilter, financeRows, stockEntries]);
 
+  const searchedFinanceEntries = useMemo(
+    () => financeAccountMovementRows.map((row) => row.entry),
+    [financeAccountMovementRows]
+  );
+
   const duplicateFinanceSourceEntry = useMemo(
     () => financeEntries.find((entry) => entry.id === duplicateFinanceSourceEntryId) ?? null,
     [financeEntries, duplicateFinanceSourceEntryId]
@@ -1540,28 +1659,40 @@ export function CadastroPage() {
             .filter((client) => client.active)
             .map((client) => ({
               id: `client-${client.id}`,
-              label: client.fullName || client.cpf || ''
+              label: client.fullName || client.cpf || '',
+              secondaryLabel: client.cpf || '',
+              searchText: [client.fullName, client.cpf].filter(Boolean).join(' ')
             })),
           ...convenios
             .filter((convenio) => convenio.active)
             .map((convenio) => ({
               id: `convenio-${convenio.id}`,
-              label: convenio.name || convenio.bankName || convenio.accountName || ''
+              label: convenio.name || convenio.bankName || convenio.accountName || '',
+              secondaryLabel: [convenio.bankName, convenio.accountName].filter(Boolean).join(' - '),
+              searchText: [convenio.name, convenio.bankName, convenio.accountName, convenio.cpfCnpj].filter(Boolean).join(' ')
             }))
         ]
       : activeFinanceTab === 'DESPESAS'
         ? suppliers
             .map((supplier) => ({
               id: `supplier-${supplier.id}`,
-              label: supplier.legalName || supplier.tradeName || ''
+              label: supplier.legalName || supplier.tradeName || `Fornecedor ${supplier.supplierCode || supplier.id}`,
+              secondaryLabel: [supplier.tradeName, supplier.cpfCnpj].filter(Boolean).join(' - '),
+              searchText: [
+                supplier.supplierCode,
+                supplier.legalName,
+                supplier.tradeName,
+                supplier.cpfCnpj,
+                supplier.city
+              ].filter(Boolean).join(' ')
             }))
         : [];
 
     const options = sourceOptions
       .filter((person) => person.label.length > 0)
-      .reduce<Array<{ id: string; label: string }>>((accumulator, person) => {
+      .reduce<Array<{ id: string; label: string; secondaryLabel?: string; searchText?: string }>>((accumulator, person) => {
         const alreadyExists = accumulator.some(
-          (item) => normalizeSearchText(item.label) === normalizeSearchText(person.label)
+          (item) => item.id === person.id
         );
 
         return alreadyExists ? accumulator : [...accumulator, person];
@@ -1571,6 +1702,24 @@ export function CadastroPage() {
       ? [{ id: 'current-finance-person', label: financeSupplierName }, ...options]
       : options;
   }, [activeFinanceTab, clients, convenios, financeSupplierName, suppliers]);
+
+  const filteredFinancePersonOptions = useMemo(() => {
+    const search = normalizeSearchText(financeSupplierName);
+
+    if (activeFinanceTab === 'CONTA_CORRENTE' || search.length < 3) {
+      return [];
+    }
+
+    const registeredOptions = financePersonOptions.filter((person) => person.id !== 'current-finance-person');
+
+    if (registeredOptions.some((person) => normalizeSearchText(person.label) === search)) {
+      return [];
+    }
+
+    return registeredOptions
+      .filter((person) => normalizeSearchText(person.searchText || person.label).includes(search))
+      .slice(0, 12);
+  }, [activeFinanceTab, financePersonOptions, financeSupplierName]);
 
   const financeAccountOptions = useMemo(() => {
     const suggestions = convenios.flatMap((convenio) => {
@@ -1768,11 +1917,6 @@ export function CadastroPage() {
   const onSubmitConvenio = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!isFilled(convenioName)) {
-      setConvenioFormError('Preencha o nome do convenio antes de salvar.');
-      return;
-    }
-
     if (isFilled(convenioCpfCnpj) && !isValidCpfCnpj(convenioCpfCnpj)) {
       setConvenioFormError('CPF/CNPJ inválido. Informe CPF com 11 dígitos ou CNPJ com 14 dígitos válidos.');
       return;
@@ -1782,6 +1926,12 @@ export function CadastroPage() {
     const generatedCode = convenioCode && !usedCodes.has(convenioCode)
       ? convenioCode
       : generateRandomCode(usedCodes);
+    const resolvedConvenioName =
+      convenioName.trim() ||
+      convenioDetails.tradeName.trim() ||
+      convenioBankName.trim() ||
+      convenioAccountName.trim() ||
+      `Convênio ${generatedCode}`;
 
     if (editingConvenioId) {
       const existingConvenio = convenios.find((convenio) => convenio.id === editingConvenioId);
@@ -1794,8 +1944,9 @@ export function CadastroPage() {
     const updatedConvenio = {
       ...existingConvenio,
       convenioCode: generatedCode,
-      name: convenioName,
+      name: resolvedConvenioName,
       cpfCnpj: convenioCpfCnpj,
+      ...convenioDetails,
       paymentMethod: convenioPaymentMethod,
         cashFlow: convenioCashFlow,
         bankName: convenioBankName,
@@ -1811,8 +1962,9 @@ export function CadastroPage() {
     } else {
       const convenio = await createConvenio({
         convenioCode: generatedCode,
-        name: convenioName,
+        name: resolvedConvenioName,
         cpfCnpj: convenioCpfCnpj,
+        ...convenioDetails,
         paymentMethod: convenioPaymentMethod,
         cashFlow: convenioCashFlow,
         bankName: convenioBankName,
@@ -1847,6 +1999,7 @@ export function CadastroPage() {
     setConvenioAccountName(convenio.accountName);
     setConvenioActive(convenio.active);
     setConvenioNotes(convenio.notes);
+    setConvenioDetails(pickConvenioDetails(convenio));
   };
 
   const onDeleteConvenio = async (convenioId: string) => {
@@ -1876,7 +2029,7 @@ export function CadastroPage() {
   
   const saveFinanceEntriesLocal = (nextEntries: FinanceEntry[]) => {
     setFinanceEntries(nextEntries);
-    localStorage.setItem(financeEntriesStorageKey, JSON.stringify(nextEntries));
+    writeFinanceEntriesLocal(nextEntries);
   };
 
   const saveFinanceDocumentTypeCatalogLocal = (nextCatalog: FinanceDocumentTypeCatalog) => {
@@ -1884,7 +2037,7 @@ export function CadastroPage() {
     localStorage.setItem(financeDocumentTypesStorageKey, JSON.stringify(nextCatalog));
   };
 
-  const onAddFinanceDocumentType = () => {
+  const onSaveFinanceDocumentType = () => {
     const documentType = financeDocumentTypeDraft.trim();
     if (!documentType) {
       setFinanceFormError('Informe o tipo de documento antes de adicionar.');
@@ -1893,20 +2046,64 @@ export function CadastroPage() {
 
     const currentOptions = financeDocumentTypeCatalog[activeFinanceTab];
     const existingOption = currentOptions.find(
-      (option) => normalizeSearchText(option) === normalizeSearchText(documentType)
+      (option) =>
+        normalizeSearchText(option) === normalizeSearchText(documentType)
+        && normalizeSearchText(option) !== normalizeSearchText(editingFinanceDocumentType ?? '')
     );
 
-    const selectedOption = existingOption ?? documentType;
-    if (!existingOption) {
-      saveFinanceDocumentTypeCatalogLocal({
-        ...financeDocumentTypeCatalog,
-        [activeFinanceTab]: [...currentOptions, documentType]
-      });
+    if (existingOption) {
+      setFinanceFormError('Documento/Referência já cadastrado.');
+      return;
     }
 
-    setFinanceDocumentRef(selectedOption);
-    setFinanceDescription((current) => current.trim() || selectedOption);
+    const nextOptions = editingFinanceDocumentType
+      ? currentOptions.map((option) => (option === editingFinanceDocumentType ? documentType : option))
+      : [...currentOptions, documentType];
+
+    saveFinanceDocumentTypeCatalogLocal({
+      ...financeDocumentTypeCatalog,
+      [activeFinanceTab]: nextOptions
+    });
+
+    if (!financeDocumentRef || financeDocumentRef === editingFinanceDocumentType) {
+      setFinanceDocumentRef(documentType);
+    }
+
+    setFinanceDescription((current) => current.trim() || documentType);
     setFinanceDocumentTypeDraft('');
+    setEditingFinanceDocumentType(null);
+    setFinanceFormError(null);
+  };
+
+  const onEditFinanceDocumentType = (documentType: string) => {
+    setEditingFinanceDocumentType(documentType);
+    setFinanceDocumentTypeDraft(documentType);
+    setShowFinanceDocumentManager(true);
+    setFinanceFormError(null);
+  };
+
+  const onDeleteFinanceDocumentType = (documentType: string) => {
+    const confirmed = window.confirm(`Deseja excluir o documento/referência "${documentType}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const nextOptions = financeDocumentTypeCatalog[activeFinanceTab].filter((option) => option !== documentType);
+
+    saveFinanceDocumentTypeCatalogLocal({
+      ...financeDocumentTypeCatalog,
+      [activeFinanceTab]: nextOptions.length ? nextOptions : [...defaultFinanceDocumentTypesByTab[activeFinanceTab]]
+    });
+
+    if (financeDocumentRef === documentType) {
+      setFinanceDocumentRef('');
+    }
+
+    if (editingFinanceDocumentType === documentType) {
+      setEditingFinanceDocumentType(null);
+      setFinanceDocumentTypeDraft('');
+    }
+
     setFinanceFormError(null);
   };
 
@@ -2877,49 +3074,13 @@ export function CadastroPage() {
     }
   };
 
-  const currentCount = activeTab === 'FORNECEDORES'
-    ? suppliers.length
-    : activeTab === 'FUNCIONARIOS'
-      ? employees.length
-      : activeTab === 'CLIENTES'
-        ? clients.length
-        : activeTab === 'CONVENIOS'
-          ? convenios.length
-          : activeTab === 'ADMIN_CARTOES'
-            ? cardManagers.length
-            : activeTab === 'FINANCEIRO'
-              ? activeFinanceRows.length
-          : stockEntries.length;
-
   return (
     <section className="cadastro-page">
       <header className="products-header card">
         <div>
           <p className="products-eyebrow">Cadastros e relacionamento</p>
           <h2>Cadastros</h2>
-          <p className="products-subtitle">Gestão de fornecedores e funcionários para operação administrativa.</p>
-        </div>
-        <div className="products-kpi">
-          <strong>{currentCount}</strong>
-          <span>
-            {activeTab === 'FORNECEDORES'
-              ? 'fornecedores'
-              : activeTab === 'FUNCIONARIOS'
-                ? 'funcionários'
-                : activeTab === 'CLIENTES'
-                  ? 'clientes'
-                  : activeTab === 'CONVENIOS'
-                    ? 'convenios'
-                    : activeTab === 'ADMIN_CARTOES'
-                      ? 'administradoras'
-                      : activeTab === 'FINANCEIRO'
-                        ? activeFinanceTab === 'DESPESAS'
-                          ? 'despesas'
-                          : activeFinanceTab === 'RECEITA'
-                            ? 'receitas'
-                            : 'conta corrente'
-                    : 'estoque'}
-          </span>
+          <p className="products-subtitle">Gestão de cadastros e relacionamentos da operação administrativa.</p>
         </div>
       </header>
 
@@ -3057,12 +3218,28 @@ export function CadastroPage() {
       </article>
 
       {activeTab === 'FORNECEDORES' && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="cadastro-span-overlay" role="dialog" aria-modal="true" aria-labelledby="supplier-cadastro-title">
+        <article className="card products-cadastro-span cadastro-span-panel">
+          <button
+            type="button"
+            className="cadastro-span-close"
+            aria-label="Fechar cadastro de fornecedor"
+            onClick={() => {
+              setShowCadastroSpan(false);
+              clearSupplierForm();
+            }}
+          >
+            ×
+          </button>
           <header className="products-cadastro-header">
-            <h3>Cadastro rápido | Fornecedores</h3>
+            <h3 id="supplier-cadastro-title">Cadastro rápido | Fornecedores</h3>
           </header>
 
           <form onSubmit={onSubmitSupplier} className="suppliers-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro de fornecedor">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3196,15 +3373,32 @@ export function CadastroPage() {
             {supplierFormError && <p className="products-form-warning">{supplierFormError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       {activeTab === 'FUNCIONARIOS' && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="cadastro-span-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-cadastro-title">
+        <article className="card products-cadastro-span cadastro-span-panel">
+          <button
+            type="button"
+            className="cadastro-span-close"
+            aria-label="Fechar cadastro de funcionário"
+            onClick={() => {
+              setShowCadastroSpan(false);
+              clearEmployeeForm();
+            }}
+          >
+            ×
+          </button>
           <header className="products-cadastro-header">
-            <h3>Cadastro rápido | Funcionários</h3>
+            <h3 id="employee-cadastro-title">Cadastro rápido | Funcionários</h3>
           </header>
 
           <form onSubmit={onSubmitEmployee} className="suppliers-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro de funcionário">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3464,15 +3658,32 @@ export function CadastroPage() {
             {employeeFormError && <p className="products-form-warning">{employeeFormError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       {activeTab === 'CLIENTES' && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="cadastro-span-overlay" role="dialog" aria-modal="true" aria-labelledby="client-cadastro-title">
+        <article className="card products-cadastro-span cadastro-span-panel">
+          <button
+            type="button"
+            className="cadastro-span-close"
+            aria-label="Fechar cadastro de cliente"
+            onClick={() => {
+              setShowCadastroSpan(false);
+              clearClientForm();
+            }}
+          >
+            ×
+          </button>
           <header className="products-cadastro-header">
-            <h3>Cadastro rápido | Clientes</h3>
+            <h3 id="client-cadastro-title">Cadastro rápido | Clientes</h3>
           </header>
 
           <form onSubmit={onSubmitClient} className="suppliers-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro de cliente">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3715,19 +3926,36 @@ export function CadastroPage() {
             {clientFormError && <p className="products-form-warning">{clientFormError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       {activeTab === 'CONVENIOS' && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="convenio-cadastro-overlay" role="dialog" aria-modal="true" aria-labelledby="convenio-cadastro-title">
+        <article className="card products-cadastro-span convenio-cadastro-span">
+          <button
+            type="button"
+            className="convenio-cadastro-close"
+            aria-label="Fechar cadastro de convênio"
+            onClick={() => {
+              setShowCadastroSpan(false);
+              clearConvenioForm();
+            }}
+          >
+            ×
+          </button>
           <header className="products-cadastro-header">
-            <h3>Cadastro rápido | Convênios</h3>
+            <h3 id="convenio-cadastro-title">Cadastro rápido | Convênios</h3>
           </header>
 
-          <form onSubmit={onSubmitConvenio} className="suppliers-form" autoComplete="off">
+          <form onSubmit={onSubmitConvenio} className="suppliers-form convenio-registration-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro de convênio">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
-              <div className="suppliers-row-3">
+              <div className="suppliers-row-4">
                 <div>
                   <label htmlFor="convenio-code">ID do convênio (automático)</label>
                   <input id="convenio-code" value={convenioCode} readOnly />
@@ -3738,7 +3966,15 @@ export function CadastroPage() {
                     id="convenio-name"
                     value={convenioName}
                     onChange={(e) => setConvenioName(e.target.value)}
-                    required
+                    placeholder="Nome completo / razão social"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-trade-name">Nome fantasia</label>
+                  <input
+                    id="convenio-trade-name"
+                    value={convenioDetails.tradeName}
+                    onChange={(e) => updateConvenioDetail('tradeName', e.target.value)}
                   />
                 </div>
                 <div>
@@ -3751,6 +3987,210 @@ export function CadastroPage() {
                   />
                 </div>
               </div>
+
+              <div className="suppliers-row-4">
+                <div>
+                  <label htmlFor="convenio-state-registration">Inscrição estadual</label>
+                  <input
+                    id="convenio-state-registration"
+                    value={convenioDetails.stateRegistration}
+                    onChange={(e) => updateConvenioDetail('stateRegistration', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label>Tipo de pessoa</label>
+                  <div className="employee-status-toggle convenio-person-toggle" role="group" aria-label="Tipo de pessoa">
+                    <button type="button" className={convenioDetails.personType === 'FISICA' ? 'is-active' : ''} onClick={() => updateConvenioDetail('personType', 'FISICA')}>
+                      Física
+                    </button>
+                    <button type="button" className={convenioDetails.personType === 'JURIDICA' ? 'is-active' : ''} onClick={() => updateConvenioDetail('personType', 'JURIDICA')}>
+                      Jurídica
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="convenio-birth-date">Data de nascimento</label>
+                  <input
+                    id="convenio-birth-date"
+                    type="date"
+                    value={convenioDetails.birthDate}
+                    onChange={(e) => updateConvenioDetail('birthDate', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-rg">RG</label>
+                  <input id="convenio-rg" value={convenioDetails.rg} onChange={(e) => updateConvenioDetail('rg', e.target.value)} />
+                </div>
+              </div>
+
+              <div className="suppliers-row-4">
+                <div>
+                  <label htmlFor="convenio-im">IM</label>
+                  <input
+                    id="convenio-im"
+                    value={convenioDetails.municipalRegistration}
+                    onChange={(e) => updateConvenioDetail('municipalRegistration', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-gender">Gênero</label>
+                  <select id="convenio-gender" value={convenioDetails.gender} onChange={(e) => updateConvenioDetail('gender', e.target.value)}>
+                    <option value="">Não informado</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Feminino">Feminino</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="convenio-entry-origin">Origem do cadastro</label>
+                  <input id="convenio-entry-origin" value={convenioDetails.entryOrigin} onChange={(e) => updateConvenioDetail('entryOrigin', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-manager-name">Gerente</label>
+                  <input id="convenio-manager-name" value={convenioDetails.managerName} onChange={(e) => updateConvenioDetail('managerName', e.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Endereço</h4>
+
+              <div className="suppliers-row-address-top">
+                <div>
+                  <label htmlFor="convenio-cep">CEP</label>
+                  <input
+                    id="convenio-cep"
+                    value={convenioDetails.cep}
+                    onChange={(e) => updateConvenioDetail('cep', formatCepValue(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-address">Logradouro</label>
+                  <input
+                    id="convenio-address"
+                    value={convenioDetails.address}
+                    onChange={(e) => updateConvenioDetail('address', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-number">Número</label>
+                  <input id="convenio-number" value={convenioDetails.number} onChange={(e) => updateConvenioDetail('number', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-neighborhood">Bairro</label>
+                  <input
+                    id="convenio-neighborhood"
+                    value={convenioDetails.neighborhood}
+                    onChange={(e) => updateConvenioDetail('neighborhood', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-address-bottom">
+                <div>
+                  <label htmlFor="convenio-state">UF</label>
+                  <select id="convenio-state" value={convenioDetails.state} onChange={(e) => updateConvenioDetail('state', e.target.value)}>
+                    {stateOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="convenio-city">Cidade</label>
+                  <input id="convenio-city" value={convenioDetails.city} onChange={(e) => updateConvenioDetail('city', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-complement">Complemento</label>
+                  <input
+                    id="convenio-complement"
+                    value={convenioDetails.complement}
+                    onChange={(e) => updateConvenioDetail('complement', e.target.value)}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Contato</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="convenio-phone">Telefone</label>
+                  <input id="convenio-phone" value={convenioDetails.phone} onChange={(e) => updateConvenioDetail('phone', formatPhone(e.target.value))} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-mobile">Celular</label>
+                  <input id="convenio-mobile" value={convenioDetails.mobile} onChange={(e) => updateConvenioDetail('mobile', formatPhone(e.target.value))} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-email">E-Mail</label>
+                  <input id="convenio-email" type="email" value={convenioDetails.email} onChange={(e) => updateConvenioDetail('email', e.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Dados fiscais</h4>
+
+              <div className="suppliers-row-3">
+                <div>
+                  <label htmlFor="convenio-state-taxpayer-type">Tipo contribuinte estadual</label>
+                  <select
+                    id="convenio-state-taxpayer-type"
+                    value={convenioDetails.stateTaxpayerType}
+                    onChange={(e) => updateConvenioDetail('stateTaxpayerType', e.target.value)}
+                  >
+                    <option>Não informado</option>
+                    <option>Contribuinte ICMS</option>
+                    <option>Contribuinte isento</option>
+                    <option>Não contribuinte</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="convenio-activity-type">Tipo atividade</label>
+                  <select id="convenio-activity-type" value={convenioDetails.activityType} onChange={(e) => updateConvenioDetail('activityType', e.target.value)}>
+                    <option>Não informado</option>
+                    <option>Comércio</option>
+                    <option>Serviço</option>
+                    <option>Indústria</option>
+                    <option>Consumidor final</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="convenio-freight-mode">Modalidade de frete</label>
+                  <select id="convenio-freight-mode" value={convenioDetails.freightMode} onChange={(e) => updateConvenioDetail('freightMode', e.target.value)}>
+                    <option>Sem Ocorrência de Transporte</option>
+                    <option>Contratação por conta do remetente</option>
+                    <option>Contratação por conta do destinatário</option>
+                    <option>Transporte próprio</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="suppliers-row-4">
+                <div>
+                  <label htmlFor="convenio-crt">CRT</label>
+                  <input id="convenio-crt" value={convenioDetails.crt} onChange={(e) => updateConvenioDetail('crt', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-cnae">CNAE</label>
+                  <input id="convenio-cnae" value={convenioDetails.cnae} onChange={(e) => updateConvenioDetail('cnae', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-suframa">Suframa</label>
+                  <input id="convenio-suframa" value={convenioDetails.suframa} onChange={(e) => updateConvenioDetail('suframa', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-carrier-name">Transportadora</label>
+                  <input id="convenio-carrier-name" value={convenioDetails.carrierName} onChange={(e) => updateConvenioDetail('carrierName', e.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            <section className="suppliers-section">
+              <h4>Financeiro</h4>
 
               <div className="suppliers-row-3">
                 <div>
@@ -3768,7 +4208,7 @@ export function CadastroPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="convenio-cash-flow">Direção</label>
+                  <label htmlFor="convenio-cash-flow">Direção do fluxo</label>
                   <select
                     id="convenio-cash-flow"
                     value={convenioCashFlow}
@@ -3792,7 +4232,7 @@ export function CadastroPage() {
                 </div>
               </div>
 
-              <div className="suppliers-row-3">
+              <div className="suppliers-row-4">
                 <div>
                   <label htmlFor="convenio-account-name">Descrição da conta</label>
                   <input
@@ -3802,11 +4242,60 @@ export function CadastroPage() {
                     placeholder="Ex.: Conta principal, POS balcão, conta corrente"
                   />
                 </div>
+                <div>
+                  <label htmlFor="convenio-credit-limit">Limite de crédito</label>
+                  <input
+                    id="convenio-credit-limit"
+                    inputMode="decimal"
+                    value={convenioDetails.creditLimit}
+                    onChange={(e) => updateConvenioDetail('creditLimit', normalizeCurrencyInputChange(e.target.value))}
+                    onBlur={() => updateConvenioDetail('creditLimit', formatCurrencyInput(convenioDetails.creditLimit))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-fiado-limit">Débito fiado (CR)</label>
+                  <input
+                    id="convenio-fiado-limit"
+                    inputMode="decimal"
+                    value={convenioDetails.fiadoLimit}
+                    onChange={(e) => updateConvenioDetail('fiadoLimit', normalizeCurrencyInputChange(e.target.value))}
+                    onBlur={() => updateConvenioDetail('fiadoLimit', formatCurrencyInput(convenioDetails.fiadoLimit))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="convenio-delivery-service-fee">Taxa entrega/serviço</label>
+                  <input
+                    id="convenio-delivery-service-fee"
+                    inputMode="decimal"
+                    value={convenioDetails.deliveryServiceFee}
+                    onChange={(e) => updateConvenioDetail('deliveryServiceFee', normalizeCurrencyInputChange(e.target.value))}
+                    onBlur={() => updateConvenioDetail('deliveryServiceFee', formatCurrencyInput(convenioDetails.deliveryServiceFee))}
+                  />
+                </div>
+              </div>
+
+              <div className="suppliers-row-4">
+                <div>
+                  <label htmlFor="convenio-discount-percent">Desconto %</label>
+                  <input id="convenio-discount-percent" value={convenioDetails.discountPercent} onChange={(e) => updateConvenioDetail('discountPercent', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-commission-percent">Comissão %</label>
+                  <input id="convenio-commission-percent" value={convenioDetails.commissionPercent} onChange={(e) => updateConvenioDetail('commissionPercent', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-visit-day">Dia visita</label>
+                  <input id="convenio-visit-day" value={convenioDetails.visitDay} onChange={(e) => updateConvenioDetail('visitDay', e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="convenio-visit-region">Região visita</label>
+                  <input id="convenio-visit-region" value={convenioDetails.visitRegion} onChange={(e) => updateConvenioDetail('visitRegion', e.target.value)} />
+                </div>
               </div>
 
               <div className="employee-status-field">
-                <label>Status do convenio</label>
-                <div className="employee-status-toggle" role="group" aria-label="Status do convenio">
+                <label>Status do convênio</label>
+                <div className="employee-status-toggle" role="group" aria-label="Status do convênio">
                   <button type="button" className={convenioActive ? 'is-active' : ''} onClick={() => setConvenioActive(true)}>
                     Ativo
                   </button>
@@ -3850,15 +4339,32 @@ export function CadastroPage() {
             {convenioFormError && <p className="products-form-warning">{convenioFormError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       {activeTab === 'ADMIN_CARTOES' && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="cadastro-span-overlay" role="dialog" aria-modal="true" aria-labelledby="card-manager-cadastro-title">
+        <article className="card products-cadastro-span cadastro-span-panel">
+          <button
+            type="button"
+            className="cadastro-span-close"
+            aria-label="Fechar cadastro de administradora de cartões"
+            onClick={() => {
+              setShowCadastroSpan(false);
+              clearCardManagerForm();
+            }}
+          >
+            ×
+          </button>
           <header className="products-cadastro-header">
-            <h3>Cadastro rápido | Administradora de cartões</h3>
+            <h3 id="card-manager-cadastro-title">Cadastro rápido | Administradora de cartões</h3>
           </header>
 
           <form onSubmit={onSubmitCardManager} className="suppliers-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro de administradora de cartões">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section">
               <h4>Dados básicos</h4>
 
@@ -3970,6 +4476,7 @@ export function CadastroPage() {
             {cardManagerFormError && <p className="products-form-warning">{cardManagerFormError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       {activeTab === 'FINANCEIRO' && showCadastroSpan && (
@@ -3988,7 +4495,13 @@ export function CadastroPage() {
           </button>
           <header className="products-cadastro-header">
             <div>
-              <h3 id="finance-cadastro-title">Cadastro rápido | Financeiro</h3>
+              <h3 id="finance-cadastro-title">
+                Cadastro rápido | {activeFinanceTab === 'DESPESAS'
+                  ? 'Despesa'
+                  : activeFinanceTab === 'RECEITA'
+                    ? 'Receita'
+                    : 'Conta corrente'}
+              </h3>
               <p className="products-subtitle">Lançamentos por categoria financeira.</p>
             </div>
             <div className="products-cadastro-tabs">
@@ -4011,6 +4524,10 @@ export function CadastroPage() {
           </header>
 
           <form onSubmit={onSubmitFinanceEntry} className="suppliers-form finance-entry-form" autoComplete="off">
+            <nav className="convenio-form-tabs" aria-label="Seções do cadastro financeiro">
+              <span>Cadastro rápido</span>
+            </nav>
+
             <section className="suppliers-section finance-entry-section">
               <h4>
                 {activeFinanceTab === 'DESPESAS'
@@ -4027,33 +4544,43 @@ export function CadastroPage() {
                 </div>
                 <div>
                   <label htmlFor="finance-supplier-name">{financePersonLabel}</label>
-                  <div className="products-supplier-picker-field">
-                    <select
+                  <div className="products-supplier-picker-field finance-person-search-field">
+                    <input
                       id="finance-supplier-name"
                       value={financeSupplierName}
                       onChange={(e) => {
-                        const selectedPersonName = e.target.value;
-                        setFinanceSupplierName(selectedPersonName);
-                        if (activeFinanceTab === 'RECEITA') {
-                          setFinanceDescription(selectedPersonName);
-                        }
+                        setFinanceSupplierName(e.target.value);
                         setFinanceFormError(null);
                       }}
+                      placeholder={activeFinanceTab === 'RECEITA'
+                        ? 'Digite 3 letras para buscar cliente'
+                        : activeFinanceTab === 'DESPESAS'
+                          ? 'Digite 3 letras para buscar fornecedor'
+                          : 'Não se aplica'}
                       disabled={activeFinanceTab === 'CONTA_CORRENTE'}
-                    >
-                      <option value="">
-                        {activeFinanceTab === 'RECEITA'
-                          ? 'Selecione o cliente'
-                          : activeFinanceTab === 'DESPESAS'
-                            ? 'Selecione o fornecedor'
-                            : 'Não se aplica'}
-                      </option>
-                      {financePersonOptions.map((person) => (
-                        <option key={person.id} value={person.label}>
-                          {person.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                    {filteredFinancePersonOptions.length > 0 && (
+                      <div className="finance-person-suggestions" role="listbox">
+                        {filteredFinancePersonOptions.map((person) => (
+                          <button
+                            key={person.id}
+                            type="button"
+                            role="option"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              setFinanceSupplierName(person.label);
+                              if (activeFinanceTab === 'RECEITA') {
+                                setFinanceDescription(person.label);
+                              }
+                              setFinanceFormError(null);
+                            }}
+                          >
+                            <strong>{person.label}</strong>
+                            {person.secondaryLabel && <span>{person.secondaryLabel}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <button
                       type="button"
                       className="products-supplier-picker-button"
@@ -4080,23 +4607,6 @@ export function CadastroPage() {
                     onChange={(e) => setFinanceDescription(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label htmlFor="finance-category-type">Tipo</label>
-                  <select
-                    id="finance-category-type"
-                    value={financeCategoryType}
-                    onChange={(e) => setFinanceCategoryType(e.target.value as typeof financeTypeOptions[number])}
-                  >
-                    {financeTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="suppliers-row-3">
                 <div>
                   <label htmlFor="finance-amount">Valor</label>
                   <input
@@ -4137,26 +4647,21 @@ export function CadastroPage() {
                         ? 'Conta corrente de entrada'
                         : 'Conta corrente'}
                   </label>
-                  <input id="finance-account-name" value={financeAccountName} readOnly placeholder="Selecione abaixo" />
-                  <div className="finance-option-chips" aria-label="Contas cadastradas em convênios">
-                    {financeAccountOptions.length ? (
-                      financeAccountOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          className={financeAccountName === option ? 'is-selected' : ''}
-                          onClick={() => {
-                            setFinanceAccountName(option);
-                            setFinanceFormError(null);
-                          }}
-                        >
-                          {option}
-                        </button>
-                      ))
-                    ) : (
-                      <span>Nenhum banco/conta cadastrado em Convênios.</span>
-                    )}
-                  </div>
+                  <select
+                    id="finance-account-name"
+                    value={financeAccountName}
+                    onChange={(event) => {
+                      setFinanceAccountName(event.target.value);
+                      setFinanceFormError(null);
+                    }}
+                  >
+                    <option value="">Selecione a conta</option>
+                    {financeAccountOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                   <div className="products-supplier-picker-field finance-inline-add">
                     <input
                       value={financeAccountDraft}
@@ -4187,22 +4692,21 @@ export function CadastroPage() {
                 </div>
                 <div>
                   <label htmlFor="finance-document-ref">Documento / Referência</label>
-                  <input id="finance-document-ref" value={financeDocumentRef} readOnly placeholder="Selecione abaixo" />
-                  <div className="finance-option-chips" aria-label="Documentos e referências financeiras">
+                  <select
+                    id="finance-document-ref"
+                    value={financeDocumentRef}
+                    onChange={(event) => {
+                      setFinanceDocumentRef(event.target.value);
+                      setFinanceFormError(null);
+                    }}
+                  >
+                    <option value="">Selecione o documento</option>
                     {financeDocumentTypeOptions.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className={financeDocumentRef === option ? 'is-selected' : ''}
-                        onClick={() => {
-                          setFinanceDocumentRef(option);
-                          setFinanceFormError(null);
-                        }}
-                      >
+                      <option key={option} value={option}>
                         {option}
-                      </button>
+                      </option>
                     ))}
-                  </div>
+                  </select>
                   <div className="products-supplier-picker-field finance-inline-add">
                     <input
                       value={financeDocumentTypeDraft}
@@ -4216,9 +4720,12 @@ export function CadastroPage() {
                     <button
                       type="button"
                       className="products-supplier-picker-button"
-                      onClick={onAddFinanceDocumentType}
-                      title="Cadastrar tipo de documento"
-                      aria-label="Cadastrar tipo de documento"
+                      onClick={() => {
+                        setShowFinanceDocumentManager((current) => !current);
+                        setFinanceFormError(null);
+                      }}
+                      title="Gerenciar documento/referência"
+                      aria-label="Gerenciar documento/referência"
                     >
                       +
                     </button>
@@ -4233,19 +4740,17 @@ export function CadastroPage() {
                 </div>
                 <div>
                   <label htmlFor="finance-status">Status</label>
-                  <input id="finance-status" value={financeStatus} readOnly />
-                  <div className="finance-option-chips finance-status-chips" aria-label="Status financeiro">
+                  <select
+                    id="finance-status"
+                    value={financeStatus}
+                    onChange={(event) => setFinanceStatus(event.target.value as typeof financeStatus)}
+                  >
                     {financeStatusOptionsByTab[activeFinanceTab].map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className={financeStatus === status ? 'is-selected' : ''}
-                        onClick={() => setFinanceStatus(status)}
-                      >
+                      <option key={status} value={status}>
                         {status}
-                      </button>
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 </div>
               </div>
 
@@ -4284,6 +4789,92 @@ export function CadastroPage() {
 
             {financeFormError && <p className="products-form-warning">{financeFormError}</p>}
           </form>
+          {showFinanceDocumentManager && (
+            <div className="finance-document-manager-overlay" role="dialog" aria-modal="true" aria-labelledby="finance-document-manager-title">
+              <section className="finance-document-manager-span">
+                <header className="finance-document-manager-header">
+                  <div>
+                    <p className="products-eyebrow">Financeiro</p>
+                    <h4 id="finance-document-manager-title">Documento / Referência</h4>
+                    <span>{activeFinanceTab === 'DESPESAS' ? 'Despesa' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta corrente'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="finance-document-manager-close"
+                    aria-label="Fechar gerenciador de documento/referência"
+                    onClick={() => setShowFinanceDocumentManager(false)}
+                  >
+                    ×
+                  </button>
+                </header>
+
+                <div className="finance-document-manager">
+                  <div className="finance-document-manager-editor">
+                    <label htmlFor="finance-document-manager-draft">
+                      {editingFinanceDocumentType ? 'Editando documento/referência' : 'Novo documento/referência'}
+                    </label>
+                    <input
+                      id="finance-document-manager-draft"
+                      value={financeDocumentTypeDraft}
+                      onChange={(event) => {
+                        setFinanceDocumentTypeDraft(event.target.value);
+                        setFinanceFormError(null);
+                      }}
+                      placeholder="Ex.: Boleto, Pix, Dinheiro"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="finance-document-manager-actions">
+                    <button type="button" onClick={onSaveFinanceDocumentType}>
+                      {editingFinanceDocumentType ? 'Salvar edição' : 'Criar'}
+                    </button>
+                    {editingFinanceDocumentType && (
+                      <button
+                        type="button"
+                        className="button-muted"
+                        onClick={() => {
+                          setEditingFinanceDocumentType(null);
+                          setFinanceDocumentTypeDraft('');
+                        }}
+                      >
+                        Cancelar edição
+                      </button>
+                    )}
+                  </div>
+                  <ul className="finance-document-manager-list">
+                    {financeDocumentTypeOptions.map((option) => (
+                      <li key={option}>
+                        <span>{option}</span>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onEditFinanceDocumentType(option);
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="button-danger"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onDeleteFinanceDocumentType(option);
+                            }}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            </div>
+          )}
         </article>
         </div>
       )}
@@ -5357,13 +5948,19 @@ export function CadastroPage() {
                 onClick={() => {
                   setFinanceAccountStartDateFilter(financeAccountStartDateInput);
                   setFinanceAccountEndDateFilter(financeAccountEndDateInput);
+                  setFinanceSearchExecutedByTab((current) => ({
+                    ...current,
+                    [activeFinanceTab]: true
+                  }));
                 }}
               >
                 Buscar
               </button>
             </div>
 
-            {!financeAccountOptions.length ? (
+            {!financeSearchExecutedByTab[activeFinanceTab] ? (
+              <p className="empty-state">Informe a conta e o período, depois clique em Buscar para visualizar os lançamentos.</p>
+            ) : !financeAccountOptions.length ? (
               <p className="empty-state">Cadastre bancos/contas em Convênios para consultar saldo por conta corrente.</p>
             ) : (
               <div className="finance-account-ledger">
@@ -5436,11 +6033,13 @@ export function CadastroPage() {
             )}
           </section>
 
-          {activeFinanceRows.length === 0 ? (
+          {!financeSearchExecutedByTab[activeFinanceTab] ? (
+            <p className="empty-state">Nenhum lançamento será exibido antes da pesquisa.</p>
+          ) : searchedFinanceEntries.length === 0 ? (
             <p className="empty-state">Nenhum lançamento em {activeFinanceTab === 'DESPESAS' ? 'Despesas' : activeFinanceTab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}.</p>
           ) : (
             <ul className="products-list suppliers-list">
-              {activeFinanceRows.map((entry) => (
+              {searchedFinanceEntries.map((entry) => (
                 <li key={entry.id}>
                   <div>
                     <strong>

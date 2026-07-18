@@ -24,6 +24,8 @@ import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/t
 import { buildReceiptText } from '@/fiscal/receiptService';
 import { convertNonFiscalToMockNfce } from '@/fiscal/mockNfce';
 import type { NonFiscalReceipt, PaymentType, ReceiptEmitter, ReceiptItem, ReceiptPayment } from '@/fiscal/types';
+import { financeContainer } from '@/modules/finance/infrastructure/container/financeContainer';
+import { ordersContainer } from '@/modules/orders/infrastructure/container/ordersContainer';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
 import type { ItemComanda } from '@/types/comanda';
@@ -1829,6 +1831,62 @@ export function CashierPage() {
     return true;
   };
 
+  const persistStandaloneCashierSale = async (documentMode: PaymentDocumentMode, payableTotal: number) => {
+    if (comandaNumber.trim()) {
+      return;
+    }
+
+    const closedAt = new Date();
+    await ordersContainer.orderRepository.save({
+      id: `venda-avulsa-${closedAt.getTime()}-${crypto.randomUUID()}`,
+      table: documentMode === 'ORCAMENTO' ? 'Orçamento avulso' : 'Venda avulsa',
+      status: 'ENTREGUE',
+      items: cartItems.map((item) => ({
+        id: item.id,
+        productId: item.catalogProductId ?? item.productCode ?? item.id,
+        productName: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        byWeight: item.unit === 'KG',
+        weight: item.unit === 'KG' ? item.quantity : undefined
+      })),
+      total: Number(payableTotal.toFixed(2)),
+      version: 1,
+      createdAt: closedAt,
+      updatedAt: closedAt,
+      lastSyncedAt: closedAt,
+      createdBy: user?.name ?? user?.role ?? 'CAIXA'
+    });
+  };
+
+  const persistCashierPaymentMovements = async (
+    payments: PaymentEntry[],
+    documentMode: PaymentDocumentMode,
+    atendimentoLabel: string
+  ) => {
+    const launchedAt = new Date();
+
+    await Promise.all(
+      payments
+        .filter((payment) => payment.amount > 0)
+        .map((payment, index) => {
+          const methodLabel = payment.label || CASHIER_PAYMENT_SUMMARY_LABELS.find((item) => item.method === payment.method)?.label || payment.method;
+          const normalizedMethod = methodLabel.toUpperCase();
+
+          return financeContainer.createCashMovement.execute({
+            id: `mov-venda-${launchedAt.getTime()}-${index}-${crypto.randomUUID()}`,
+            movementCode: `V-${String(launchedAt.getTime()).slice(-8)}-${index + 1}`,
+            movementType: 'ENTRADA',
+            category: normalizedMethod,
+            amount: Number(payment.amount.toFixed(2)),
+            description: `${documentMode === 'NFCE' ? 'Venda NFC-e' : 'Orçamento'} ${atendimentoLabel} - ${methodLabel}`,
+            launchedAt,
+            paymentMethod: methodLabel
+          });
+        })
+    );
+  };
+
   const handlePaymentConfirm = async ({ payments, fiadoClientId, discountAmount, documentMode, customerDocument }: PaymentConfirmPayload) => {
     if (!ensureCashierOpen('finalizar pagamento')) {
       return;
@@ -1860,7 +1918,10 @@ export function CashierPage() {
       return;
     }
 
+    await persistStandaloneCashierSale(finalDocumentMode, payableTotal);
+    await persistCashierPaymentMovements(payments, finalDocumentMode, currentComandaNumber);
     accumulateSaleInCashierSession(payments, payableTotal);
+    window.dispatchEvent(new CustomEvent('pdv.dashboard-refresh'));
 
     if (isFiadoFlow) {
       const clientId = fiadoClientId;

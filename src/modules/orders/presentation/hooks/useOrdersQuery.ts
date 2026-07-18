@@ -23,23 +23,32 @@ type DashboardComanda = {
   transitions?: Array<{ to: string; at: string }>;
 };
 
-const getClosingDate = (comanda: DashboardComanda) => {
-  const closingTransition = [...(comanda.transitions ?? [])]
+const getClosingTransition = (comanda: DashboardComanda) =>
+  [...(comanda.transitions ?? [])]
     .reverse()
-    .find((transition) => transition.to === 'FECHADA_VENDA');
+    .find((transition) => transition.to === 'FECHADA_VENDA' || transition.to === 'FECHADA_ORCAMENTO');
+
+const getClosingDate = (comanda: DashboardComanda) => {
+  const closingTransition = getClosingTransition(comanda);
   return new Date(closingTransition?.at ?? comanda.updatedAt);
 };
 
+const isClosedForDashboard = (comanda: DashboardComanda) =>
+  comanda.status === 'FECHADA_VENDA'
+  || comanda.status === 'FECHADA_ORCAMENTO'
+  || (comanda.status === 'ARQUIVADA' && Boolean(getClosingTransition(comanda)));
+
 export const mapClosedSalesToOrders = (comandas: DashboardComanda[]): Order[] =>
   comandas
-    .filter((comanda) => comanda.status === 'FECHADA_VENDA')
+    .filter(isClosedForDashboard)
     .map((comanda) => {
       const closedAt = getClosingDate(comanda);
+      const closingType = getClosingTransition(comanda)?.to ?? comanda.status;
       const items = Array.isArray(comanda.items) ? comanda.items : [];
 
       return {
-        id: `comanda-${comanda.numero}`,
-        table: `Comanda ${comanda.numero}`,
+        id: `comanda-${comanda.numero}-${closingType.toLowerCase()}`,
+        table: `${closingType === 'FECHADA_ORCAMENTO' ? 'Orçamento' : 'Comanda'} ${comanda.numero}`,
         status: 'ENTREGUE',
         items: items.map((item) => ({
           id: item.id,
@@ -83,8 +92,12 @@ export function useOrdersQuery() {
       }
 
       setOrders([...mergedOrders.values()]);
-      setClosedSalesCount(closedSaleOrders.length);
-      setClosedBudgetsCount(comandas.filter((comanda) => comanda.status === 'FECHADA_ORCAMENTO').length);
+      setClosedSalesCount(
+        comandas.filter((comanda) => isClosedForDashboard(comanda) && (getClosingTransition(comanda)?.to ?? comanda.status) === 'FECHADA_VENDA').length
+      );
+      setClosedBudgetsCount(
+        comandas.filter((comanda) => isClosedForDashboard(comanda) && (getClosingTransition(comanda)?.to ?? comanda.status) === 'FECHADA_ORCAMENTO').length
+      );
     } catch {
       setOrders(localOrders);
       setClosedSalesCount(0);
