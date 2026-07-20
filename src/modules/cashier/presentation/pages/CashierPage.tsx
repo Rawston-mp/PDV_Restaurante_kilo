@@ -23,8 +23,9 @@ import { CashierVirtualKeyboard } from '@/modules/cashier/presentation/component
 import { type PaymentDocumentMode, type PaymentEntry } from '@/modules/cashier/types';
 import { buildReceiptText } from '@/fiscal/receiptService';
 import { convertNonFiscalToMockNfce } from '@/fiscal/mockNfce';
-import type { NonFiscalReceipt, PaymentType, ReceiptEmitter, ReceiptItem, ReceiptPayment } from '@/fiscal/types';
+import type { FiscalReceipt, NonFiscalReceipt, PaymentType, ReceiptEmitter, ReceiptItem, ReceiptPayment } from '@/fiscal/types';
 import { financeContainer } from '@/modules/finance/infrastructure/container/financeContainer';
+import { fiscalContainer } from '@/modules/fiscal/infrastructure/container/fiscalContainer';
 import { ordersContainer } from '@/modules/orders/infrastructure/container/ordersContainer';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
 import { clientsContainer } from '@/modules/clients/infrastructure/container/clientsContainer';
@@ -46,7 +47,7 @@ import {
   unmarkComandaLocallyCancelled,
   upsertComandaItems
 } from '@/shared/infrastructure/storage/comandaCache';
-import { loadDigitalCertificateSettings } from '@/shared/domain/services/digitalCertificateRules';
+import { loadDigitalCertificateSettings, SEFAZ_PRODUCTION_READY } from '@/shared/domain/services/digitalCertificateRules';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CashierPage — tela de caixa unificada
@@ -1518,17 +1519,12 @@ export function CashierPage() {
     };
   };
 
-  const printReceipt = (
+  const buildCheckoutReceipt = (
     payments: PaymentEntry[],
     discountAmount = 0,
     documentMode: PaymentDocumentMode = 'NFCE',
     customerDocument = ''
-  ) => {
-    const opened = window.open('', '_blank', 'width=460,height=760');
-    if (!opened) {
-      return;
-    }
-
+  ): FiscalReceipt | NonFiscalReceipt => {
     const now = new Date();
     const payableTotal = Math.max(0, subtotal - discountAmount);
     const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
@@ -1592,7 +1588,9 @@ export function CashierPage() {
               ...mockNfce.nfce,
               serie: nfceSerie,
               numero: nfceNumber,
-              ambiente: fiscalSettings?.nfceEnvironment || mockNfce.nfce.ambiente,
+              ambiente: SEFAZ_PRODUCTION_READY
+                ? fiscalSettings?.nfceEnvironment || mockNfce.nfce.ambiente
+                : 'HOMOLOGACAO',
               cscId: fiscalSettings?.cscId?.trim() || mockNfce.nfce.cscId
             },
             consumidor: customerDocumentDigits
@@ -1606,6 +1604,21 @@ export function CashierPage() {
           };
         })()
       : nonFiscalReceipt;
+    return receipt;
+  };
+
+  const printReceipt = (
+    payments: PaymentEntry[],
+    discountAmount = 0,
+    documentMode: PaymentDocumentMode = 'NFCE',
+    customerDocument = ''
+  ) => {
+    const opened = window.open('', '_blank', 'width=460,height=760');
+    if (!opened) {
+      return;
+    }
+
+    const receipt = buildCheckoutReceipt(payments, discountAmount, documentMode, customerDocument);
     const receiptText = buildReceiptText(receipt);
 
     opened.document.write(`
@@ -1920,6 +1933,31 @@ export function CashierPage() {
 
     await persistStandaloneCashierSale(finalDocumentMode, payableTotal);
     await persistCashierPaymentMovements(payments, finalDocumentMode, currentComandaNumber);
+
+    if (finalDocumentMode === 'NFCE') {
+      const fiscalReceipt = buildCheckoutReceipt(payments, discountAmount, finalDocumentMode, customerDocument) as FiscalReceipt;
+      const fiscalDocument = await fiscalContainer.registerPendingFiscalDocument.execute({
+        saleId: `cashier-${crypto.randomUUID()}`,
+        receipt: fiscalReceipt
+      });
+
+      if (fiscalDocument.status === 'AUTHORIZED') {
+        showNotice(`NFC-e registrada em homologação/desenvolvimento: ${fiscalDocument.protocol ?? fiscalDocument.accessKey}.`, 'success');
+      } else if (fiscalDocument.status === 'OFFLINE' || fiscalDocument.status === 'PENDING') {
+        showNotice('Sem internet: NFC-e salva como pendente e será enviada automaticamente quando a conexão voltar.', 'warning');
+      } else if (fiscalDocument.status === 'REJECTED') {
+        showNotice(
+          `NFC-e rejeitada: ${fiscalDocument.xmotivo ?? fiscalDocument.lastError ?? 'revise a pendência fiscal.'}`,
+          'error'
+        );
+      } else if (fiscalDocument.status === 'MANUAL_REVIEW') {
+        showNotice(
+          `NFC-e em revisão: ${fiscalDocument.xmotivo ?? fiscalDocument.lastError ?? 'configure o emissor fiscal real.'}`,
+          'warning'
+        );
+      }
+    }
+
     accumulateSaleInCashierSession(payments, payableTotal);
     window.dispatchEvent(new CustomEvent('pdv.dashboard-refresh'));
 

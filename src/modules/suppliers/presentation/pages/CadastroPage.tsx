@@ -858,6 +858,10 @@ export function CadastroPage() {
   const [stockNotePeriodEnd, setStockNotePeriodEnd] = useState('');
   const [stockNoteSupplierFilter, setStockNoteSupplierFilter] = useState('');
   const [stockNoteBarcodeFilter, setStockNoteBarcodeFilter] = useState('');
+  const [appliedStockNotePeriodStart, setAppliedStockNotePeriodStart] = useState('');
+  const [appliedStockNotePeriodEnd, setAppliedStockNotePeriodEnd] = useState('');
+  const [appliedStockNoteSupplierFilter, setAppliedStockNoteSupplierFilter] = useState('');
+  const [appliedStockNoteBarcodeFilter, setAppliedStockNoteBarcodeFilter] = useState('');
   const [viewingStockNoteKey, setViewingStockNoteKey] = useState<string | null>(null);
   const stockEntryXmlInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -2047,10 +2051,10 @@ export function CadastroPage() {
   }, [products, stockEntries]);
 
   const filteredStockEntryNoteRows = useMemo(() => {
-    const supplierFilter = normalizeSearchText(stockNoteSupplierFilter).trim();
-    const barcodeFilter = stockNoteBarcodeFilter.replace(/\D/g, '');
-    const startDate = stockNotePeriodStart ? new Date(`${stockNotePeriodStart}T00:00:00`) : null;
-    const endDate = stockNotePeriodEnd ? new Date(`${stockNotePeriodEnd}T23:59:59`) : null;
+    const supplierFilter = normalizeSearchText(appliedStockNoteSupplierFilter).trim();
+    const barcodeFilter = appliedStockNoteBarcodeFilter.replace(/\D/g, '');
+    const startDate = appliedStockNotePeriodStart ? new Date(`${appliedStockNotePeriodStart}T00:00:00`) : null;
+    const endDate = appliedStockNotePeriodEnd ? new Date(`${appliedStockNotePeriodEnd}T23:59:59`) : null;
 
     return stockEntryNoteRows.filter((note) => {
       if (startDate && note.issueDate < startDate) return false;
@@ -2059,7 +2063,13 @@ export function CadastroPage() {
       if (barcodeFilter && !note.barcodes.some((barcode) => barcode.replace(/\D/g, '').includes(barcodeFilter))) return false;
       return true;
     });
-  }, [stockEntryNoteRows, stockNoteBarcodeFilter, stockNotePeriodEnd, stockNotePeriodStart, stockNoteSupplierFilter]);
+  }, [
+    appliedStockNoteBarcodeFilter,
+    appliedStockNotePeriodEnd,
+    appliedStockNotePeriodStart,
+    appliedStockNoteSupplierFilter,
+    stockEntryNoteRows
+  ]);
 
   const viewingStockNote = useMemo(
     () => stockEntryNoteRows.find((note) => note.key === viewingStockNoteKey) ?? null,
@@ -6021,13 +6031,13 @@ export function CadastroPage() {
               type="button"
               className="button-muted"
               onClick={() => {
-                setStockNotePeriodStart('');
-                setStockNotePeriodEnd('');
-                setStockNoteSupplierFilter('');
-                setStockNoteBarcodeFilter('');
+                setAppliedStockNotePeriodStart(stockNotePeriodStart);
+                setAppliedStockNotePeriodEnd(stockNotePeriodEnd);
+                setAppliedStockNoteSupplierFilter(stockNoteSupplierFilter);
+                setAppliedStockNoteBarcodeFilter(stockNoteBarcodeFilter);
               }}
             >
-              Limpar
+              Buscar
             </button>
           </div>
 
