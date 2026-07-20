@@ -11,6 +11,18 @@ import {
 } from '@/modules/admin/infrastructure/local/sensitiveAuditLog';
 import { StoreSettingsPanel } from '@/modules/admin/presentation/components/StoreSettingsPanel';
 import { PeripheralSettingsPanel } from '@/modules/admin/presentation/components/PeripheralSettingsPanel';
+import type { FiscalDocument } from '@/modules/fiscal/domain/entities/FiscalDocument';
+import {
+  FISCAL_GATEWAY_API_BASE_URLS,
+  FISCAL_GATEWAY_RATE_LIMITS,
+  FISCAL_GATEWAY_WEBHOOK_RETRY_POLICY,
+  loadFiscalGatewaySettings,
+  maskApiKey,
+  saveFiscalGatewaySettings,
+  type FiscalGatewayEnvironment,
+  type FiscalGatewaySettings
+} from '@/modules/fiscal/domain/services/fiscalGatewaySettings';
+import { fiscalContainer } from '@/modules/fiscal/infrastructure/container/fiscalContainer';
 import {
   commercialStatusLabels,
   findStoreSettingById,
@@ -32,6 +44,7 @@ import {
   CERTIFICATE_MODEL_OPTIONS,
   CERTIFICATE_SETTINGS_STORAGE_KEY,
   DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS,
+  SEFAZ_PRODUCTION_READY,
   formatCertificateFileSize,
   getCertificateExpiryStatus,
   getUfNfceRuleMessage,
@@ -57,6 +70,29 @@ const outcomeLabels: Record<SensitiveAuditEvent['outcome'] | 'ALL', string> = {
   SUCCESS: 'Aprovado',
   DENIED: 'Negado'
 };
+
+const fiscalStatusLabels: Record<FiscalDocument['status'], string> = {
+  PENDING: 'Pendente',
+  OFFLINE: 'Offline',
+  AUTHORIZED: 'Autorizada',
+  REJECTED: 'Rejeitada',
+  CANCELLED: 'Cancelada',
+  MANUAL_REVIEW: 'Revisão manual'
+};
+
+const sefazEnvironmentLabels: Record<'ALL' | 'HOMOLOGACAO' | 'PRODUCAO', string> = {
+  ALL: 'Todos os ambientes',
+  HOMOLOGACAO: 'Homologação (testes)',
+  PRODUCAO: 'Produção (venda real)'
+};
+
+const sefazProductionMissingItems = [
+  'Gateway real de autorização SEFAZ-SP ou API fiscal homologada',
+  'Assinatura XML NFC-e com certificado A1',
+  'Transmissão real para webservice da SEFAZ-SP',
+  'Retorno real de protocolo, cStat, xMotivo e QR Code',
+  'Contingência fiscal validada com contador antes do go-live'
+];
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
 const commercialStatusOptions: StoreCommercialStatus[] = [
@@ -93,6 +129,7 @@ export function AdminPage() {
   const { user, getPinHealth } = useAuth();
   const [syncTasks, setSyncTasks] = useState<SyncQueueTask[]>([]);
   const [auditEvents, setAuditEvents] = useState<SensitiveAuditEvent[]>([]);
+  const [fiscalDocuments, setFiscalDocuments] = useState<FiscalDocument[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<'ALL' | SensitiveAuditEvent['action']>('ALL');
@@ -133,21 +170,38 @@ export function AdminPage() {
   const [isFiscalSettingsOpen, setIsFiscalSettingsOpen] = useState(false);
   const [isOperationalOpen, setIsOperationalOpen] = useState(false);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
+  const [isPdvSefazOpen, setIsPdvSefazOpen] = useState(false);
+  const [sefazEnvironmentFilter, setSefazEnvironmentFilter] = useState<'ALL' | 'HOMOLOGACAO' | 'PRODUCAO'>('ALL');
   const [isCommercialOpen, setIsCommercialOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [commercialStores, setCommercialStores] = useState<StoreSettings[]>(readStoreSettings);
   const [selectedCommercialStoreId, setSelectedCommercialStoreId] = useState(commercialStores[0]?.id ?? '');
   const [ownerSettings, setOwnerSettings] = useState<PlatformOwnerSettings>(readPlatformOwnerSettings);
+  const [fiscalGatewaySettings, setFiscalGatewaySettings] = useState<FiscalGatewaySettings>(loadFiscalGatewaySettings);
 
   const refresh = async () => {
     const tasks = await productsContainer.syncTaskQueue.listAll();
     setSyncTasks(tasks);
     setAuditEvents(listSensitiveAuditEvents());
+    setFiscalDocuments(await fiscalContainer.fiscalDocumentRepository.list());
     setProducts(await productsContainer.productRepository.list());
   };
 
   useEffect(() => {
     void refresh();
+  }, []);
+
+  useEffect(() => {
+    const refreshFiscalDocuments = () => {
+      void fiscalContainer.fiscalDocumentRepository.list().then(setFiscalDocuments);
+    };
+
+    window.addEventListener('pdv.fiscal-documents-refresh', refreshFiscalDocuments);
+    window.addEventListener('online', refreshFiscalDocuments);
+    return () => {
+      window.removeEventListener('pdv.fiscal-documents-refresh', refreshFiscalDocuments);
+      window.removeEventListener('online', refreshFiscalDocuments);
+    };
   }, []);
 
   useEffect(() => {
@@ -279,6 +333,79 @@ export function AdminPage() {
       return line.includes(normalizedText);
     });
   }, [actionFilter, outcomeFilter, roleFilter, textFilter, auditEvents]);
+
+  const fiscalSummary = useMemo(() => {
+    const countByStatus = (status: FiscalDocument['status'], environment?: FiscalDocument['environment']) =>
+      fiscalDocuments.filter((document) =>
+        document.status === status && (!environment || document.environment === environment)
+      ).length;
+
+    return {
+      total: fiscalDocuments.length,
+      pending: countByStatus('PENDING') + countByStatus('OFFLINE'),
+      authorized: countByStatus('AUTHORIZED'),
+      rejected: countByStatus('REJECTED'),
+      manualReview: countByStatus('MANUAL_REVIEW'),
+      homologacao: {
+        total: fiscalDocuments.filter((document) => document.environment === 'HOMOLOGACAO').length,
+        pending: countByStatus('PENDING', 'HOMOLOGACAO') + countByStatus('OFFLINE', 'HOMOLOGACAO'),
+        authorized: countByStatus('AUTHORIZED', 'HOMOLOGACAO'),
+        rejected: countByStatus('REJECTED', 'HOMOLOGACAO')
+      },
+      producao: {
+        total: fiscalDocuments.filter((document) => document.environment === 'PRODUCAO').length,
+        pending: countByStatus('PENDING', 'PRODUCAO') + countByStatus('OFFLINE', 'PRODUCAO'),
+        authorized: countByStatus('AUTHORIZED', 'PRODUCAO'),
+        rejected: countByStatus('REJECTED', 'PRODUCAO')
+      }
+    };
+  }, [fiscalDocuments]);
+
+  const orderedFiscalDocuments = useMemo(() => {
+    return [...fiscalDocuments]
+      .filter((document) => sefazEnvironmentFilter === 'ALL' || document.environment === sefazEnvironmentFilter)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [fiscalDocuments, sefazEnvironmentFilter]);
+
+  const sefazActiveEnvironment = savedCertificateSettings?.nfceEnvironment ?? certificateNfceEnvironment;
+
+  const sefazProductionReadiness = useMemo(() => {
+    const issues = [
+      !certificateCompanyName.trim() ? 'Razão social não informada' : null,
+      !isValidCnpj(certificateCnpj) ? 'CNPJ inválido ou ausente' : null,
+      !certificateStateRegistration.trim() ? 'Inscrição estadual não informada' : null,
+      !certificateCnae.trim() ? 'CNAE principal não selecionado' : null,
+      !certificateTaxRegime.trim() ? 'Regime tributário não selecionado' : null,
+      !certificateCscId.trim() ? 'CSC ID não informado' : null,
+      !certificateCscCode.trim() ? 'CSC não informado' : null,
+      !certificateFileName.trim() ? 'Certificado A1 não importado' : null
+    ].filter(Boolean) as string[];
+
+    const cscError = validateCscByUf({
+      uf: certificateUf,
+      cscId: certificateCscId,
+      cscCode: certificateCscCode
+    });
+
+    if (cscError) {
+      issues.push(cscError);
+    }
+
+    return {
+      isReady: issues.length === 0,
+      issues
+    };
+  }, [
+    certificateCnae,
+    certificateCnpj,
+    certificateCompanyName,
+    certificateCscCode,
+    certificateCscId,
+    certificateFileName,
+    certificateStateRegistration,
+    certificateTaxRegime,
+    certificateUf
+  ]);
 
   const certificateExpiryInfo = useMemo(() => {
     if (!certificateExpirationDate) {
@@ -441,6 +568,88 @@ export function AdminPage() {
     });
 
     await refresh();
+  };
+
+  const onRefreshFiscalDocuments = async () => {
+    setFiscalDocuments(await fiscalContainer.fiscalDocumentRepository.list());
+    setMessage('Pdv_Sefaz atualizado.');
+  };
+
+  const onSelectSefazEnvironment = (environment: 'HOMOLOGACAO' | 'PRODUCAO') => {
+    if (environment === 'PRODUCAO' && !SEFAZ_PRODUCTION_READY) {
+      setMessage('Produção bloqueada: configure e valide o gateway real SEFAZ-SP/API fiscal antes de vender com NFC-e real.');
+      return;
+    }
+
+    const settings: DigitalCertificateSettings = {
+      alias: certificateAlias,
+      companyName: certificateCompanyName,
+      cnpj: normalizeCnpj(certificateCnpj),
+      stateRegistration: certificateStateRegistration,
+      cnae: certificateCnae,
+      taxRegime: certificateTaxRegime,
+      addressLine1: certificateAddressLine1,
+      addressLine2: certificateAddressLine2,
+      cityUf: certificateCityUf,
+      model: certificateModel,
+      uf: certificateUf,
+      cscId: certificateCscId,
+      cscCode: certificateCscCode,
+      nfceEnvironment: environment,
+      nfceSerie: certificateNfceSerie,
+      nfceNextNumber: certificateNfceNextNumber,
+      accountingEmail: certificateAccountingEmail,
+      fileName: certificateFileName,
+      fileSize: certificateFileSize ?? 0,
+      fileExtension: certificateFileExtension,
+      importSource: certificateImportSource,
+      expirationDate: certificateExpirationDate,
+      renewAlertDays: Number(certificateRenewAlertDays) || DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS,
+      importedAt: certificateImportedAt,
+      updatedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem(CERTIFICATE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    setCertificateNfceEnvironment(environment);
+    setSavedCertificateSettings(settings);
+    setMessage(
+      environment === 'PRODUCAO'
+        ? 'Ambiente Produção selecionado. Confirme certificado, CSC e emissor real antes de venda fiscal.'
+        : 'Ambiente Homologação selecionado para testes fiscais.'
+    );
+  };
+
+  const updateFiscalGatewaySettings = <Field extends keyof FiscalGatewaySettings>(
+    field: Field,
+    value: FiscalGatewaySettings[Field]
+  ) => {
+    setFiscalGatewaySettings((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
+
+  const onSaveFiscalGatewaySettings = () => {
+    const savedSettings = saveFiscalGatewaySettings(fiscalGatewaySettings);
+    setFiscalGatewaySettings(savedSettings);
+    setMessage('Configuração do Gateway Fiscal PDVTouch salva no Pdv_Sefaz.');
+  };
+
+  const onRetryFiscalDocument = async (document: FiscalDocument) => {
+    await fiscalContainer.fiscalDocumentRepository.save({
+      ...document,
+      status: document.status === 'AUTHORIZED' ? document.status : 'PENDING',
+      nextRetryAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    const processed = await fiscalContainer.retryPendingFiscalDocuments.execute();
+    setFiscalDocuments(await fiscalContainer.fiscalDocumentRepository.list());
+    setMessage(
+      processed.length > 0
+        ? `Pdv_Sefaz processou ${processed.length} documento(s).`
+        : 'Nenhum documento fiscal estava pronto para reenvio.'
+    );
   };
 
   const onClearAudit = () => {
@@ -652,6 +861,352 @@ export function AdminPage() {
         )}
 
         <PeripheralSettingsPanel onOpenFiscalSettings={() => setIsFiscalSettingsOpen(true)} />
+
+        <article className="card admin-config-card">
+          <div className="admin-config-header">
+            <div>
+              <h3>Pdv_Sefaz</h3>
+              <p className="admin-subtitle">
+                Acompanhe NFC-e pendentes, offline, autorizadas e rejeitadas.
+              </p>
+            </div>
+            <span>{fiscalSummary.pending} pend.</span>
+          </div>
+          <div className="admin-config-toolbar admin-compact-toolbar">
+            <button type="button" onClick={() => setIsPdvSefazOpen(true)}>Abrir Pdv_Sefaz</button>
+          </div>
+
+          {isPdvSefazOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-950/75 p-3 md:p-6 flex items-center justify-center">
+              <section className="w-full max-w-6xl max-h-[calc(100vh-3rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+                <div className="sticky top-0 z-10 bg-white px-4 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="admin-eyebrow">Fiscal</p>
+                    <h3>Pdv_Sefaz</h3>
+                    <p className="admin-subtitle">
+                      Controle de ambiente, pendências e reenvio automático das NFC-e.
+                    </p>
+                  </div>
+                  <button type="button" className="button-muted" onClick={() => setIsPdvSefazOpen(false)}>Fechar</button>
+                </div>
+
+                <div className="p-4 space-y-4">
+                  <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="admin-eyebrow relative inline-flex group cursor-help">
+                        Ambiente ativo
+                        {!SEFAZ_PRODUCTION_READY && (
+                          <span className="pointer-events-none absolute left-0 top-6 z-20 hidden w-80 max-w-[80vw] rounded-xl border border-amber-200 bg-white p-3 text-xs normal-case tracking-normal text-slate-700 shadow-2xl group-hover:block">
+                            <strong className="block text-amber-700">Produção ainda bloqueada</strong>
+                            {sefazProductionMissingItems.map((item) => (
+                              <span key={item} className="mt-1 block">- {item}</span>
+                            ))}
+                          </span>
+                        )}
+                      </p>
+                      <h4>{SEFAZ_PRODUCTION_READY ? sefazEnvironmentLabels[sefazActiveEnvironment] : 'Homologação (testes)'}</h4>
+                      <p className="admin-subtitle">
+                        Homologação é o ambiente disponível para testes fiscais até a integração real com a SEFAZ estar validada.
+                      </p>
+                      <div className="admin-config-toolbar admin-compact-toolbar mt-3">
+                        <button
+                          type="button"
+                          className="bg-sky-600 text-white border-sky-700"
+                          onClick={() => onSelectSefazEnvironment('HOMOLOGACAO')}
+                        >
+                          Homologação
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!SEFAZ_PRODUCTION_READY}
+                          title={
+                            SEFAZ_PRODUCTION_READY
+                              ? 'Usar ambiente de produção para venda real'
+                              : `Produção bloqueada: ${sefazProductionMissingItems.join('; ')}`
+                          }
+                          className={
+                            SEFAZ_PRODUCTION_READY && sefazActiveEnvironment === 'PRODUCAO'
+                              ? 'bg-emerald-600 text-white border-emerald-700'
+                              : 'button-muted opacity-60 cursor-not-allowed'
+                          }
+                          onClick={() => onSelectSefazEnvironment('PRODUCAO')}
+                        >
+                          Produção
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="admin-eyebrow">Emissor</p>
+                      <h4>Desenvolvimento / Simulador</h4>
+                      <p className="admin-subtitle">
+                        A fila, o offline e o reenvio estão prontos. Para venda real, conecte o gateway SEFAZ-SP direto ou uma API fiscal homologada.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="admin-eyebrow">Prontidão para produção</p>
+                      <h4>{sefazProductionReadiness.isReady ? 'Cadastro fiscal completo' : `${sefazProductionReadiness.issues.length} pendência(s)`}</h4>
+                      {sefazProductionReadiness.isReady ? (
+                        <p className="admin-subtitle">Dados mínimos informados. Falta apenas validar o emissor real antes do go-live.</p>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                          {sefazProductionReadiness.issues.slice(0, 5).map((issue) => (
+                            <li key={issue}>- {issue}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                      <h4>Homologação (testes)</h4>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <span>Total<br /><strong>{fiscalSummary.homologacao.total}</strong></span>
+                        <span>Pend.<br /><strong>{fiscalSummary.homologacao.pending}</strong></span>
+                        <span>Aut.<br /><strong>{fiscalSummary.homologacao.authorized}</strong></span>
+                        <span>Rej.<br /><strong>{fiscalSummary.homologacao.rejected}</strong></span>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <h4>Produção (venda real)</h4>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <span>Total<br /><strong>{fiscalSummary.producao.total}</strong></span>
+                        <span>Pend.<br /><strong>{fiscalSummary.producao.pending}</strong></span>
+                        <span>Aut.<br /><strong>{fiscalSummary.producao.authorized}</strong></span>
+                        <span>Rej.<br /><strong>{fiscalSummary.producao.rejected}</strong></span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="admin-eyebrow">Gateway Fiscal PDVTouch</p>
+                        <h4>Nossa API fiscal assíncrona, webhooks e contingência</h4>
+                        <p className="admin-subtitle">
+                          O PDV enfileira a NFC-e, nossa API fiscal processa em segundo plano e retorna status por webhook ou consulta.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        {fiscalGatewaySettings.enabled ? 'Configurada' : 'Não configurada'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label>
+                        Ambiente da API fiscal
+                        <select
+                          value={fiscalGatewaySettings.environment}
+                          onChange={(event) => updateFiscalGatewaySettings('environment', event.target.value as FiscalGatewayEnvironment)}
+                        >
+                          <option value="SANDBOX">Sandbox - testes</option>
+                          <option value="PRODUCTION">Produção - venda real</option>
+                        </select>
+                      </label>
+                      <label>
+                        URL base
+                        <input value={FISCAL_GATEWAY_API_BASE_URLS[fiscalGatewaySettings.environment]} readOnly />
+                      </label>
+                      <label>
+                        Endpoint NFC-e
+                        <input value="/fiscal/nfce" readOnly />
+                      </label>
+                      <label>
+                        API Key sandbox
+                        <input
+                          value={fiscalGatewaySettings.sandboxApiKey}
+                          onChange={(event) => updateFiscalGatewaySettings('sandboxApiKey', event.target.value)}
+                          placeholder="X-Api-Key do nosso sandbox"
+                        />
+                      </label>
+                      <label>
+                        API Key produção
+                        <input
+                          value={fiscalGatewaySettings.productionApiKey}
+                          onChange={(event) => updateFiscalGatewaySettings('productionApiKey', event.target.value)}
+                          placeholder="X-Api-Key da nossa produção"
+                        />
+                      </label>
+                      <label>
+                        Webhook URL
+                        <input
+                          value={fiscalGatewaySettings.webhookUrl}
+                          onChange={(event) => updateFiscalGatewaySettings('webhookUrl', event.target.value)}
+                          placeholder="https://seu-dominio.com/fiscal/webhooks/status"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <strong>Autenticação</strong>
+                        <p className="admin-subtitle">Enviar header `X-Api-Key` em todas as requisições.</p>
+                        <p className="text-xs text-slate-600">Sandbox: {maskApiKey(fiscalGatewaySettings.sandboxApiKey)}</p>
+                        <p className="text-xs text-slate-600">Produção: {maskApiKey(fiscalGatewaySettings.productionApiKey)}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <strong>Rate limit</strong>
+                        <p className="admin-subtitle">
+                          {FISCAL_GATEWAY_RATE_LIMITS.requestsPerMinute} req/min e {FISCAL_GATEWAY_RATE_LIMITS.requestsPerSecond} req/s.
+                        </p>
+                        <p className="text-xs text-slate-600">Em HTTP 429, respeitar `x-rate-limit-reset` antes de tentar novamente.</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <strong>Contingência NFC-e</strong>
+                        <label className="mt-2 flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={fiscalGatewaySettings.allowOfflineContingency}
+                            onChange={(event) => updateFiscalGatewaySettings('allowOfflineContingency', event.target.checked)}
+                          />
+                          Habilitar empresa para contingência offline quando nossa API fiscal e a SEFAZ permitirem.
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <strong>Fluxo assíncrono</strong>
+                        <ol className="mt-2 space-y-1 text-xs text-slate-700">
+                          <li>1. PDV envia a NFC-e para nossa API fiscal.</li>
+                          <li>2. A API valida, registra idempotência e retorna `enqueued`.</li>
+                          <li>3. O worker fiscal transmite para a SEFAZ em segundo plano.</li>
+                          <li>4. Webhook ou consulta atualiza para `authorized`, `rejected`, `canceled` ou `inContingent`.</li>
+                        </ol>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <strong>Política de retry do webhook</strong>
+                        <div className="mt-2 grid grid-cols-5 gap-2 text-center text-xs">
+                          {FISCAL_GATEWAY_WEBHOOK_RETRY_POLICY.map((retry) => (
+                            <span key={retry.attempt} className="rounded-lg bg-white p-2">
+                              {retry.attempt}ª<br />
+                              <strong>{retry.interval}</strong>
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs text-slate-600">
+                          Após 5 falhas consecutivas, o webhook pode ser desabilitado e será necessário reconciliar por consulta.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="admin-config-toolbar admin-compact-toolbar">
+                      <button
+                        type="button"
+                        onClick={() => updateFiscalGatewaySettings('enabled', !fiscalGatewaySettings.enabled)}
+                        className={fiscalGatewaySettings.enabled ? undefined : 'button-muted'}
+                      >
+                        {fiscalGatewaySettings.enabled ? 'Gateway ativo' : 'Ativar gateway'}
+                      </button>
+                      <button type="button" onClick={onSaveFiscalGatewaySettings}>Salvar gateway</button>
+                    </div>
+                  </section>
+
+                  <ul className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <li className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <span>Total</span>
+                      <strong className="block text-xl">{fiscalSummary.total}</strong>
+                    </li>
+                    <li className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <span>Pendentes/offline</span>
+                      <strong className="block text-xl text-amber-700">{fiscalSummary.pending}</strong>
+                    </li>
+                    <li className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                      <span>Autorizadas</span>
+                      <strong className="block text-xl text-emerald-700">{fiscalSummary.authorized}</strong>
+                    </li>
+                    <li className="rounded-xl border border-red-200 bg-red-50 p-3">
+                      <span>Rejeitadas</span>
+                      <strong className="block text-xl text-red-700">{fiscalSummary.rejected}</strong>
+                    </li>
+                    <li className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                      <span>Revisão manual</span>
+                      <strong className="block text-xl text-sky-700">{fiscalSummary.manualReview}</strong>
+                    </li>
+                  </ul>
+
+                  <div className="admin-actions">
+                    <select
+                      value={sefazEnvironmentFilter}
+                      onChange={(event) => setSefazEnvironmentFilter(event.target.value as typeof sefazEnvironmentFilter)}
+                    >
+                      {(['ALL', 'HOMOLOGACAO', 'PRODUCAO'] as const).map((environment) => (
+                        <option key={environment} value={environment}>
+                          {sefazEnvironmentLabels[environment]}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => void onRefreshFiscalDocuments()}>
+                      Atualizar Pdv_Sefaz
+                    </button>
+                    <button
+                      type="button"
+                      className="button-muted"
+                      onClick={() => void fiscalContainer.retryPendingFiscalDocuments.execute().then(onRefreshFiscalDocuments)}
+                    >
+                      Reenviar pendências
+                    </button>
+                  </div>
+
+                  {orderedFiscalDocuments.length === 0 ? (
+                    <p className="empty-state">
+                      Nenhum documento fiscal registrado. As NFC-e aparecerão aqui após vendas fiscais no caixa.
+                    </p>
+                  ) : (
+                    <div className="admin-table-wrap">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>Emissão</th>
+                            <th>Venda</th>
+                            <th>NFC-e</th>
+                            <th>Status</th>
+                            <th>Valor</th>
+                            <th>Tent.</th>
+                            <th>Motivo</th>
+                            <th>Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orderedFiscalDocuments.map((document) => (
+                            <tr key={document.id}>
+                              <td>{new Date(document.createdAt).toLocaleString('pt-BR')}</td>
+                              <td>{document.saleId}</td>
+                              <td>
+                                Série {document.series} nº {document.number}
+                                <br />
+                                <small>{document.environment}</small>
+                              </td>
+                              <td>{fiscalStatusLabels[document.status]}</td>
+                              <td>{currency.format(document.payload.totalDocumento)}</td>
+                              <td>{document.attempts}</td>
+                              <td>{document.xmotivo ?? document.lastError ?? '-'}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  disabled={document.status === 'AUTHORIZED' || document.status === 'CANCELLED'}
+                                  onClick={() => void onRetryFiscalDocument(document)}
+                                >
+                                  Reenviar agora
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <p className="admin-message">
+                    Produção exige certificado A1 válido, CSC/CSC ID, dados da empresa, produtos fiscais corretos e gateway real de autorização. O modo atual é seguro para desenvolvimento e homologação visual do fluxo.
+                  </p>
+                </div>
+              </section>
+            </div>
+          )}
+        </article>
 
         <article className="card admin-audit">
           <h3>Auditoria de ações sensíveis</h3>

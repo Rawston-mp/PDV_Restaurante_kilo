@@ -37,7 +37,7 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - Caixa usa cadastro real de produtos com `descricao`, foto, status `indisponivel` e status `oculto`.
 - RBAC e login por PIN estão ativos.
 
-## Estado Fiscal e Homologação NFC-e (2026-07)
+## Estado Fiscal, Pdv_Sefaz e Homologação NFC-e (2026-07)
 - O restaurante já possui certificado digital e operação fiscal funcional em outro sistema; o objetivo do dono/desenvolvedor é evoluir o PDVTouch para uso próprio homologado/testado no restaurante.
 - O projeto já possui preparação fiscal na UI e nas regras:
 	- seleção entre `NFC-e` e `Orçamento não fiscal` no recebimento
@@ -45,9 +45,34 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 	- Admin com configuração fiscal, certificado, UF, CSC, CSC ID e série
 	- regras de certificado/CSC em `src/shared/domain/services/digitalCertificateRules.ts`
 	- bloqueios operacionais quando certificado fiscal está inválido/vencido
-- Ponto crítico: o fluxo `NFC-e` atual ainda é modo de documento/recibo local, não emissão fiscal autorizada na SEFAZ.
+- O Admin possui interface `Pdv_Sefaz` para acompanhar ambiente fiscal, fila de documentos, pendências e estratégia da API fiscal própria do PDVTouch.
+- O fluxo fiscal atual cria documento fiscal local e fila de processamento com persistência Dexie (`fiscalDocuments`), retry automático e mock de autorização para desenvolvimento/homologação.
+- Ponto crítico: ainda não existe emissão fiscal real autorizada pela SEFAZ-SP. Não apresentar produção como pronta enquanto `SEFAZ_PRODUCTION_READY` estiver `false`.
+- `Homologação` é o ambiente ativo de desenvolvimento/teste. `Produção` deve aparecer como opção visível, mas bloqueada até integração real, certificado, CSC, numeração, QR Code, transmissão e retorno fiscal estarem validados.
 - Antes de substituir o sistema fiscal atual, implementar autorização real de NFC-e modelo 65: XML 4.00, assinatura A1, transmissão SEFAZ, protocolo, XML autorizado, DANFE NFC-e com QR Code, cancelamento, inutilização, contingência, exportação de XML e auditoria.
 - O README raiz agora contém o roteiro de implantação/teste real: `README.md`.
+- A documentação da API fiscal própria fica em `docs/PDVTOUCH_FISCAL_API.md`.
+
+## API Fiscal Própria PDVTouch
+- Não vincular a solução a fornecedor fiscal externo sem decisão explícita do usuário.
+- Usar documentações externas apenas como referência técnica; não copiar nomes, marca, endpoints comerciais ou identidade de fornecedor para UI, código ou documentação final.
+- Nomear a integração como `Gateway Fiscal PDVTouch` ou `API Fiscal PDVTouch`.
+- Contratos planejados:
+	- `POST /v1/fiscal/nfce`
+	- `GET /v1/fiscal/nfce/{id}`
+	- `GET /v1/fiscal/nfce/{id}/xml`
+	- `GET /v1/fiscal/nfce/{id}/danfe`
+	- `DELETE /v1/fiscal/nfce/{id}`
+	- `POST /v1/fiscal/webhooks/status`
+- Usar `integrationId` como idempotência da emissão e `X-Api-Key` como autenticação do gateway.
+- Respeitar limites planejados de API: 60 requisições por minuto e 5 por segundo por credencial.
+- Status fiscais esperados: `PENDING`, `OFFLINE`, `AUTHORIZED`, `REJECTED`, `CANCELLED`, `MANUAL_REVIEW`.
+- A emissão fiscal deve ser assíncrona e resiliente: venda gravada localmente, documento fiscal pendente, retry automático e revisão manual se a falha não for recuperável.
+- Política de retry de referência:
+	- retry local automático ao voltar a conexão e em intervalo periódico
+	- retry de webhook em janelas progressivas: 5 minutos, 30 minutos, 1 hora, 4 horas e 16 horas
+- Se a internet cair durante venda fiscal, o caixa não deve travar a operação; deve registrar pendência fiscal, avisar o operador e regularizar automaticamente quando a conexão voltar.
+- Nunca simular autorização de produção. Em produção sem gateway real validado, enviar para `MANUAL_REVIEW`/alerta operacional.
 
 ## Atualizações Recentes (2026-07)
 - Aplicativo desktop Electron corrigido para produção:
@@ -107,6 +132,7 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - Quando for revisar regras de acesso, PIN ou checklist de validação operacional.
 - Quando for alterar cadastro/edição de produtos, cards do caixa, status indisponível/oculto ou exibição de foto/descrição.
 - Quando for analisar ou implementar preparação fiscal, NFC-e, certificado A1, CSC, SEFAZ, DANFE, XML, homologação, contingência, cancelamento, inutilização ou piloto em restaurante real.
+- Quando for alterar `Pdv_Sefaz`, fila fiscal, retry, gateway fiscal, status de documento fiscal, contingência offline ou documentação `docs/PDVTOUCH_FISCAL_API.md`.
 - Quando for atualizar documentação do projeto sobre o caminho para teste real/homologação fiscal.
 
 ## Escopo Implementado (Resumo)
@@ -120,7 +146,7 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 	- ocultar (retira do grid de venda)
 - Fechamento/caixa completo existe no módulo de pedidos (`/orders/new`), mas não como etapa integrada do fluxo `/comanda` com estados formais do documento.
 - Financeiro possui fluxos de despesas, receitas e conta corrente; em telas financeiras, preservar filtros por tipo: despesas mostram saídas, receitas mostram entradas e conta corrente mostra entrada + saída.
-- Fluxo fiscal no caixa permite escolher `NFC-e`, mas ainda não gera XML autorizado pela SEFAZ.
+- Fluxo fiscal no caixa permite escolher `NFC-e`, registra documento fiscal local e fila de retry, mas ainda não gera XML autorizado pela SEFAZ real.
 
 ## Lacunas em Relação ao Documento Base
 - Não há leitura nativa de código de barras da comanda nem fallback "digitar número" na tela de balança (hoje opera por número digitado).
@@ -129,7 +155,7 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - Não há persistência backend para comandas/pesagens/pagamentos/auditoria no modelo de tabelas proposto.
 - Não há regras de timeout e autoencerramento por inatividade da comanda no fluxo atual.
 - Não há relatórios de discrepância balança x caixa no backend dedicado.
-- Não há módulo fiscal NFC-e real com XML assinado, SEFAZ, protocolo, DANFE, QR Code, cancelamento, inutilização e contingência.
+- Não há módulo fiscal NFC-e real com XML assinado, transmissão SEFAZ, protocolo oficial, DANFE fiscal com QR Code oficial, cancelamento, inutilização e contingência fiscal homologada.
 
 ## Inconsistências do Documento de Referência
 - Seção 6 possui trecho corrompido em `PA-05` (comparação de peso/valor quebrada).
@@ -190,11 +216,22 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - `src/modules/products/presentation/pages/ProductsPage.tsx`
 - `src/modules/admin/presentation/pages/AdminPage.tsx`
 - `src/shared/domain/services/digitalCertificateRules.ts`
+- `src/modules/fiscal/domain/entities/FiscalDocument.ts`
+- `src/modules/fiscal/domain/ports/FiscalDocumentRepository.ts`
+- `src/modules/fiscal/domain/ports/FiscalGateway.ts`
+- `src/modules/fiscal/application/use-cases/RegisterPendingFiscalDocument.ts`
+- `src/modules/fiscal/application/use-cases/RetryPendingFiscalDocuments.ts`
+- `src/modules/fiscal/infrastructure/repositories/DexieFiscalDocumentRepository.ts`
+- `src/modules/fiscal/infrastructure/gateways/MockFiscalGateway.ts`
+- `src/modules/fiscal/infrastructure/container/fiscalContainer.ts`
+- `src/modules/fiscal/infrastructure/container/fiscalRetryWorker.ts`
+- `src/modules/fiscal/domain/services/fiscalGatewaySettings.ts`
 - `src/app/styles.css`
 - `src/shared/infrastructure/storage/comandaCache.ts`
 - `backend/src/server.ts`
 - `backend/src/services/scaleReader.service.ts`
 - `docs/PDVTOUCH_ARCHITECTURE_BLUEPRINT.md`
+- `docs/PDVTOUCH_FISCAL_API.md`
 
 ## Autenticação e PIN
 - Login por PIN por perfil na tela de acesso.
@@ -215,6 +252,9 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 - Se alterar cadastro de produtos ou cards do caixa, validar espaçamento, overflow, imagem, menu operacional e build.
 - Não assumir que backend atual suporta estados completos de comanda sem implementar camada de domínio/persistência.
 - Se mexer em fiscal/NFC-e, tratar o fluxo atual como simulado até existir XML autorizado pela SEFAZ e protocolo salvo.
+- Se mexer em `Pdv_Sefaz`, manter `Homologação` liberada para testes e `Produção` bloqueada enquanto `SEFAZ_PRODUCTION_READY=false`.
+- Não reintroduzir nomes de fornecedores fiscais externos na UI, documentação ou código sem decisão explícita do usuário.
+- Se usar documentação externa como referência, abstrair para contratos próprios do PDVTouch.
 - Não permitir que venda paga em modo fiscal desapareça ou fique sem estado final: autorizada, contingência controlada, rejeitada pendente ou revisão manual.
 - Não armazenar senha do certificado A1 em `localStorage`; segredos fiscais pertencem ao backend/armazenamento protegido.
 - Se alterar estorno, cancelamento, reabertura, pagamento ou emissão fiscal, registrar trilha de auditoria com usuário, data/hora e motivo.
@@ -230,8 +270,9 @@ Centralizar o estado operacional do projeto PDV Touch/PDVTouch Restaurante com f
 8. Validar cadastro/edição de produto com foto, categorias, descrição e status indisponível/oculto.
 9. Validar cards do caixa com produto disponível, indisponível, oculto, com foto e sem foto.
 10. Para financeiro, validar que Despesas lista saídas, Receita lista entradas e Conta Corrente lista entrada + saída.
-11. Para NFC-e real, validar em homologação: status SEFAZ, autorização, rejeição tratada, cancelamento, inutilização, contingência, DANFE, QR Code e exportação de XML.
-12. Rodar build e, quando aplicável, testes automatizados.
+11. Para `Pdv_Sefaz`, validar ambiente ativo, bloqueio de produção, tabela de documentos fiscais, retry e mensagens de pendência.
+12. Para NFC-e real, validar em homologação: status SEFAZ, autorização, rejeição tratada, cancelamento, inutilização, contingência, DANFE, QR Code e exportação de XML.
+13. Rodar build e, quando aplicável, testes automatizados.
 
 ## Pendências para Análise mais Precisa
 - Política oficial de timeout e autoencerramento de comanda (ativos e limites).
@@ -300,6 +341,7 @@ npm run dev
 	- cancelamento, inutilização, contingência e retransmissão
 	- painel de pendências fiscais
 	- exportação de XML para contador
+- Gateway Fiscal PDVTouch real conforme `docs/PDVTOUCH_FISCAL_API.md`, substituindo o mock somente quando houver serviço fiscal homologado.
 - Validação rígida de cadastro fiscal de produtos antes de venda em modo fiscal.
 
 ## O que pode melhorar
@@ -322,6 +364,7 @@ npm run dev
 - Prioridade alta: fechar política final de timeout/expiração para lock por comanda em duas balanças.
 - Prioridade alta: entregar identificação por código de barras da comanda com fallback manual.
 - Prioridade alta: implementar o módulo fiscal NFC-e real antes de qualquer piloto substituindo o sistema fiscal atual.
+- Prioridade alta: manter produção fiscal bloqueada até o Gateway Fiscal PDVTouch real estar validado em homologação, com certificado A1, CSC, QR Code, protocolo e XML autorizado.
 - Prioridade alta: manter o sistema fiscal atual em paralelo durante homologação e piloto controlado.
 - Prioridade média: integrar fluxo PRONTA_PARA_CAIXA -> caixa -> encerramento formal no backend.
 - Prioridade média: fechar pacote mínimo de testes E2E do fluxo comanda por quilo (automático, manual, exceções).

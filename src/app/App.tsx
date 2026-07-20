@@ -13,6 +13,7 @@ import { ComandaScreen } from '@/components/Comanda/ComandaScreen';
 import { AdminPage } from '@/modules/admin/presentation/pages/AdminPage';
 import { CadastroPage } from '@/modules/suppliers/presentation/pages/CadastroPage';
 import { CashierPage } from '@/modules/cashier/presentation/pages/CashierPage';
+import { startFiscalRetryWorker } from '@/modules/fiscal/infrastructure/container/fiscalRetryWorker';
 
 const FLUSH_ROUTES = ['/caixa', '/comanda'];
 
@@ -25,6 +26,8 @@ export function App() {
   const canAccessCadastro = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const isFlush = FLUSH_ROUTES.some((r) => location.pathname.startsWith(r));
   const previousUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => startFiscalRetryWorker(), []);
 
   useEffect(() => {
     if (isScaleTerminal && !location.pathname.startsWith('/comanda')) {

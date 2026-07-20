@@ -1,4 +1,5 @@
 export const CERTIFICATE_SETTINGS_STORAGE_KEY = 'pdv.certificate.settings';
+export const SEFAZ_PRODUCTION_READY = false;
 
 export const CERTIFICATE_MODEL_OPTIONS = ['A1', 'A3'] as const;
 export const CERTIFICATE_IMPORT_SOURCE_OPTIONS = ['MAQUINA', 'PENDRIVE'] as const;
