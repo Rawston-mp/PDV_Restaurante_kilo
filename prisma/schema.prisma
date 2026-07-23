@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+// url provided via CLI
+
+}
+
+
+enum Cargo {
+  ADMIN
+  CAIXA
+  COMANDA
+}
+
+enum BalancaTipo {
+  A
+  B
+}
+
+enum ComandaStatus {
+  ABERTA
+  FECHADA
+  CANCELADA
+}
+
+model Usuario {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  email       String   @unique
+  senhaHash   String
+  cargo       Cargo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  comandas    Comanda[]
+  auditorias  Auditoria[]
+}
+
+model Produto {
+  id           Int      @id @default(autoincrement())
+  nome         String
+  preco        Float
+  estoque      Int
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  itensComanda ItemComanda[]
+}
+
+model Comanda {
+  id          Int      @id @default(autoincrement())
+  numero      Int      @unique
+  status      ComandaStatus @default(ABERTA)
+  createdAt   DateTime @default(now())
+  closedAt    DateTime?
+  usuarioId   Int
+  usuario     Usuario @relation(fields: [usuarioId], references: [id])
+  itens       ItemComanda[]
+}
+
+model ItemComanda {
+  id            Int      @id @default(autoincrement())
+  comandaId     Int
+  produtoId     Int
+  quantidade    Int
+  precoUnitario Float
+  comanda       Comanda @relation(fields: [comandaId], references: [id])
+  produto       Produto @relation(fields: [produtoId], references: [id])
+}
+
+model Balanca {
+  id        Int    @id @default(autoincrement())
+  tipo      BalancaTipo
+  codigo    String @unique
+  criadoEm  DateTime @default(now())
+}
+
+model Auditoria {
+  id          Int      @id @default(autoincrement())
+  tabela      String
+  registroId  Int
+  acao        String
+  usuarioId   Int
+  data        DateTime @default(now())
+  usuario     Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+model pdv_comanda_state {
+  id        Int   @id @default(autoincrement())
+  snapshot  Json
+  updated_at DateTime @default(now())
+}
+
+model pdv_comanda_audit {
+  id        Int   @id @default(autoincrement())
+  action    String
+  numero    String
+  event     Json
+  created_at DateTime @default(now())
+}
