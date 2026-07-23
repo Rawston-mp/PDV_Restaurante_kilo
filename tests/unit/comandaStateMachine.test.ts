@@ -177,8 +177,8 @@ describe('ComandaStateMachineService', () => {
       stationId: 'BALANCA_A'
     });
 
-    expect(acquired.lock.owner).toBe('COMANDA_A');
-    expect(acquired.lock.stationId).toBe('BALANCA_A');
+    expect(acquired.lock?.owner).toBe('COMANDA_A');
+    expect(acquired.lock?.stationId).toBe('BALANCA_A');
 
     expect(() =>
       service.acquireLock('201', {
@@ -202,7 +202,11 @@ describe('ComandaStateMachineService', () => {
       stationId: 'BALANCA_A'
     });
 
-    expect(Date.parse(renewed.lock.expiresAt)).toBeGreaterThanOrEqual(Date.parse(acquired.lock.expiresAt));
+    expect(renewed.lock).not.toBeNull();
+    expect(acquired.lock).not.toBeNull();
+    if (renewed.lock && acquired.lock) {
+      expect(Date.parse(renewed.lock.expiresAt)).toBeGreaterThanOrEqual(Date.parse(acquired.lock.expiresAt));
+    }
 
     const released = service.releaseLock('202', {
       owner: 'COMANDA_A',
