@@ -6,14 +6,21 @@ export type ComandaStatus =
   | 'FECHADA_ORCAMENTO'
   | 'FECHADA_VENDA'
   | 'CANCELADA'
+export type ComandaStatus =
+  | 'ABERTA'
+  | 'EM_USO_BALANCA'
+  | 'PRONTA_PARA_CAIXA'
+  | 'EM_FECHAMENTO'
+  | 'FECHADA_ORCAMENTO'
+  | 'FECHADA_VENDA'
+  | 'CANCELADA'
   | 'ARQUIVADA';
 
-export type ComandaLockOwner = 'COMANDA_A' | 'COMANDA_B';
+
 
 export type ComandaLockStationId = 'BALANCA_A' | 'BALANCA_B';
 
 export type ComandaLock = {
-  owner: ComandaLockOwner;
   stationId: ComandaLockStationId;
   acquiredAt: string;
   heartbeatAt: string;
@@ -46,7 +53,6 @@ export type ComandaPesagemRecord = {
   id: string;
   peso: number;
   origem?: string;
-  owner?: ComandaLockOwner;
   stationId?: ComandaLockStationId;
   itemId?: string;
   productName?: string;
@@ -57,7 +63,6 @@ export type ComandaPesagemInput = {
   id?: string;
   peso: number;
   origem?: string;
-  owner?: ComandaLockOwner;
   stationId?: ComandaLockStationId;
   itemId?: string;
   productName?: string;
@@ -192,14 +197,12 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
       return acc;
     }
 
-    const owner = pesagem.owner === 'COMANDA_A' || pesagem.owner === 'COMANDA_B' ? pesagem.owner : undefined;
     const stationId = pesagem.stationId === 'BALANCA_A' || pesagem.stationId === 'BALANCA_B' ? pesagem.stationId : undefined;
 
     acc.push({
       id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
       peso: Number(peso.toFixed(3)),
       origem: normalizeText(pesagem.origem) || undefined,
-      owner,
       stationId,
       itemId: normalizeText(pesagem.itemId) || undefined,
       productName: normalizeText(pesagem.productName) || undefined,
@@ -256,10 +259,9 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
     return null;
   }
 
-  const lockOwner = lock.owner?.toUpperCase();
   const stationId = lock.stationId?.toUpperCase();
 
-  if ((lockOwner !== 'COMANDA_A' && lockOwner !== 'COMANDA_B') || (stationId !== 'BALANCA_A' && stationId !== 'BALANCA_B')) {
+  if (stationId !== 'BALANCA_A' && stationId !== 'BALANCA_B') {
     return null;
   }
 
@@ -268,7 +270,6 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   const expiresAt = lock.expiresAt || heartbeatAt;
 
   return {
-    owner: lockOwner,
     stationId,
     acquiredAt,
     heartbeatAt,
@@ -276,13 +277,12 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   } as ComandaLock;
 };
 
-const buildLock = (owner: ComandaLockOwner, stationId: ComandaLockStationId, ttlSeconds?: number): ComandaLock => {
+const buildLock = (stationId: ComandaLockStationId, ttlSeconds?: number): ComandaLock => {
   const acquiredAt = nowIso();
   const ttl = sanitizeTtl(ttlSeconds);
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
 
   return {
-    owner,
     stationId,
     acquiredAt,
     heartbeatAt: acquiredAt,
@@ -561,234 +561,163 @@ export class ComandaStateMachineService {
     });
   }
 
-  markEmUsoBalanca(numero: string, reason = 'peso_recebido') {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    if (existing.status === 'ABERTA') {
-      return this.transition(numero, 'EM_USO_BALANCA', reason);
-    }
-
-    if (existing.status === 'EM_USO_BALANCA') {
-      return existing;
-    }
-
-    throw new Error(`Comanda em status ${existing.status} não aceita pesagem.`);
-  }
-
-  markPesagemEmAndamento(numero: string, reason = 'peso_recebido') {
-    return this.markEmUsoBalanca(numero, reason);
-  }
-
-  setItems(numero: string, items: ComandaItemRecord[], _reason = 'items_sync') {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    ensureMutableItemsStatus(existing.status);
-
-    const updatedAt = nowIso();
-    const normalizedItems = normalizeComandaItems(items).map((item) => ({
-      ...item,
-      createdAt: item.createdAt ?? updatedAt,
-      updatedAt
-    }));
-
-    const updated: ComandaRecord = {
-      ...existing,
-      items: normalizedItems,
-      updatedAt
-    };
-
-    this.comandas.set(updated.numero, updated);
-
-    return updated;
-  }
-
-  addItem(numero: string, item: ComandaItemRecord, reason = 'item_added') {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    ensureMutableItemsStatus(existing.status);
-
-    const normalizedItems = normalizeComandaItems([item]);
-    if (normalizedItems.length === 0) {
-      throw new Error('Item da comanda inválido.');
-    }
-
-    return this.setItems(numero, [normalizedItems[0], ...existing.items], reason);
-  }
-
-  recordPesagem(numero: string, input: ComandaPesagemInput) {
-    const peso = normalizeFiniteNumber(input.peso);
-    if (peso === null || peso <= 0) {
-      throw new Error('Peso da pesagem deve ser maior que zero.');
-    }
-
-    const record = this.markEmUsoBalanca(numero, input.reason ?? 'pesagem_registrada');
-    const createdAt = nowIso();
-    const pesagem: ComandaPesagemRecord = {
-      id: normalizeText(input.id) || buildGeneratedId('pesagem'),
-      peso: Number(peso.toFixed(3)),
-      origem: normalizeText(input.origem) || undefined,
-      owner: input.owner,
-      stationId: input.stationId,
-      itemId: normalizeText(input.itemId) || undefined,
-      productName: normalizeText(input.productName) || undefined,
-      createdAt
-    };
-
-    const updated: ComandaRecord = {
-      ...record,
-      pesagens: [pesagem, ...record.pesagens],
-      updatedAt: createdAt
-    };
-
-    this.comandas.set(updated.numero, updated);
-
-    return {
-      comanda: updated,
-      pesagem
-    };
-  }
-
-  acquireLock(
-    numero: string,
-    params: {
-      owner: ComandaLockOwner;
-      stationId: ComandaLockStationId;
-      ttlSeconds?: number;
-    }
-  ) {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    const { owner, stationId, ttlSeconds } = params;
-    const { record, expired } = this.clearExpiredLock(existing);
-
-    if (record.lock) {
-      if (record.lock.owner === owner && record.lock.stationId === stationId) {
-        const renewedLock = refreshLock(record.lock, ttlSeconds);
-        const renewedRecord: ComandaRecord = {
-          ...record,
-          lock: renewedLock,
-          updatedAt: renewedLock.heartbeatAt
-        };
-
-        this.comandas.set(renewedRecord.numero, renewedRecord);
-
-        return {
-          comanda: renewedRecord,
-          lock: renewedLock,
-          expiredPreviousLock: expired
-        };
-      }
-
-      throw new ComandaLockConflictError(record.lock);
-    }
-
-    const lock = buildLock(owner, stationId, ttlSeconds);
-    const updated: ComandaRecord = {
-      ...record,
-      lock,
-      updatedAt: lock.heartbeatAt
-    };
-
-    this.comandas.set(updated.numero, updated);
-
-    return {
-      comanda: updated,
-      lock,
-      expiredPreviousLock: expired
-    };
-  }
-
-  renewLock(
-    numero: string,
-    params: {
-      owner: ComandaLockOwner;
-      stationId: ComandaLockStationId;
-      ttlSeconds?: number;
-    }
-  ) {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    const { owner, stationId, ttlSeconds } = params;
-    const { record } = this.clearExpiredLock(existing);
-
-    if (!record.lock) {
-      throw new ComandaLockNotFoundError();
-    }
-
-    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
-      throw new ComandaLockOwnershipError();
-    }
-
-    const lock = refreshLock(record.lock, ttlSeconds);
-    const updated: ComandaRecord = {
-      ...record,
-      lock,
-      updatedAt: lock.heartbeatAt
-    };
-
-    this.comandas.set(updated.numero, updated);
-
-    return {
-      comanda: updated,
-      lock
-    };
-  }
-
-  releaseLock(
-    numero: string,
-    params: {
-      owner: ComandaLockOwner;
-      stationId: ComandaLockStationId;
-    }
-  ) {
-    const existing = this.get(numero);
-    if (!existing) {
-      throw new Error('Comanda não encontrada.');
-    }
-
-    const { owner, stationId } = params;
-    const { record } = this.clearExpiredLock(existing);
-
-    if (!record.lock) {
-      throw new ComandaLockNotFoundError();
-    }
-
-    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
-      throw new ComandaLockOwnershipError();
-    }
-
-    const updated: ComandaRecord = {
-      ...record,
-      lock: null,
-      updatedAt: nowIso()
-    };
-
-    this.comandas.set(updated.numero, updated);
-
-    return updated;
-  }
-
-  canEmitWeight() {
-    const active = this.getActive();
-    if (!active) {
-      return false;
-    }
-
+  isActive(active: ComandaRecord) {
     return active.status === 'ABERTA' || active.status === 'EM_USO_BALANCA';
   }
+
+  // Acquire a lock for a comanda. Throws if already locked by another owner/station.
+  acquireLock(
+    numero: string,
+    lockInfo: { owner: string; stationId: ComandaLockStationId },
+    ttlSeconds?: number
+  ) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    const { record: freshRecord } = this.clearExpiredLock(record);
+    if (freshRecord.lock) {
+      const existing: any = freshRecord.lock as any;
+      if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
+        throw new ComandaLockConflictError(existing);
+      }
+      return freshRecord;
+    }
+    const lock = { ...(buildLock(lockInfo.stationId, ttlSeconds) as any), owner: lockInfo.owner } as any;
+    const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: nowIso() };
+    this.comandas.set(updated.numero, updated);
+    return updated;
+  }
+
+  // Renew an existing lock for the same owner/station.
+  renewLock(
+    numero: string,
+    lockInfo: { owner: string; stationId: ComandaLockStationId },
+    ttlSeconds?: number
+  ) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    const { record: freshRecord } = this.clearExpiredLock(record);
+    if (!freshRecord.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+    const existing: any = freshRecord.lock as any;
+    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+    const refreshed = refreshLock(existing as any, ttlSeconds);
+    const lock = { ...(refreshed as any), owner: lockInfo.owner } as any;
+    const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: nowIso() };
+    this.comandas.set(updated.numero, updated);
+    return updated;
+  }
+
+  // Release a lock for the given owner/station.
+  releaseLock(
+    numero: string,
+    lockInfo: { owner: string; stationId: ComandaLockStationId }
+  ) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    const { record: freshRecord } = this.clearExpiredLock(record);
+    if (!freshRecord.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+    const existing: any = freshRecord.lock as any;
+    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+    const updated: ComandaRecord = { ...freshRecord, lock: null, updatedAt: nowIso() };
+    this.comandas.set(updated.numero, updated);
+    return updated;
+  }
+
+  // Set items for a comanda.
+  setItems(numero: string, items: ComandaItemRecord[]) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    ensureMutableItemsStatus(record.status);
+    const updated: ComandaRecord = { ...record, items, updatedAt: nowIso() };
+    this.comandas.set(updated.numero, updated);
+    return updated;
+  }
+
+  // Record a pesagem and put the comanda in use on a balança.
+  recordPesagem(
+    numero: string,
+    pesagem: {
+      peso: number;
+      origem?: string;
+      owner: string;
+      stationId: ComandaLockStationId;
+      itemId?: string;
+      productName?: string;
+      reason?: string;
+      id?: string;
+    }
+  ) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    // Ensure lock exists for this station/owner
+    let lock: any = record.lock as any;
+    if (!lock || lock.owner !== pesagem.owner || lock.stationId !== pesagem.stationId) {
+      lock = { ...(buildLock(pesagem.stationId) as any), owner: pesagem.owner } as any;
+    }
+    const newPesagem: ComandaPesagemRecord = {
+      id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
+      peso: Number(normalizeFiniteNumber(pesagem.peso)!.toFixed(3)),
+      origem: normalizeText(pesagem.origem) || undefined,
+      stationId: pesagem.stationId,
+      owner: pesagem.owner,
+      itemId: normalizeText(pesagem.itemId) || undefined,
+      productName: normalizeText(pesagem.productName) || undefined,
+      reason: pesagem.reason,
+      createdAt: nowIso()
+    };
+    const updated: ComandaRecord = {
+      ...record,
+      status: 'EM_USO_BALANCA',
+      lock,
+      pesagens: [...record.pesagens, newPesagem],
+      updatedAt: nowIso()
+    };
+    this.comandas.set(updated.numero, updated);
+    return { comanda: updated, pesagem: newPesagem };
+  }
+
+  // Convenience method to mark comanda in use on a balança (without owner info).
+  // Convenience method to mark comanda in use on a balança (with cancellation guard).
+  markEmUsoBalanca(numero: string, stationId?: string) {
+    const record = this.get(numero);
+    if (!record) {
+      throw new Error(`Comanda ${numero} não encontrada.`);
+    }
+    if (record.status === 'CANCELADA') {
+      throw new Error('Comanda em status CANCELADA não aceita pesagem.');
+    }
+    const updated: ComandaRecord = {
+      ...record,
+      status: 'EM_USO_BALANCA',
+      lock: stationId
+        ? {
+            stationId: stationId.toUpperCase() as ComandaLockStationId,
+            acquiredAt: nowIso(),
+            heartbeatAt: nowIso(),
+            expiresAt: nowIso()
+          }
+        : record.lock,
+      updatedAt: nowIso()
+    };
+    this.comandas.set(updated.numero, updated);
+    return updated;
+  }
+
 }

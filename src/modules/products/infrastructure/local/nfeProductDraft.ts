@@ -25,12 +25,44 @@ export type NfeProductDraftResult = {
 export const nfeProductDraftStorageKey = 'pdv.products.nfeProductDraft';
 export const nfeProductDraftResultStorageKey = 'pdv.products.nfeProductDraftResult';
 
+// Polyfill for localStorage in non‑browser environments (e.g., Node tests)
+const storage: Storage = (typeof localStorage !== 'undefined')
+  ? (localStorage as unknown as Storage)
+  : (() => {
+      const map = new Map<string, string>();
+      return {
+        getItem(key: string) {
+          return map.has(key) ? map.get(key)! : null;
+        },
+        setItem(key: string, value: string) {
+          map.set(key, value);
+        },
+        removeItem(key: string) {
+          map.delete(key);
+        },
+        clear() {
+          map.clear();
+        },
+        // The following are required by the Storage interface but not used
+        key(index: number) {
+          const keys = Array.from(map.keys());
+          return keys[index] ?? null;
+        },
+        length: 0,
+      } as unknown as Storage;
+    })();
+
+// Ensure global.localStorage exists for test code that calls it directly
+if (typeof (globalThis as any).localStorage === 'undefined') {
+  (globalThis as any).localStorage = storage;
+}
+
 const readJson = <Value>(key: string): Value | null => {
   try {
-    const rawValue = localStorage.getItem(key);
-    return rawValue ? JSON.parse(rawValue) as Value : null;
+    const rawValue = storage.getItem(key);
+    return rawValue ? (JSON.parse(rawValue) as Value) : null;
   } catch {
-    localStorage.removeItem(key);
+    storage.removeItem(key);
     return null;
   }
 };
@@ -38,20 +70,20 @@ const readJson = <Value>(key: string): Value | null => {
 export const readNfeProductDraft = () => readJson<NfeProductDraft>(nfeProductDraftStorageKey);
 
 export const writeNfeProductDraft = (draft: NfeProductDraft) => {
-  localStorage.setItem(nfeProductDraftStorageKey, JSON.stringify(draft));
+  storage.setItem(nfeProductDraftStorageKey, JSON.stringify(draft));
 };
 
 export const clearNfeProductDraft = () => {
-  localStorage.removeItem(nfeProductDraftStorageKey);
+  storage.removeItem(nfeProductDraftStorageKey);
 };
 
 export const readNfeProductDraftResult = () =>
   readJson<NfeProductDraftResult>(nfeProductDraftResultStorageKey);
 
 export const writeNfeProductDraftResult = (result: NfeProductDraftResult) => {
-  localStorage.setItem(nfeProductDraftResultStorageKey, JSON.stringify(result));
+  storage.setItem(nfeProductDraftResultStorageKey, JSON.stringify(result));
 };
 
 export const clearNfeProductDraftResult = () => {
-  localStorage.removeItem(nfeProductDraftResultStorageKey);
+  storage.removeItem(nfeProductDraftResultStorageKey);
 };

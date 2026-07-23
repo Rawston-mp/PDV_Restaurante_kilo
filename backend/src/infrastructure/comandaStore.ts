@@ -132,17 +132,13 @@ export const createComandaStore = async (): Promise<{ store: ComandaStore; using
     return { store: new ComandaFileStore(), usingPostgres: false };
   }
 
-  const pool = createPool();
-  const pgStore = new ComandaPostgresStore(pool);
-
+  // Use Prisma store when PostgreSQL is enabled
   try {
-    await pgStore.initialize();
-    return { store: pgStore, usingPostgres: true };
-  } catch {
-    await pool.end().catch(() => {
-      // ignore pool close errors in fallback path
-    });
-
+    const { prismaStore } = await import('./prismaStore');
+    const store = await prismaStore();
+    return { store, usingPostgres: true };
+  } catch (e) {
+    console.error('Failed to initialize Prisma store, falling back to file store:', e);
     return { store: new ComandaFileStore(), usingPostgres: false };
   }
 };
