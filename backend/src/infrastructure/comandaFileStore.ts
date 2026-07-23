@@ -3,7 +3,6 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import type {
-  ComandaLockOwner,
   ComandaLockStationId,
   ComandaStateSnapshot,
   ComandaStatus
@@ -16,7 +15,7 @@ export type ComandaAuditEvent = {
   toStatus?: ComandaStatus;
   at: string;
   reason?: string;
-  lockOwner?: ComandaLockOwner;
+  lockOwner?: string;
   lockStationId?: ComandaLockStationId;
   lockExpiresAt?: string;
   itemId?: string;
