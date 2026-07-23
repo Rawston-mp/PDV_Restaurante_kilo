@@ -6,17 +6,7 @@ export type ComandaStatus =
   | 'FECHADA_ORCAMENTO'
   | 'FECHADA_VENDA'
   | 'CANCELADA'
-export type ComandaStatus =
-  | 'ABERTA'
-  | 'EM_USO_BALANCA'
-  | 'PRONTA_PARA_CAIXA'
-  | 'EM_FECHAMENTO'
-  | 'FECHADA_ORCAMENTO'
-  | 'FECHADA_VENDA'
-  | 'CANCELADA'
   | 'ARQUIVADA';
-
-
 
 export type ComandaLockStationId = 'BALANCA_A' | 'BALANCA_B';
 
@@ -25,6 +15,7 @@ export type ComandaLock = {
   acquiredAt: string;
   heartbeatAt: string;
   expiresAt: string;
+  owner?: string;
 };
 
 type LegacyComandaStatus = 'PESAGEM_EM_ANDAMENTO' | 'ENCERRADA' | 'FINALIZADA';
@@ -54,8 +45,10 @@ export type ComandaPesagemRecord = {
   peso: number;
   origem?: string;
   stationId?: ComandaLockStationId;
+  owner?: string;
   itemId?: string;
   productName?: string;
+  reason?: string;
   createdAt: string;
 };
 
@@ -64,6 +57,7 @@ export type ComandaPesagemInput = {
   peso: number;
   origem?: string;
   stationId?: ComandaLockStationId;
+  owner?: string;
   itemId?: string;
   productName?: string;
   reason?: string;
@@ -204,8 +198,10 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
       peso: Number(peso.toFixed(3)),
       origem: normalizeText(pesagem.origem) || undefined,
       stationId,
+      owner: normalizeText(pesagem.owner) || undefined,
       itemId: normalizeText(pesagem.itemId) || undefined,
       productName: normalizeText(pesagem.productName) || undefined,
+      reason: normalizeText(pesagem.reason) || undefined,
       createdAt
     });
 
@@ -273,7 +269,8 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
     stationId,
     acquiredAt,
     heartbeatAt,
-    expiresAt
+    expiresAt,
+    owner: lock.owner
   } as ComandaLock;
 };
 
@@ -577,13 +574,12 @@ export class ComandaStateMachineService {
     }
     const { record: freshRecord } = this.clearExpiredLock(record);
     if (freshRecord.lock) {
-      const existing: any = freshRecord.lock as any;
-      if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
-        throw new ComandaLockConflictError(existing);
+      if (freshRecord.lock.owner !== lockInfo.owner || freshRecord.lock.stationId !== lockInfo.stationId) {
+        throw new ComandaLockConflictError(freshRecord.lock);
       }
       return freshRecord;
     }
-    const lock = { ...(buildLock(lockInfo.stationId, ttlSeconds) as any), owner: lockInfo.owner } as any;
+    const lock = { ...buildLock(lockInfo.stationId, ttlSeconds), owner: lockInfo.owner };
     const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: nowIso() };
     this.comandas.set(updated.numero, updated);
     return updated;
@@ -603,12 +599,11 @@ export class ComandaStateMachineService {
     if (!freshRecord.lock) {
       throw new ComandaLockNotFoundError();
     }
-    const existing: any = freshRecord.lock as any;
-    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
+    if (freshRecord.lock.owner !== lockInfo.owner || freshRecord.lock.stationId !== lockInfo.stationId) {
       throw new ComandaLockOwnershipError();
     }
-    const refreshed = refreshLock(existing as any, ttlSeconds);
-    const lock = { ...(refreshed as any), owner: lockInfo.owner } as any;
+    const refreshed = refreshLock(freshRecord.lock, ttlSeconds);
+    const lock = { ...refreshed, owner: lockInfo.owner };
     const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: nowIso() };
     this.comandas.set(updated.numero, updated);
     return updated;
@@ -627,8 +622,7 @@ export class ComandaStateMachineService {
     if (!freshRecord.lock) {
       throw new ComandaLockNotFoundError();
     }
-    const existing: any = freshRecord.lock as any;
-    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
+    if (freshRecord.lock.owner !== lockInfo.owner || freshRecord.lock.stationId !== lockInfo.stationId) {
       throw new ComandaLockOwnershipError();
     }
     const updated: ComandaRecord = { ...freshRecord, lock: null, updatedAt: nowIso() };
@@ -654,8 +648,8 @@ export class ComandaStateMachineService {
     pesagem: {
       peso: number;
       origem?: string;
-      owner: string;
-      stationId: ComandaLockStationId;
+      owner?: string;
+      stationId?: ComandaLockStationId;
       itemId?: string;
       productName?: string;
       reason?: string;
@@ -666,22 +660,27 @@ export class ComandaStateMachineService {
     if (!record) {
       throw new Error(`Comanda ${numero} não encontrada.`);
     }
-    // Ensure lock exists for this station/owner
-    let lock: any = record.lock as any;
-    if (!lock || lock.owner !== pesagem.owner || lock.stationId !== pesagem.stationId) {
-      lock = { ...(buildLock(pesagem.stationId) as any), owner: pesagem.owner } as any;
-    }
+
     const newPesagem: ComandaPesagemRecord = {
       id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
       peso: Number(normalizeFiniteNumber(pesagem.peso)!.toFixed(3)),
       origem: normalizeText(pesagem.origem) || undefined,
       stationId: pesagem.stationId,
-      owner: pesagem.owner,
+      owner: normalizeText(pesagem.owner) || undefined,
       itemId: normalizeText(pesagem.itemId) || undefined,
       productName: normalizeText(pesagem.productName) || undefined,
-      reason: pesagem.reason,
+      reason: normalizeText(pesagem.reason) || undefined,
       createdAt: nowIso()
     };
+
+    // Ensure lock exists if owner and stationId are provided
+    let lock = record.lock;
+    if (pesagem.owner && pesagem.stationId) {
+      if (!lock || lock.owner !== pesagem.owner || lock.stationId !== pesagem.stationId) {
+        lock = { ...buildLock(pesagem.stationId), owner: pesagem.owner };
+      }
+    }
+
     const updated: ComandaRecord = {
       ...record,
       status: 'EM_USO_BALANCA',
@@ -693,7 +692,6 @@ export class ComandaStateMachineService {
     return { comanda: updated, pesagem: newPesagem };
   }
 
-  // Convenience method to mark comanda in use on a balança (without owner info).
   // Convenience method to mark comanda in use on a balança (with cancellation guard).
   markEmUsoBalanca(numero: string, stationId?: string) {
     const record = this.get(numero);
@@ -719,5 +717,4 @@ export class ComandaStateMachineService {
     this.comandas.set(updated.numero, updated);
     return updated;
   }
-
 }
