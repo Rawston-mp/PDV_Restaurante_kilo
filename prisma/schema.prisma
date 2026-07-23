@@ -3,8 +3,7 @@ generator client {
 }
 datasource db {
   provider = "sqlite"
-// url provided via CLI
-
+  url      = env("DATABASE_URL")
 }
 
 
