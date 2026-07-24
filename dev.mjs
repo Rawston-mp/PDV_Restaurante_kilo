@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
+import { dirname } from 'node:path';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = process.cwd();
+const root = dirname(fileURLToPath(import.meta.url));
 const services = [
   ['backend', [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'watch', 'backend/src/server.ts']],
   ['frontend', [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '0.0.0.0']]

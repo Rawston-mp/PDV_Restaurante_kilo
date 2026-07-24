@@ -10,7 +10,7 @@ import type {
 } from '../domain/comandaStateMachine';
 
 export type ComandaAuditEvent = {
-  action: 'OPEN_COMANDA' | 'TRANSITION' | 'LOCK_ACQUIRED' | 'LOCK_RENEWED' | 'LOCK_RELEASED' | 'LOCK_EXPIRED' | 'ITEMS_SYNCED' | 'ITEM_ADDED' | 'PESAGEM_RECORDED';
+  action: string;
   numero: string;
   fromStatus?: ComandaStatus;
   toStatus?: ComandaStatus;
