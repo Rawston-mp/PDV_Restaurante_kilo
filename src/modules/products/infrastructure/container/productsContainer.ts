@@ -3,14 +3,15 @@ import { SyncProducts } from '@/modules/products/application/use-cases/SyncProdu
 import { ProcessSyncQueue } from '@/modules/products/application/use-cases/ProcessSyncQueue';
 import { AdjustStock } from '@/modules/stock/application/use-cases/AdjustStock';
 import { SyncOrders } from '@/modules/orders/application/use-cases/SyncOrders';
-import { InMemoryProductRepository } from '@/modules/products/infrastructure/repositories/InMemoryProductRepository';
 import { DexieProductRepository } from '@/modules/products/infrastructure/repositories/DexieProductRepository';
-import { InMemoryProductSyncGateway } from '@/modules/products/infrastructure/sync/InMemoryProductSyncGateway';
+import { ApiBackedProductRepository } from '@/modules/products/infrastructure/repositories/ApiBackedProductRepository';
+import { ApiProductSyncGateway } from '@/modules/products/infrastructure/sync/ApiProductSyncGateway';
 import { ordersContainer } from '@/modules/orders/infrastructure/container/ordersContainer';
 import { getSyncTaskQueue } from '@/shared/sync/infrastructure/queue/syncTaskQueueSingleton';
 
-const productRepository = new DexieProductRepository();
-const productSyncGateway = new InMemoryProductSyncGateway();
+const localProductRepository = new DexieProductRepository();
+const productRepository = new ApiBackedProductRepository(localProductRepository);
+const productSyncGateway = new ApiProductSyncGateway();
 const syncTaskQueue = getSyncTaskQueue();
 const syncProducts = new SyncProducts(productRepository, productSyncGateway);
 const syncOrders = ordersContainer.syncOrders;

@@ -15,6 +15,8 @@ import {
 } from './domain/comandaStateMachine';
 import type { ComandaStore } from './infrastructure/comandaStore';
 import { createComandaStore } from './infrastructure/comandaStore';
+import type { ProductRecord, ProductStore } from './infrastructure/productStore';
+import { createProductStore } from './infrastructure/productStore';
 import { startScaleReader } from './services/scaleReader.service';
 
 type PesoSensorPayload = {
@@ -36,7 +38,29 @@ app.use((req, res, next) => {
 
   next();
 });
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+const jsonParseErrorHandler: express.ErrorRequestHandler = (error, _req, res, next) => {
+  if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
+    res.status(413).json({
+      ok: false,
+      message: 'Payload muito grande. Reduza a imagem do produto ou remova a foto antes de sincronizar.'
+    });
+    return;
+  }
+
+  if (error instanceof SyntaxError && 'body' in error) {
+    res.status(400).json({
+      ok: false,
+      message: 'JSON inválido na requisição.'
+    });
+    return;
+  }
+
+  next(error);
+};
+
+app.use(jsonParseErrorHandler);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -47,6 +71,8 @@ const io = new Server(httpServer, {
 
 const comandaService = new ComandaStateMachineService();
 let comandaStore: ComandaStore;
+let productStore: ProductStore | null = null;
+let productStoreError: string | null = null;
 
 const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
 const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
@@ -139,6 +165,19 @@ const parseComandaPesagemInput = (body: unknown): ComandaPesagemInput | null => 
     productName: parseOptionalText(payload.productName),
     reason: parseOptionalText(payload.reason)
   };
+};
+
+const parseProductPayload = (body: unknown): ProductRecord | null => {
+  if (typeof body !== 'object' || body === null) {
+    return null;
+  }
+
+  const payload = body as { product?: unknown };
+  const rawProduct = typeof payload.product === 'object' && payload.product !== null
+    ? payload.product
+    : body;
+
+  return rawProduct as ProductRecord;
 };
 
 const resolveComandaMutationError = (error: unknown, fallbackMessage: string) => {
@@ -268,6 +307,32 @@ const initializeComandas = async () => {
   }
 
   comandaService.loadSnapshot(snapshot);
+};
+
+const initializeProducts = async () => {
+  try {
+    productStore = await createProductStore();
+    productStoreError = null;
+    // eslint-disable-next-line no-console
+    console.log('Persistência de produtos: PostgreSQL');
+  } catch (error) {
+    productStore = null;
+    productStoreError = error instanceof Error ? error.message : 'erro desconhecido';
+    // eslint-disable-next-line no-console
+    console.error('Falha ao iniciar persistência PostgreSQL de produtos:', error);
+  }
+};
+
+const requireProductStore = (res: express.Response): ProductStore | null => {
+  if (productStore) {
+    return productStore;
+  }
+
+  res.status(503).json({
+    ok: false,
+    message: `Banco de produtos indisponível. O sistema continuará usando cache local até o PostgreSQL voltar.${productStoreError ? ` Detalhe: ${productStoreError}` : ''}`
+  });
+  return null;
 };
 
 app.get('/comandas/status', (_req, res) => {
@@ -447,6 +512,108 @@ app.get('/api/v1/comandas/:numero/pesagens', (req, res) => {
 
 app.get('/api/v1/comandas', (_req, res) => {
   res.status(200).json({ ok: true, comandas: comandaService.getAll() });
+});
+
+app.get('/api/v1/products', async (_req, res) => {
+  const store = requireProductStore(res);
+  if (!store) {
+    return;
+  }
+
+  try {
+    const products = await store.list();
+    res.status(200).json({ ok: true, products });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao listar produtos.'
+    });
+  }
+});
+
+app.get('/api/v1/products/:id', async (req, res) => {
+  const store = requireProductStore(res);
+  if (!store) {
+    return;
+  }
+
+  try {
+    const product = await store.findById(req.params.id);
+    if (!product) {
+      res.status(404).json({ ok: false, message: 'Produto não encontrado.' });
+      return;
+    }
+
+    res.status(200).json({ ok: true, product });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao consultar produto.'
+    });
+  }
+});
+
+app.put('/api/v1/products/:id', async (req, res) => {
+  const store = requireProductStore(res);
+  if (!store) {
+    return;
+  }
+
+  const product = parseProductPayload(req.body);
+  if (!product || product.id !== req.params.id) {
+    res.status(400).json({ ok: false, message: 'Produto inválido ou ID divergente.' });
+    return;
+  }
+
+  try {
+    const savedProduct = await store.save(product);
+    res.status(200).json({ ok: true, product: savedProduct });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao salvar produto.'
+    });
+  }
+});
+
+app.post('/api/v1/products', async (req, res) => {
+  const store = requireProductStore(res);
+  if (!store) {
+    return;
+  }
+
+  const product = parseProductPayload(req.body);
+  if (!product) {
+    res.status(400).json({ ok: false, message: 'Produto inválido.' });
+    return;
+  }
+
+  try {
+    const savedProduct = await store.save(product);
+    res.status(201).json({ ok: true, product: savedProduct });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao criar produto.'
+    });
+  }
+});
+
+app.delete('/api/v1/products/:id', async (req, res) => {
+  const store = requireProductStore(res);
+  if (!store) {
+    return;
+  }
+
+  try {
+    await store.delete(req.params.id);
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: error instanceof Error ? error.message : 'Falha ao excluir produto.'
+    });
+  }
 });
 
 app.post('/api/v1/comandas/close-batch', (req, res) => {
@@ -807,6 +974,7 @@ const PORT = Number(process.env.PORT ?? 3001);
 void (async () => {
   try {
     await initializeComandas();
+    await initializeProducts();
     httpServer.listen(PORT, () => {
       // eslint-disable-next-line no-console
       console.log(`Servidor backend rodando na porta ${PORT}`);
