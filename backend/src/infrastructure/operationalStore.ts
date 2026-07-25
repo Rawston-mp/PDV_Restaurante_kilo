@@ -609,6 +609,37 @@ export class OperationalPostgresStore {
   async deleteFinanceEntry(id: string) {
     await this.pool.query('DELETE FROM financeiro WHERE id = $1', [id]);
   }
+
+  /**
+   * Bloqueio pessimista para o caixa / balança no PostgreSQL (FOR UPDATE)
+   * Impede condições de corrida entre a Balança e o Caixa ao ler a comanda para alteração/fechamento.
+   */
+  async findComandaForUpdate(client: Pick<Pool, 'query'>, numero: string) {
+    const result = await client.query(
+      'SELECT * FROM comandas WHERE numero = $1 FOR UPDATE',
+      [numero]
+    );
+    return result.rowCount ? result.rows[0] : null;
+  }
+
+  /**
+   * Executa um callback envelopado em uma transação segura com FOR UPDATE na comanda informada.
+   */
+  async withComandaLock<T>(numero: string, fn: (comandaRow: any) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const comandaRow = await this.findComandaForUpdate(client, numero);
+      const result = await fn(comandaRow);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export const createOperationalStore = async () => {
