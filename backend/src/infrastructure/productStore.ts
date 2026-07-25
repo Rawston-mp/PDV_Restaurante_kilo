@@ -1,7 +1,5 @@
 import { Pool } from 'pg';
-import * as dotenv from 'dotenv';
-
-dotenv.config({ path: `${process.cwd()}/.env` });
+import { createPostgresPool, parseBoolean } from './postgresConfig';
 
 export type ProductRecord = {
   id: string;
@@ -44,68 +42,6 @@ export type ProductStore = {
   findById: (id: string) => Promise<ProductRecord | null>;
   save: (product: ProductRecord) => Promise<ProductRecord>;
   delete: (id: string) => Promise<void>;
-};
-
-type PostgresConfig = {
-  connectionString?: string;
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password?: string;
-  ssl: boolean;
-};
-
-const parseBoolean = (value: string | undefined, fallback = false) => {
-  if (!value) {
-    return fallback;
-  }
-
-  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
-};
-
-const buildPostgresConfig = (): PostgresConfig => {
-  const rawConnectionString = (
-    process.env.PRODUCT_DATABASE_URL ??
-    process.env.POSTGRES_URL ??
-    process.env.DATABASE_URL
-  )?.trim().replace(/^"|"$/g, '');
-  const connectionString = rawConnectionString?.startsWith('postgres://') || rawConnectionString?.startsWith('postgresql://')
-    ? rawConnectionString
-    : undefined;
-
-  return {
-    connectionString: connectionString || undefined,
-    host: process.env.PGHOST?.trim() || '127.0.0.1',
-    port: Number(process.env.PGPORT ?? 5432),
-    database: process.env.PGDATABASE?.trim() || 'postgres',
-    user: process.env.PGUSER?.trim() || 'postgres',
-    password: process.env.PGPASSWORD?.trim() || 'postgres',
-    ssl: parseBoolean(process.env.PGSSL, false)
-  };
-};
-
-const createPool = () => {
-  const config = buildPostgresConfig();
-  const connectionTimeoutMillis = Number(process.env.PG_CONNECTION_TIMEOUT_MS ?? 3000);
-
-  if (config.connectionString) {
-    return new Pool({
-      connectionString: config.connectionString,
-      connectionTimeoutMillis,
-      ssl: config.ssl ? { rejectUnauthorized: false } : undefined
-    });
-  }
-
-  return new Pool({
-    host: config.host,
-    port: config.port,
-    database: config.database,
-    user: config.user,
-    password: config.password,
-    connectionTimeoutMillis,
-    ssl: config.ssl ? { rejectUnauthorized: false } : undefined
-  });
 };
 
 const toOptionalText = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
@@ -263,18 +199,28 @@ class PostgresProductStore implements ProductStore {
         fiscal_type TEXT,
         purchase_unit TEXT,
         sale_unit TEXT,
-        units_per_purchase NUMERIC(12, 4) NOT NULL DEFAULT 1,
-        purchase_cost_value NUMERIC(14, 4) NOT NULL DEFAULT 0,
-        cost_value NUMERIC(14, 4) NOT NULL DEFAULT 0,
-        margin_profit NUMERIC(10, 4) NOT NULL DEFAULT 0,
-        price NUMERIC(14, 4) NOT NULL DEFAULT 0,
+        units_per_purchase NUMERIC(12, 2) NOT NULL DEFAULT 1,
+        purchase_cost_value NUMERIC(14, 2) NOT NULL DEFAULT 0,
+        cost_value NUMERIC(14, 2) NOT NULL DEFAULT 0,
+        margin_profit NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        price NUMERIC(14, 2) NOT NULL DEFAULT 0,
         by_weight BOOLEAN NOT NULL DEFAULT FALSE,
-        stock NUMERIC(14, 4) NOT NULL DEFAULT 0,
+        stock NUMERIC(14, 2) NOT NULL DEFAULT 0,
         version INTEGER NOT NULL DEFAULT 1,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         last_synced_at TIMESTAMPTZ
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE pdv_products
+        ALTER COLUMN units_per_purchase TYPE NUMERIC(12, 2) USING ROUND(units_per_purchase, 2),
+        ALTER COLUMN purchase_cost_value TYPE NUMERIC(14, 2) USING ROUND(purchase_cost_value, 2),
+        ALTER COLUMN cost_value TYPE NUMERIC(14, 2) USING ROUND(cost_value, 2),
+        ALTER COLUMN margin_profit TYPE NUMERIC(10, 2) USING ROUND(margin_profit, 2),
+        ALTER COLUMN price TYPE NUMERIC(14, 2) USING ROUND(price, 2),
+        ALTER COLUMN stock TYPE NUMERIC(14, 2) USING ROUND(stock, 2)
     `);
 
     await this.pool.query('CREATE INDEX IF NOT EXISTS idx_pdv_products_name ON pdv_products USING GIN (to_tsvector(\'portuguese\', name))');
@@ -395,7 +341,7 @@ class PostgresProductStore implements ProductStore {
 }
 
 export const createProductStore = async (): Promise<ProductStore> => {
-  const store = new PostgresProductStore(createPool());
+  const store = new PostgresProductStore(createPostgresPool());
   await store.initialize();
   return store;
 };
