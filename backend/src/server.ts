@@ -1105,11 +1105,21 @@ app.delete('/api/v1/financeiro/:id', async (req, res) => {
   }
 });
 
-app.post('/api/v1/comandas/close-batch', (req, res) => {
+app.post('/api/v1/comandas/close-batch', async (req, res) => {
   const numeros = Array.isArray(req.body?.numeros)
     ? req.body.numeros.map(parseNumero).filter(Boolean)
     : [];
   const documentMode = parseNumero(req.body?.documentMode).toUpperCase();
+  const payments = Array.isArray(req.body?.payments)
+    ? req.body.payments
+      .map((payment: Record<string, unknown>, index: number) => ({
+        id: parseOptionalText(payment.id),
+        method: parseOptionalText(payment.method) ?? `PAGAMENTO_${index + 1}`,
+        label: parseOptionalText(payment.label),
+        amount: parseNumber(payment.amount)
+      }))
+      .filter((payment) => payment.amount > 0)
+    : [];
   const targetStatus = documentMode === 'ORCAMENTO'
     ? 'FECHADA_ORCAMENTO'
     : documentMode === 'NFCE'
@@ -1124,6 +1134,14 @@ app.post('/api/v1/comandas/close-batch', (req, res) => {
     return;
   }
 
+  if (payments.length > 0 && !operationalStore) {
+    res.status(503).json({
+      ok: false,
+      message: `Banco operacional indisponível. O pagamento não foi gravado no PostgreSQL.${operationalStoreError ? ` Detalhe: ${operationalStoreError}` : ''}`
+    });
+    return;
+  }
+
   try {
     const beforeByNumero = new Map(
       numeros.map((numero) => [numero, comandaService.get(numero)])
@@ -1134,8 +1152,8 @@ app.post('/api/v1/comandas/close-batch', (req, res) => {
       parseNumero(req.body?.reason) || 'fechamento_comandas_unidas_caixa'
     );
 
-    void persistComandas();
-    void Promise.all(comandas.flatMap((comanda) => {
+    await persistComandas();
+    await Promise.all(comandas.flatMap((comanda) => {
       const before = beforeByNumero.get(comanda.numero);
       const previousTransitionCount = before?.transitions.length ?? 0;
       return comanda.transitions.slice(previousTransitionCount).map((transition) => appendTransitionAudit(
@@ -1146,6 +1164,33 @@ app.post('/api/v1/comandas/close-batch', (req, res) => {
         transition.reason
       ));
     }));
+
+    if (operationalStore && payments.length > 0) {
+      await Promise.all(comandas.map((comanda) => {
+        const subtotal = comanda.items.reduce((sum, item) => sum + parseNumber(item.subtotal), 0);
+        const discount = parseNumber(req.body?.discount);
+        const total = Math.max(0, subtotal - discount);
+        const saleId = `venda-comanda-${comanda.numero}-${targetStatus}`;
+
+        return operationalStore!.registerSale({
+          id: saleId,
+          comandaNumero: comanda.numero,
+          documentMode: documentMode as 'NFCE' | 'ORCAMENTO',
+          status: 'CLOSED',
+          subtotal,
+          discount,
+          total,
+          operator: parseOptionalText(req.body?.operator) ?? 'CAIXA',
+          pdv: parseOptionalText(req.body?.pdv) ?? 'CAIXA',
+          customerDocument: parseOptionalText(req.body?.customerDocument),
+          closedAt: comanda.updatedAt,
+          payments: payments.map((payment, index) => ({
+            ...payment,
+            id: `${saleId}-pagamento-${index + 1}`
+          }))
+        });
+      }));
+    }
 
     res.status(200).json({ ok: true, comandas });
   } catch (error) {

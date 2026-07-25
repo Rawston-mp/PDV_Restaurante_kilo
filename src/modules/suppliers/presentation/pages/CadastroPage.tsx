@@ -6873,7 +6873,7 @@ export function CadastroPage() {
                     {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + parseFinanceAmount(row.entry.amount), 0))}
                   </b>
                   <b data-label="Valor pago">
-                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + row.debit + row.credit, 0))}
+                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + row.credit - row.debit, 0))}
                   </b>
                   <span data-label="Pago">-</span>
                   <span data-label="Status">-</span>
