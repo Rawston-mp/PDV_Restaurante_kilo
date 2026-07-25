@@ -1780,7 +1780,7 @@ export function CashierPage() {
     }
   };
 
-  const closeComandaAtCashier = async (documentMode: PaymentDocumentMode, customerDocument = '') => {
+  const closeComandaAtCashier = async (documentMode: PaymentDocumentMode, customerDocument = '', payments: PaymentEntry[] = [], discountAmount = 0) => {
     const numero = comandaNumber.trim();
     if (!numero) {
       showNotice(
@@ -1810,6 +1810,17 @@ export function CashierPage() {
         numeros,
         documentMode,
         customerDocument: documentMode === 'NFCE' ? customerDocument.replace(/\D/g, '') : undefined,
+        discount: Number(discountAmount.toFixed(2)),
+        operator: user?.name ?? user?.role ?? 'CAIXA',
+        pdv: 'CAIXA',
+        payments: payments
+          .filter((payment) => payment.amount > 0)
+          .map((payment, index) => ({
+            id: `pagamento-${numero}-${documentMode}-${index + 1}`,
+            method: payment.method,
+            label: payment.label || CASHIER_PAYMENT_SUMMARY_LABELS.find((item) => item.method === payment.method)?.label || payment.method,
+            amount: Number(payment.amount.toFixed(2))
+          })),
         reason: numeros.length > 1 ? 'fechamento_comandas_unidas_caixa' : 'fechamento_caixa'
       })
     }).catch(() => null);
@@ -1845,13 +1856,15 @@ export function CashierPage() {
   };
 
   const persistStandaloneCashierSale = async (documentMode: PaymentDocumentMode, payableTotal: number) => {
+    const saleId = `venda-avulsa-${Date.now()}-${crypto.randomUUID()}`;
+
     if (comandaNumber.trim()) {
-      return;
+      return undefined;
     }
 
     const closedAt = new Date();
     await ordersContainer.orderRepository.save({
-      id: `venda-avulsa-${closedAt.getTime()}-${crypto.randomUUID()}`,
+      id: saleId,
       table: documentMode === 'ORCAMENTO' ? 'Orçamento avulso' : 'Venda avulsa',
       status: 'ENTREGUE',
       items: cartItems.map((item) => ({
@@ -1870,6 +1883,65 @@ export function CashierPage() {
       lastSyncedAt: closedAt,
       createdBy: user?.name ?? user?.role ?? 'CAIXA'
     });
+
+    return saleId;
+  };
+
+  const buildBackendSaleId = (documentMode: PaymentDocumentMode, fallbackSaleId?: string) => {
+    const primaryComanda = comandaNumber.trim();
+    if (!primaryComanda) {
+      return fallbackSaleId ?? `venda-avulsa-${Date.now()}-${crypto.randomUUID()}`;
+    }
+
+    const closedStatus = documentMode === 'ORCAMENTO' ? 'FECHADA_ORCAMENTO' : 'FECHADA_VENDA';
+    return `venda-comanda-${primaryComanda}-${closedStatus}`;
+  };
+
+  const persistBackendCashierSale = async (
+    payments: PaymentEntry[],
+    documentMode: PaymentDocumentMode,
+    payableTotal: number,
+    discountAmount: number,
+    customerDocument: string,
+    fallbackSaleId?: string
+  ) => {
+    const saleId = buildBackendSaleId(documentMode, fallbackSaleId);
+    const primaryComanda = comandaNumber.trim();
+
+    const response = await fetch(`${API_BASE}/api/v1/vendas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: saleId,
+        comandaNumero: primaryComanda || undefined,
+        documentMode,
+        status: 'CLOSED',
+        subtotal: Number(subtotal.toFixed(2)),
+        discount: Number(discountAmount.toFixed(2)),
+        total: Number(payableTotal.toFixed(2)),
+        operator: user?.name ?? user?.role ?? 'CAIXA',
+        pdv: 'CAIXA',
+        customerDocument: documentMode === 'NFCE' ? customerDocument.replace(/\D/g, '') : undefined,
+        closedAt: new Date().toISOString(),
+        payments: payments
+          .filter((payment) => payment.amount > 0)
+          .map((payment, index) => ({
+            id: `${saleId}-pagamento-${index + 1}`,
+            method: payment.method,
+            label: payment.label || CASHIER_PAYMENT_SUMMARY_LABELS.find((item) => item.method === payment.method)?.label || payment.method,
+            amount: Number(payment.amount.toFixed(2))
+          }))
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { message?: string } | null;
+      throw new Error(payload?.message ?? 'Falha ao persistir venda e pagamentos no PostgreSQL.');
+    }
+
+    return saleId;
   };
 
   const persistCashierPaymentMovements = async (
@@ -1882,20 +1954,52 @@ export function CashierPage() {
     await Promise.all(
       payments
         .filter((payment) => payment.amount > 0)
-        .map((payment, index) => {
+        .map(async (payment, index) => {
           const methodLabel = payment.label || CASHIER_PAYMENT_SUMMARY_LABELS.find((item) => item.method === payment.method)?.label || payment.method;
           const normalizedMethod = methodLabel.toUpperCase();
+          const movementId = `mov-venda-${launchedAt.getTime()}-${index}-${crypto.randomUUID()}`;
+          const movementCode = `V-${String(launchedAt.getTime()).slice(-8)}-${index + 1}`;
+          const description = `${documentMode === 'NFCE' ? 'Venda NFC-e' : 'Orçamento'} ${atendimentoLabel} - ${methodLabel}`;
 
-          return financeContainer.createCashMovement.execute({
-            id: `mov-venda-${launchedAt.getTime()}-${index}-${crypto.randomUUID()}`,
-            movementCode: `V-${String(launchedAt.getTime()).slice(-8)}-${index + 1}`,
+          await financeContainer.createCashMovement.execute({
+            id: movementId,
+            movementCode,
             movementType: 'ENTRADA',
             category: normalizedMethod,
             amount: Number(payment.amount.toFixed(2)),
-            description: `${documentMode === 'NFCE' ? 'Venda NFC-e' : 'Orçamento'} ${atendimentoLabel} - ${methodLabel}`,
+            description,
             launchedAt,
+            convenioName: methodLabel,
             paymentMethod: methodLabel
           });
+
+          await fetch(`${API_BASE}/api/v1/financeiro`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              id: movementId,
+              financeCode: movementCode,
+              tab: 'RECEITA',
+              movementType: 'ENTRADA',
+              category: normalizedMethod,
+              amount: Number(payment.amount.toFixed(2)),
+              description,
+              accountName: methodLabel,
+              documentRef: documentMode === 'NFCE' ? 'NFC-e' : 'Orçamento',
+              status: 'RECEBIDO',
+              convenioName: methodLabel,
+              paymentMethod: methodLabel,
+              launchedAt: launchedAt.toISOString(),
+              sourceJson: {
+                origin: 'CAIXA_PAYMENT',
+                atendimentoLabel,
+                documentMode,
+                payment
+              }
+            })
+          }).catch(() => undefined);
         })
     );
   };
@@ -1926,12 +2030,20 @@ export function CashierPage() {
       }
     }
 
-    const closed = await closeComandaAtCashier(finalDocumentMode, customerDocument);
+    const closed = await closeComandaAtCashier(finalDocumentMode, customerDocument ?? '', payments, discountAmount);
     if (!closed) {
       return;
     }
 
-    await persistStandaloneCashierSale(finalDocumentMode, payableTotal);
+    const standaloneSaleId = await persistStandaloneCashierSale(finalDocumentMode, payableTotal);
+    try {
+      await persistBackendCashierSale(payments, finalDocumentMode, payableTotal, discountAmount, customerDocument ?? '', standaloneSaleId);
+    } catch (error) {
+      showNotice(
+        error instanceof Error ? error.message : 'Venda fechada localmente, mas os pagamentos não foram enviados ao PostgreSQL.',
+        'warning'
+      );
+    }
     await persistCashierPaymentMovements(payments, finalDocumentMode, currentComandaNumber);
 
     if (finalDocumentMode === 'NFCE') {
