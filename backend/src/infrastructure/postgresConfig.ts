@@ -1,7 +1,29 @@
 import { Pool } from 'pg';
-import * as dotenv from 'dotenv';
+import fs from 'node:fs';
+import path from 'node:path';
 
-dotenv.config({ path: `${process.cwd()}/.env` });
+// Carrega .env manualmente se existir, sem depender do pacote `dotenv` em produção
+try {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx > 0) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          const val = trimmed.slice(eqIdx + 1).trim().replace(/^"|"$/g, '');
+          if (!process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    }
+  }
+} catch {
+  // Ignora se não for possível ler o .env no ambiente empacotado
+}
 
 export type PostgresConfig = {
   connectionString?: string;
