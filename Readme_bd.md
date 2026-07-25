@@ -72,3 +72,8 @@ FROM public.vendas
 WHERE comanda_numero = '1';
 
 **************************
+
+npm run build
+npm run test -- tests/integration/cashMovementsUseCases.test.ts
+
+**************************
