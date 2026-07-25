@@ -1,4 +1,5 @@
 import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 export type PinKind = 'LOGIN' | 'SENSITIVE';
 
@@ -111,6 +112,30 @@ const persistPins = (kind: PinKind, pins: Record<Role, string>, storeId?: string
   }
 
   window.localStorage.setItem(getStoreStorageKey(kind, storeId), JSON.stringify(pins));
+
+  if (storeId && typeof window.fetch === 'function') {
+    for (const [role, pinValue] of Object.entries(pins)) {
+      void window.fetch(`${API_BASE_URL}/api/v1/admin/store_pins/${encodeURIComponent(`${storeId}-${role}-${kind}`)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          record: {
+            id: `${storeId}-${role}-${kind}`,
+            name: `${role} ${kind}`,
+            storeId,
+            role,
+            pinKind: kind,
+            pinValue,
+            active: true
+          }
+        })
+      }).catch(() => {
+        // O PIN local continua válido quando backend/banco estiver indisponível.
+      });
+    }
+  }
 };
 
 const isPinStrongEnough = (pin: string) => {

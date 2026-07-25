@@ -1,4 +1,5 @@
 import type { Role } from '@/modules/auth/domain/types/Role';
+import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 export const STORE_SETTINGS_STORAGE_KEY = 'pdv.platform.stores';
 export const LOCAL_PERIPHERAL_SETTINGS_STORAGE_KEY = 'pdv.local.peripherals';
@@ -93,6 +94,29 @@ const defaultStoreRoles: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'CO
 let memoryStoreSettings: StoreSettings[] | null = null;
 let memoryPeripheralSettings: LocalPeripheralSettings | null = null;
 let memoryOwnerSettings: PlatformOwnerSettings | null = null;
+
+const postAdminRecord = (entity: string, id: string, name: string, record: Record<string, unknown>) => {
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
+    return;
+  }
+
+  void window.fetch(`${API_BASE_URL}/api/v1/admin/${entity}/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      record: {
+        ...record,
+        id,
+        name,
+        data: record
+      }
+    })
+  }).catch(() => {
+    // Configuração local permanece como fonte de operação quando backend/banco cair.
+  });
+};
 
 const hasStorage = () =>
   typeof window !== 'undefined' &&
@@ -295,6 +319,10 @@ export const saveStoreSettings = (stores: StoreSettings[]) => {
     memoryStoreSettings = nextStores;
   }
 
+  for (const store of nextStores) {
+    postAdminRecord('stores', store.id, store.name, store);
+  }
+
   return nextStores;
 };
 
@@ -369,6 +397,8 @@ export const savePlatformOwnerSettings = (settings: PlatformOwnerSettings) => {
   } else {
     memoryOwnerSettings = nextSettings;
   }
+
+  postAdminRecord('support_settings', 'platform-owner-support', nextSettings.companyName || 'Suporte', nextSettings);
 
   return nextSettings;
 };
@@ -472,6 +502,11 @@ export const saveLocalPeripheralSettings = (settings: LocalPeripheralSettings) =
   } else {
     memoryPeripheralSettings = nextSettings;
   }
+
+  postAdminRecord('peripheral_settings', `local-peripherals-${nextSettings.computerName}`, nextSettings.computerName, {
+    ...nextSettings,
+    peripheralType: 'LOCAL_COMPUTER'
+  });
 
   return nextSettings;
 };
