@@ -306,6 +306,41 @@ Considerar o PDVTouch pronto para piloto real somente quando:
 - Nenhuma venda paga puder desaparecer.
 - Nenhuma venda fiscal puder ser editada sem auditoria.
 - Contador tiver validado CFOP, NCM, CSOSN/CST, PIS, COFINS e regras do restaurante.
+## 9. Como Executar o Projeto
+
+Pré-requisitos:
+- Node.js 18+
+- npm 8+
+- Docker Desktop (opcional, para rodar o PostgreSQL containerizado)
+
+Instalação:
+
+```bash
+npm install
+```
+
+Banco de Dados com Docker (PostgreSQL):
+
+```bash
+# 1. Subir os containers do PostgreSQL (porta 5432) e pgAdmin (porta 8080)
+npm run db:up
+
+# 2. Criar a estrutura de tabelas e importar dados iniciais
+npm run db:setup
+
+# 3. Para desligar o banco quando não estiver utilizando
+npm run db:down
+```
+
+*Acesso ao pgAdmin*: http://localhost:8080 | Login: admin@pdv.local | Senha: admin
+
+Desenvolvimento (Frontend + Backend):
+
+```bash
+npm run dev
+```
+
+Esse comando inicia:
 
 ## 8. O Que Não Deve Ir Para Produção Ainda
 
@@ -316,36 +351,6 @@ Não colocar em produção fiscal enquanto:
 - Não houver protocolo salvo.
 - Não houver QR Code válido.
 - Não houver controle de numeração.
-- Não houver cancelamento.
-- Não houver contingência.
-- Não houver armazenamento dos XMLs.
-- Não houver auditoria de estorno, cancelamento e edição.
-
-## 9. Como Executar o Projeto
-
-Pré-requisitos:
-
-- Node.js 18+
-- npm 8+
-
-Instalação:
-
-```bash
-npm install
-```
-
-Desenvolvimento:
-
-```bash
-npm run dev
-```
-
-Esse comando inicia:
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3001`
-
-Testes:
 
 ```bash
 npm run test
