@@ -38,12 +38,16 @@ export function ItemsList({ items, onDelete, onAdjust, canDelete = true }: Items
               </div>
               <strong className="comanda-item-subtotal">{formatCurrency(item.subtotal)}</strong>
               <div className="comanda-item-actions">
-                <button type="button" onClick={() => onAdjust(item.id, -1)} aria-label={`Diminuir ${item.nome}`}>
-                  <Minus size={18} />
-                </button>
-                <button type="button" onClick={() => onAdjust(item.id, 1)} aria-label={`Aumentar ${item.nome}`}>
-                  <Plus size={18} />
-                </button>
+                {item.porUnidade && (
+                  <>
+                    <button type="button" onClick={() => onAdjust(item.id, -1)} aria-label={`Diminuir ${item.nome}`}>
+                      <Minus size={18} />
+                    </button>
+                    <button type="button" onClick={() => onAdjust(item.id, 1)} aria-label={`Aumentar ${item.nome}`}>
+                      <Plus size={18} />
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="is-danger"

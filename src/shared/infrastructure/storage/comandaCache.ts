@@ -1,4 +1,5 @@
 import type { ItemComanda } from '@/types/comanda';
+import { isValidComandaNumber, normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 
 export const COMANDA_ITEMS_STORAGE_KEY = 'pdv.comandas.itens.v1';
 export const COMANDA_CANCELLED_STORAGE_KEY = 'pdv.comandas.canceladas.v1';
@@ -17,8 +18,6 @@ type CancelledComandaMap = Record<string, CancelledComandaSnapshot>;
 
 const hasStorage = () => typeof window !== 'undefined' && Boolean(window.localStorage);
 
-const isValidNumero = (numero: string) => /^\d{1,12}$/.test(numero.trim());
-
 const sanitizeCache = (raw: unknown): ComandaCacheMap => {
   if (typeof raw !== 'object' || raw === null) {
     return {};
@@ -28,7 +27,8 @@ const sanitizeCache = (raw: unknown): ComandaCacheMap => {
   const sanitized: ComandaCacheMap = {};
 
   for (const [numero, snapshot] of entries) {
-    if (!isValidNumero(numero)) {
+    const normalizedNumero = normalizeComandaNumber(numero);
+    if (!isValidComandaNumber(normalizedNumero)) {
       continue;
     }
 
@@ -43,10 +43,19 @@ const sanitizeCache = (raw: unknown): ComandaCacheMap => {
       continue;
     }
 
-    sanitized[numero] = {
+    const normalizedSnapshot = {
       itens: itens as ItemComanda[],
       updatedAt: typeof updatedAt === 'string' ? updatedAt : new Date().toISOString()
     };
+    const current = sanitized[normalizedNumero];
+    sanitized[normalizedNumero] = current
+      ? {
+          itens: [...current.itens, ...normalizedSnapshot.itens],
+          updatedAt: Date.parse(normalizedSnapshot.updatedAt) >= Date.parse(current.updatedAt)
+            ? normalizedSnapshot.updatedAt
+            : current.updatedAt
+        }
+      : normalizedSnapshot;
   }
 
   return sanitized;
@@ -59,13 +68,14 @@ const sanitizeCancelledComandas = (raw: unknown): CancelledComandaMap => {
 
   const sanitized: CancelledComandaMap = {};
   for (const [numero, snapshot] of Object.entries(raw as Record<string, unknown>)) {
-    if (!isValidNumero(numero) || typeof snapshot !== 'object' || snapshot === null) {
+    const normalizedNumero = normalizeComandaNumber(numero);
+    if (!isValidComandaNumber(normalizedNumero) || typeof snapshot !== 'object' || snapshot === null) {
       continue;
     }
 
     const cancelledAt = (snapshot as { cancelledAt?: unknown }).cancelledAt;
     const reason = (snapshot as { reason?: unknown }).reason;
-    sanitized[numero] = {
+    sanitized[normalizedNumero] = {
       cancelledAt: typeof cancelledAt === 'string' ? cancelledAt : new Date().toISOString(),
       reason: typeof reason === 'string' && reason.trim() ? reason : 'cancelada_no_caixa'
     };
@@ -153,31 +163,33 @@ const writeCancelledComandas = (cache: CancelledComandaMap) => {
 };
 
 export const readComandaItems = (numero: string): ItemComanda[] => {
-  if (!isValidNumero(numero)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return [];
   }
 
-  return readComandaCache()[numero]?.itens ?? [];
+  return readComandaCache()[normalizedNumero]?.itens ?? [];
 };
 
 export const listLocallyCancelledComandaNumbers = (): string[] => Object.keys(readCancelledComandas());
 
 export const isComandaLocallyCancelled = (numero: string): boolean => {
-  if (!isValidNumero(numero)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return false;
   }
 
-  return Boolean(readCancelledComandas()[numero.trim()]);
+  return Boolean(readCancelledComandas()[normalizedNumero]);
 };
 
 export const markComandaLocallyCancelled = (numero: string, reason = 'cancelada_no_caixa') => {
-  const trimmed = numero.trim();
-  if (!isValidNumero(trimmed)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return;
   }
 
   const current = readCancelledComandas();
-  current[trimmed] = {
+  current[normalizedNumero] = {
     cancelledAt: new Date().toISOString(),
     reason
   };
@@ -185,17 +197,17 @@ export const markComandaLocallyCancelled = (numero: string, reason = 'cancelada_
 };
 
 export const unmarkComandaLocallyCancelled = (numero: string) => {
-  const trimmed = numero.trim();
-  if (!isValidNumero(trimmed)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return;
   }
 
   const current = readCancelledComandas();
-  if (!current[trimmed]) {
+  if (!current[normalizedNumero]) {
     return;
   }
 
-  delete current[trimmed];
+  delete current[normalizedNumero];
   writeCancelledComandas(current);
 };
 
@@ -204,19 +216,20 @@ export const listOpenComandaNumbers = (): string[] => (
 );
 
 export const upsertComandaItems = (numero: string, itens: ItemComanda[]) => {
-  if (!isValidNumero(numero)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return;
   }
 
   const current = readComandaCache();
 
   if (itens.length === 0) {
-    delete current[numero];
+    delete current[normalizedNumero];
     writeComandaCache(current);
     return;
   }
 
-  current[numero] = {
+  current[normalizedNumero] = {
     itens,
     updatedAt: new Date().toISOString()
   };
@@ -225,16 +238,17 @@ export const upsertComandaItems = (numero: string, itens: ItemComanda[]) => {
 };
 
 export const removeComandaCacheEntry = (numero: string) => {
-  if (!isValidNumero(numero)) {
+  const normalizedNumero = normalizeComandaNumber(numero);
+  if (!isValidComandaNumber(normalizedNumero)) {
     return;
   }
 
   const current = readComandaCache();
-  if (!current[numero]) {
+  if (!current[normalizedNumero]) {
     return;
   }
 
-  delete current[numero];
+  delete current[normalizedNumero];
   writeComandaCache(current);
 };
 

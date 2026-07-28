@@ -77,3 +77,9 @@ npm run build
 npm run test -- tests/integration/cashMovementsUseCases.test.ts
 
 **************************
+
+🌟Docker: Resumo dos comandos para seu dia a dia:
+Subir o Banco de Dados: npm run db:up
+Iniciar a Aplicação: npm run dev (ou npm run electron:dev para abrir a interface desktop)
+Desligar o Banco de Dados: npm run db:down
+Se precisar de mais alguma ajuda ou ajustes no projeto, estou à disposição!

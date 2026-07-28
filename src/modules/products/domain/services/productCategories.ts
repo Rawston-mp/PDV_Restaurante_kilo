@@ -3,6 +3,7 @@ import type { Categoria } from '@/types/comanda';
 
 export const defaultProductCategories = ['Saladas', 'Quentes', 'Sobremesas', 'Bebidas'];
 export const productCategoriesStorageKey = 'pdv.products.categories';
+export const productCategoriesChangedEvent = 'pdv:product-categories-changed';
 const legacyProductCategoriesStorageKey = 'pdv.products.groups';
 
 const categoryPalette = ['#10b981', '#f59e0b', '#a78bfa', '#38bdf8', '#f97316', '#ef4444', '#14b8a6', '#6366f1'];
@@ -66,6 +67,7 @@ export const persistProductCategories = (categories: string[]) => {
     JSON.stringify(sanitizeCategoryOptions(categories))
   );
   window.localStorage.removeItem(legacyProductCategoriesStorageKey);
+  window.dispatchEvent(new CustomEvent(productCategoriesChangedEvent));
 };
 
 export const mergeCategoryOptions = (storedCategories: string[], products: Product[]) => {

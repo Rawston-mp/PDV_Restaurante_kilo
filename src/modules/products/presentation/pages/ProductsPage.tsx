@@ -276,6 +276,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState('ALL');
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -612,6 +613,14 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       .slice(0, 12);
   }, [ncmSearchQuery]);
 
+  const filteredProducts = useMemo(() => {
+    if (activeCategoryFilter === 'ALL') {
+      return products;
+    }
+
+    return products.filter((product) => isSameCategoryName(product.category, activeCategoryFilter));
+  }, [activeCategoryFilter, products]);
+
   const generateCodeForCurrentCatalog = () => {
     const usedCodes = getUsedProductCodes(products);
     return generateRandomProductCode(usedCodes);
@@ -871,18 +880,15 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     }
   };
 
-  const openCadastroForCategory = (nextCategory: string) => {
-    if (!canEditOrDelete) {
-      return;
+  const openCadastro = () => {
+    resetCadastroForm();
+
+    if (activeCategoryFilter !== 'ALL') {
+      setCategory(activeCategoryFilter);
     }
 
-    if (!showCadastroSpan) {
-      resetCadastroForm();
-      setShowCadastroSpan(true);
-    }
-
+    setShowCadastroSpan(true);
     setActiveTab('PRODUTO');
-    setCategory(nextCategory);
   };
 
   return (
@@ -905,13 +911,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
             <button
               type="button"
               className="products-new-button"
-              onClick={() => {
-                if (!showCadastroSpan) {
-                  resetCadastroForm();
-                }
-
-                setShowCadastroSpan((prev) => !prev);
-              }}
+              onClick={openCadastro}
             >
               + Novo cadastro
             </button>
@@ -928,10 +928,19 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
       {canEditOrDelete && (
         <article className="card products-cadastro-quickbar">
-          <p className="products-help-note">Categorias rápidas: clique para abrir o cadastro já na categoria.</p>
-          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rapidas de cadastro">
+          <p className="products-help-note">Categorias rápidas: clique para filtrar o catálogo ativo.</p>
+          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rápidas do catálogo">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeCategoryFilter === 'ALL'}
+              className={`products-category-chip ${activeCategoryFilter === 'ALL' ? 'is-active' : ''}`}
+              onClick={() => setActiveCategoryFilter('ALL')}
+            >
+              Todos
+            </button>
             {categoryOptions.map((option) => {
-              const isActiveCategory = isSameCategoryName(option, category);
+              const isActiveCategory = activeCategoryFilter !== 'ALL' && isSameCategoryName(option, activeCategoryFilter);
               return (
                 <button
                   key={option}
@@ -939,7 +948,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   role="tab"
                   aria-selected={isActiveCategory}
                   className={`products-category-chip ${isActiveCategory ? 'is-active' : ''}`}
-                  onClick={() => openCadastroForCategory(option)}
+                  onClick={() => setActiveCategoryFilter(option)}
                 >
                   {option}
                 </button>
@@ -950,9 +959,10 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       )}
 
       {canEditOrDelete && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <div className="products-cadastro-overlay" role="dialog" aria-modal="true" aria-labelledby="products-cadastro-title">
+        <article className="card products-cadastro-span products-cadastro-modal">
           <header className="products-cadastro-header">
-            <h3>Produtos &gt; Cadastro</h3>
+            <h3 id="products-cadastro-title">Produtos &gt; Cadastro</h3>
             <div className="products-cadastro-tabs">
               <button
                 type="button"
@@ -967,6 +977,18 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                 onClick={() => setActiveTab('FISCAL')}
               >
                 Fiscal
+              </button>
+              <button
+                type="button"
+                className="products-cadastro-close"
+                aria-label="Fechar cadastro de produto"
+                onClick={() => {
+                  setShowCadastroSpan(false);
+                  setEditingProductId(null);
+                  setFormError(null);
+                }}
+              >
+                ×
               </button>
             </div>
           </header>
@@ -1477,16 +1499,27 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
             {formError && <p className="products-form-warning">{formError}</p>}
           </form>
         </article>
+        </div>
       )}
 
       <div className="products-grid products-grid-list-only">
         <article className="card products-list-card">
-          <h3>Catalogo ativo</h3>
+          <header className="products-list-header">
+            <div>
+              <h3>Catalogo ativo</h3>
+              <p className="products-help-note">
+                {activeCategoryFilter === 'ALL' ? 'Mostrando todos os produtos.' : `Filtro: ${activeCategoryFilter}.`}
+              </p>
+            </div>
+            <span>{filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'itens'}</span>
+          </header>
           {products.length === 0 ? (
             <p className="empty-state">Nenhum produto cadastrado ainda.</p>
+          ) : filteredProducts.length === 0 ? (
+            <p className="empty-state">Nenhum produto encontrado nesta categoria.</p>
           ) : (
             <ul className="products-list">
-              {products.map((product) => (
+              {filteredProducts.map((product) => (
                 <li key={product.id}>
                   <div>
                     <strong>
@@ -1545,7 +1578,12 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       </div>
 
       {categoryManagerMode && (
-        <div className="sensitive-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="products-group-manager-title">
+        <div
+          className="sensitive-modal-overlay products-category-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="products-group-manager-title"
+        >
           <section className="sensitive-modal">
             <h3 id="products-group-manager-title">
               {categoryManagerMode === 'ADD'

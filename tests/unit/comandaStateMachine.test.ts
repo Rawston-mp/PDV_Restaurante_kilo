@@ -20,6 +20,29 @@ describe('ComandaStateMachineService', () => {
     ]);
   });
 
+  it('normaliza zeros à esquerda para tratar 7, 07 e 007 como a mesma comanda', () => {
+    const service = new ComandaStateMachineService();
+
+    const opened = service.open('07');
+    service.setItems('7', [{
+      id: 'item-1',
+      nome: 'Costela Bovina',
+      precoUnitario: 29.5,
+      quantidade: 1,
+      categoriaId: 'Delivery',
+      subtotal: 29.5,
+      porUnidade: true
+    }]);
+
+    const closed = service.closeMany(['007', '7'], 'FECHADA_ORCAMENTO', 'teste_normalizacao');
+
+    expect(opened.numero).toBe('7');
+    expect(service.get('07')?.items).toHaveLength(1);
+    expect(closed).toHaveLength(1);
+    expect(closed[0].numero).toBe('7');
+    expect(closed[0].status).toBe('FECHADA_ORCAMENTO');
+  });
+
   it('permite fechar uma comanda como venda fiscal no caixa', () => {
     const service = new ComandaStateMachineService();
 

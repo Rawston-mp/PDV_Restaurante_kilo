@@ -1291,6 +1291,25 @@ body {
     box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.08), var(--shadow);
 }
 
+.products-cadastro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(2px);
+}
+
+.products-cadastro-modal {
+    width: min(1120px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow: hidden;
+    grid-template-rows: auto minmax(0, 1fr);
+    background: #ffffff;
+}
+
 .products-cadastro-header {
     display: flex;
     justify-content: space-between;
@@ -1310,6 +1329,7 @@ body {
 .products-cadastro-tabs {
     display: flex;
     gap: 0.45rem;
+    align-items: center;
 }
 
 .content .products-cadastro-tabs button {
@@ -1325,6 +1345,19 @@ body {
     background: linear-gradient(120deg, #f0f9ff 0%, #e0f2fe 100%);
     color: #075985;
     box-shadow: 0 6px 14px rgba(14, 165, 233, 0.14);
+}
+
+.content .products-cadastro-tabs .products-cadastro-close {
+    min-width: 42px;
+    width: 42px;
+    height: 38px;
+    padding: 0;
+    border-color: rgba(15, 118, 110, 0.35);
+    background: linear-gradient(120deg, #0f766e 0%, #14b8a6 100%);
+    color: #ffffff;
+    font-size: 1.1rem;
+    line-height: 1;
+    box-shadow: 0 10px 18px rgba(15, 118, 110, 0.16);
 }
 
 .products-row-3 {
@@ -1415,11 +1448,43 @@ body {
     margin-top: 0;
 }
 
+.products-list-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.products-list-header h3,
+.products-list-header p {
+    margin: 0;
+}
+
+.products-list-header>span {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 0.22rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
 .products-form {
     margin-top: 0.65rem;
     display: grid;
     gap: 1.15rem;
     max-width: 1120px;
+}
+
+.products-cadastro-modal .products-form {
+    max-width: none;
+    overflow: auto;
+    padding-right: 0.25rem;
 }
 
 .products-form label {
@@ -1517,11 +1582,11 @@ body {
     background: #f0f9ff;
 }
 
-.content .products-category-chip.is-active {
-    border-color: #0284c7;
-    color: #075985;
-    background: linear-gradient(120deg, #f0f9ff 0%, #e0f2fe 100%);
-    box-shadow: 0 6px 14px rgba(14, 165, 233, 0.14);
+.content .products-category-quickbar button.products-category-chip.is-active {
+    border-color: #f97316;
+    color: #ffffff;
+    background: linear-gradient(120deg, #fb923c 0%, #f97316 100%);
+    box-shadow: 0 6px 14px rgba(249, 115, 22, 0.22);
 }
 
 .products-group-input-row {
@@ -2977,6 +3042,10 @@ body {
     place-items: center;
     background: rgba(2, 6, 23, 0.72);
     backdrop-filter: blur(3px);
+}
+
+.products-category-modal-overlay {
+    z-index: 70;
 }
 
 .sensitive-modal {

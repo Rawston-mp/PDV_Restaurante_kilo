@@ -7,6 +7,7 @@ import {
   ComandaLockNotFoundError,
   ComandaLockOwnershipError,
   ComandaStateMachineService,
+  normalizeComandaNumber,
   type ComandaItemRecord,
   type ComandaLockOwner,
   type ComandaLockStationId,
@@ -86,6 +87,7 @@ const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
 const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
 
 const parseNumero = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+const parseComandaNumero = (value: unknown) => normalizeComandaNumber(value);
 const isReusableClosedComandaStatus = (status?: string) =>
   status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'ARQUIVADA';
 
@@ -423,7 +425,7 @@ app.get('/comandas/status', (_req, res) => {
 });
 
 app.post('/comandas/abrir', (req, res) => {
-  const numero = parseNumero(req.body?.numero) || 'LEGACY_MAIN';
+  const numero = parseComandaNumero(req.body?.numero) || 'LEGACY_MAIN';
 
   try {
     const before = comandaService.get(numero);
@@ -460,7 +462,7 @@ app.post('/comandas/fechar', (_req, res) => {
 });
 
 app.post('/api/v1/comandas', (req, res) => {
-  const numero = parseNumero(req.body?.numero);
+  const numero = parseComandaNumero(req.body?.numero);
   if (!numero) {
     res.status(400).json({ ok: false, message: 'O campo número é obrigatório.' });
     return;
@@ -492,7 +494,8 @@ app.post('/api/v1/comandas', (req, res) => {
 });
 
 app.get('/api/v1/comandas/:numero', (req, res) => {
-  const comanda = comandaService.get(req.params.numero);
+  const numero = parseComandaNumero(req.params.numero);
+  const comanda = comandaService.get(numero);
   if (!comanda) {
     res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
@@ -502,7 +505,8 @@ app.get('/api/v1/comandas/:numero', (req, res) => {
 });
 
 app.get('/api/v1/comandas/:numero/items', (req, res) => {
-  const comanda = comandaService.get(req.params.numero);
+  const numero = parseComandaNumero(req.params.numero);
+  const comanda = comandaService.get(numero);
   if (!comanda) {
     res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
@@ -526,7 +530,7 @@ app.put('/api/v1/comandas/:numero/items', (req, res) => {
 
   try {
     const reason = parseOptionalText(req.body?.reason) ?? 'items_sync';
-    const comanda = comandaService.setItems(req.params.numero, items, reason);
+    const comanda = comandaService.setItems(parseComandaNumero(req.params.numero), items, reason);
 
     void appendComandaAudit({
       action: 'ITEMS_SYNCED',
@@ -550,7 +554,7 @@ app.post('/api/v1/comandas/:numero/items', (req, res) => {
 
   try {
     const reason = parseOptionalText(req.body?.reason) ?? 'item_added';
-    const comanda = comandaService.addItem(req.params.numero, rawItem as ComandaItemRecord, reason);
+    const comanda = comandaService.addItem(parseComandaNumero(req.params.numero), rawItem as ComandaItemRecord, reason);
     const item = comanda.items[0];
 
     void appendComandaAudit({
@@ -572,7 +576,8 @@ app.post('/api/v1/comandas/:numero/items', (req, res) => {
 });
 
 app.get('/api/v1/comandas/:numero/pesagens', (req, res) => {
-  const comanda = comandaService.get(req.params.numero);
+  const numero = parseComandaNumero(req.params.numero);
+  const comanda = comandaService.get(numero);
   if (!comanda) {
     res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
     return;
@@ -1107,7 +1112,7 @@ app.delete('/api/v1/financeiro/:id', async (req, res) => {
 
 app.post('/api/v1/comandas/close-batch', async (req, res) => {
   const numeros = Array.isArray(req.body?.numeros)
-    ? req.body.numeros.map(parseNumero).filter(Boolean)
+    ? req.body.numeros.map(parseComandaNumero).filter(Boolean)
     : [];
   const documentMode = parseNumero(req.body?.documentMode).toUpperCase();
   const payments = Array.isArray(req.body?.payments)
@@ -1142,15 +1147,62 @@ app.post('/api/v1/comandas/close-batch', async (req, res) => {
     return;
   }
 
+  const snapshotBeforeClose = comandaService.snapshot();
+
   try {
-    const beforeByNumero = new Map(
-      numeros.map((numero) => [numero, comandaService.get(numero)])
-    );
-    const comandas = comandaService.closeMany(
-      numeros,
-      targetStatus,
-      parseNumero(req.body?.reason) || 'fechamento_comandas_unidas_caixa'
-    );
+    const reason = parseNumero(req.body?.reason) || 'fechamento_comandas_unidas_caixa';
+    const closeAndRegister = async (
+      registerSale?: OperationalPostgresStore['registerSale'],
+      mirrorComandas?: (comandas: ReturnType<typeof comandaService.closeMany>) => Promise<void>
+    ) => {
+      const beforeByNumero = new Map(
+        numeros.map((numero) => [numero, comandaService.get(numero)])
+      );
+      const comandas = comandaService.closeMany(
+        numeros,
+        targetStatus,
+        reason
+      );
+
+      if (mirrorComandas) {
+        await mirrorComandas(comandas);
+      }
+
+      if (registerSale && payments.length > 0) {
+        await Promise.all(comandas.map((comanda) => {
+          const subtotal = comanda.items.reduce((sum, item) => sum + parseNumber(item.subtotal), 0);
+          const discount = parseNumber(req.body?.discount);
+          const total = Math.max(0, subtotal - discount);
+          const saleId = `venda-comanda-${comanda.numero}-${targetStatus}`;
+
+          return registerSale({
+            id: saleId,
+            comandaNumero: comanda.numero,
+            documentMode: documentMode as 'NFCE' | 'ORCAMENTO',
+            status: 'CLOSED',
+            subtotal,
+            discount,
+            total,
+            operator: parseOptionalText(req.body?.operator) ?? 'CAIXA',
+            pdv: parseOptionalText(req.body?.pdv) ?? 'CAIXA',
+            customerDocument: parseOptionalText(req.body?.customerDocument),
+            closedAt: comanda.updatedAt,
+            payments: payments.map((payment, index) => ({
+              ...payment,
+              id: `${saleId}-pagamento-${index + 1}`
+            }))
+          });
+        }));
+      }
+
+      return { beforeByNumero, comandas };
+    };
+
+    const { beforeByNumero, comandas } = operationalStore
+      ? await operationalStore.withComandaLocks(numeros, ({ registerSale, mirrorComandas }) =>
+        closeAndRegister(registerSale, mirrorComandas)
+      )
+      : await closeAndRegister();
 
     await persistComandas();
     await Promise.all(comandas.flatMap((comanda) => {
@@ -1165,35 +1217,10 @@ app.post('/api/v1/comandas/close-batch', async (req, res) => {
       ));
     }));
 
-    if (operationalStore && payments.length > 0) {
-      await Promise.all(comandas.map((comanda) => {
-        const subtotal = comanda.items.reduce((sum, item) => sum + parseNumber(item.subtotal), 0);
-        const discount = parseNumber(req.body?.discount);
-        const total = Math.max(0, subtotal - discount);
-        const saleId = `venda-comanda-${comanda.numero}-${targetStatus}`;
-
-        return operationalStore!.registerSale({
-          id: saleId,
-          comandaNumero: comanda.numero,
-          documentMode: documentMode as 'NFCE' | 'ORCAMENTO',
-          status: 'CLOSED',
-          subtotal,
-          discount,
-          total,
-          operator: parseOptionalText(req.body?.operator) ?? 'CAIXA',
-          pdv: parseOptionalText(req.body?.pdv) ?? 'CAIXA',
-          customerDocument: parseOptionalText(req.body?.customerDocument),
-          closedAt: comanda.updatedAt,
-          payments: payments.map((payment, index) => ({
-            ...payment,
-            id: `${saleId}-pagamento-${index + 1}`
-          }))
-        });
-      }));
-    }
-
     res.status(200).json({ ok: true, comandas });
   } catch (error) {
+    comandaService.loadSnapshot(snapshotBeforeClose);
+    void persistComandas();
     res.status(400).json({
       ok: false,
       message: error instanceof Error ? error.message : 'Falha ao fechar comandas em lote.'
@@ -1202,6 +1229,7 @@ app.post('/api/v1/comandas/close-batch', async (req, res) => {
 });
 
 app.put('/api/v1/comandas/:numero/status', (req, res) => {
+  const numero = parseComandaNumero(req.params.numero);
   const nextStatus = parseStatus(req.body?.status);
   if (!nextStatus) {
     res.status(400).json({ ok: false, message: 'Status inválido.' });
@@ -1209,13 +1237,13 @@ app.put('/api/v1/comandas/:numero/status', (req, res) => {
   }
 
   try {
-    const before = comandaService.get(req.params.numero);
+    const before = comandaService.get(numero);
     if (!before) {
       res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
       return;
     }
 
-    const comanda = comandaService.transition(req.params.numero, nextStatus, parseNumero(req.body?.reason));
+    const comanda = comandaService.transition(numero, nextStatus, parseNumero(req.body?.reason));
     const lastTransition = comanda.transitions[comanda.transitions.length - 1];
 
     if (lastTransition) {
@@ -1241,7 +1269,8 @@ app.put('/api/v1/comandas/:numero/status', (req, res) => {
 
 app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
   try {
-    const before = comandaService.get(req.params.numero);
+    const numero = parseComandaNumero(req.params.numero);
+    const before = comandaService.get(numero);
     if (!before) {
       res.status(404).json({ ok: false, message: 'Comanda não encontrada.' });
       return;
@@ -1249,7 +1278,7 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
 
     const pesagemInput = parseComandaPesagemInput(req.body);
     if (pesagemInput) {
-      const result = comandaService.recordPesagem(req.params.numero, pesagemInput);
+      const result = comandaService.recordPesagem(numero, pesagemInput);
       const comanda = result.comanda;
 
       if (before.status !== comanda.status) {
@@ -1281,7 +1310,7 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
       return;
     }
 
-    const comanda = comandaService.markPesagemEmAndamento(req.params.numero, parseOptionalText(req.body?.reason) ?? 'peso_recebido');
+    const comanda = comandaService.markPesagemEmAndamento(numero, parseOptionalText(req.body?.reason) ?? 'peso_recebido');
 
     if (before.status !== comanda.status) {
       const lastTransition = comanda.transitions[comanda.transitions.length - 1];
@@ -1306,6 +1335,7 @@ app.post('/api/v1/comandas/:numero/pesagem', (req, res) => {
 });
 
 app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
+  const numero = parseComandaNumero(req.params.numero);
   const owner = parseLockOwner(req.body?.owner);
   const stationId = parseLockStationId(req.body?.stationId);
 
@@ -1318,7 +1348,7 @@ app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
   }
 
   try {
-    const result = comandaService.acquireLock(req.params.numero, {
+    const result = comandaService.acquireLock(numero, {
       owner,
       stationId,
       ttlSeconds: parsePositiveNumber(req.body?.ttlSeconds)
@@ -1357,6 +1387,7 @@ app.post('/api/v1/comandas/:numero/lock/acquire', (req, res) => {
 });
 
 app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
+  const numero = parseComandaNumero(req.params.numero);
   const owner = parseLockOwner(req.body?.owner);
   const stationId = parseLockStationId(req.body?.stationId);
 
@@ -1369,7 +1400,7 @@ app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
   }
 
   try {
-    const result = comandaService.renewLock(req.params.numero, {
+    const result = comandaService.renewLock(numero, {
       owner,
       stationId,
       ttlSeconds: parsePositiveNumber(req.body?.ttlSeconds)
@@ -1399,6 +1430,7 @@ app.post('/api/v1/comandas/:numero/lock/renew', (req, res) => {
 });
 
 app.post('/api/v1/comandas/:numero/lock/release', (req, res) => {
+  const numero = parseComandaNumero(req.params.numero);
   const owner = parseLockOwner(req.body?.owner);
   const stationId = parseLockStationId(req.body?.stationId);
 
@@ -1411,7 +1443,7 @@ app.post('/api/v1/comandas/:numero/lock/release', (req, res) => {
   }
 
   try {
-    const comanda = comandaService.releaseLock(req.params.numero, {
+    const comanda = comandaService.releaseLock(numero, {
       owner,
       stationId
     });

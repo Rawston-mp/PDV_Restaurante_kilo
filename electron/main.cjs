@@ -56,15 +56,26 @@ const startBackendInProcess = async(root, serverEntry) => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = PORT;
 
-    const { tsImport } = await
-    import ('tsx/esm/api');
+    const { tsImport } = await import('tsx/esm/api');
     await tsImport(pathToFileURL(serverEntry).href, {
         parentURL: pathToFileURL(path.join(root, 'electron', 'main.cjs')).href
     });
 };
 
+const getAppRoot = () => {
+    const appPath = app.getAppPath();
+    if (fs.existsSync(path.join(appPath, 'backend', 'src', 'server.ts'))) {
+        return appPath;
+    }
+    const parentPath = path.resolve(appPath, '..');
+    if (fs.existsSync(path.join(parentPath, 'backend', 'src', 'server.ts'))) {
+        return parentPath;
+    }
+    return path.resolve(__dirname, '..');
+};
+
 const startBackend = async() => {
-    const root = app.getAppPath();
+    const root = getAppRoot();
     const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
     const serverEntry = path.join(root, 'backend', 'src', 'server.ts');
 
@@ -110,8 +121,8 @@ const startBackend = async() => {
         });
     });
 };
-const getRendererIndexPath = () => path.join(app.getAppPath(), 'dist', 'index.html');
-const getPreloadPath = () => path.join(app.getAppPath(), 'electron', 'preload.cjs');
+const getRendererIndexPath = () => path.join(getAppRoot(), 'dist', 'index.html');
+const getPreloadPath = () => path.join(getAppRoot(), 'electron', 'preload.cjs');
 
 const buildEscPosTestPayload = (config) => {
     const columns = Number(config && config.colunas) || 48;

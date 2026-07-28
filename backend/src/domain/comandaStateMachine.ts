@@ -38,6 +38,7 @@ export type ComandaItemRecord = {
   categoriaId: string;
   subtotal: number;
   porUnidade: boolean;
+  origemLancamento?: 'BALANCA' | 'CAIXA' | string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -127,6 +128,35 @@ const normalizeFiniteNumber = (value: unknown) => {
 
 const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
+export const normalizeComandaNumber = (value: unknown) => {
+  const normalized = typeof value === 'number' && Number.isFinite(value)
+    ? String(Math.trunc(value))
+    : normalizeText(value);
+  if (!normalized) {
+    return '';
+  }
+
+  return /^\d+$/.test(normalized) ? String(Number.parseInt(normalized, 10)) : normalized;
+};
+
+const mergeComandaRecords = (current: ComandaRecord, incoming: ComandaRecord): ComandaRecord => {
+  const currentUpdatedAt = Date.parse(current.updatedAt);
+  const incomingUpdatedAt = Date.parse(incoming.updatedAt);
+  const base = Number.isFinite(incomingUpdatedAt)
+    && (!Number.isFinite(currentUpdatedAt) || incomingUpdatedAt >= currentUpdatedAt)
+    ? incoming
+    : current;
+
+  return {
+    ...base,
+    numero: normalizeComandaNumber(base.numero),
+    items: [...current.items, ...incoming.items],
+    pesagens: [...current.pesagens, ...incoming.pesagens],
+    transitions: [...current.transitions, ...incoming.transitions]
+      .sort((left, right) => Date.parse(left.at) - Date.parse(right.at))
+  };
+};
+
 const normalizeOptionalIso = (value: unknown) => {
   if (typeof value !== 'string') {
     return undefined;
@@ -157,6 +187,7 @@ const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
 
     const peso = normalizeFiniteNumber(item.peso);
     const subtotal = normalizeFiniteNumber(item.subtotal) ?? Number((precoUnitario * quantidade).toFixed(2));
+    const origemLancamento = normalizeText(item.origemLancamento).toUpperCase();
 
     acc.push({
       id,
@@ -167,6 +198,9 @@ const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
       categoriaId: normalizeText(item.categoriaId) || 'GERAL',
       subtotal: Number(subtotal.toFixed(2)),
       porUnidade: Boolean(item.porUnidade),
+      origemLancamento: origemLancamento === 'CAIXA' || origemLancamento === 'BALANCA'
+        ? origemLancamento
+        : undefined,
       createdAt: normalizeOptionalIso(item.createdAt),
       updatedAt: normalizeOptionalIso(item.updatedAt)
     });
@@ -349,8 +383,14 @@ export class ComandaStateMachineService {
   loadSnapshot(snapshot: ComandaStateSnapshot) {
     this.comandas.clear();
     for (const comanda of snapshot.comandas) {
+      const numero = normalizeComandaNumber(comanda.numero);
+      if (!numero) {
+        continue;
+      }
+
       const normalizedComanda: ComandaRecord = {
         ...comanda,
+        numero,
         status: normalizeStatus(comanda.status),
         lock: normalizeLock(comanda.lock ?? null),
         transitions: comanda.transitions.map((transition) => ({
@@ -362,11 +402,16 @@ export class ComandaStateMachineService {
         pesagens: normalizeComandaPesagens((comanda as Partial<ComandaRecord>).pesagens)
       };
 
-      this.comandas.set(normalizedComanda.numero, normalizedComanda);
+      const existing = this.comandas.get(normalizedComanda.numero);
+      this.comandas.set(
+        normalizedComanda.numero,
+        existing ? mergeComandaRecords(existing, normalizedComanda) : normalizedComanda
+      );
     }
 
-    const activeComanda = snapshot.activeComandaNumero
-      ? this.comandas.get(snapshot.activeComandaNumero)
+    const activeNumero = normalizeComandaNumber(snapshot.activeComandaNumero);
+    const activeComanda = activeNumero
+      ? this.comandas.get(activeNumero)
       : null;
     this.activeComandaNumero = activeComanda && !isInactiveStatus(activeComanda.status)
       ? activeComanda.numero
@@ -382,7 +427,7 @@ export class ComandaStateMachineService {
   }
 
   open(numero: string) {
-    const normalized = numero.trim();
+    const normalized = normalizeComandaNumber(numero);
     if (!normalized) {
       throw new Error('O número da comanda é obrigatório.');
     }
@@ -442,7 +487,7 @@ export class ComandaStateMachineService {
   }
 
   get(numero: string) {
-    const existing = this.comandas.get(numero.trim()) ?? null;
+    const existing = this.comandas.get(normalizeComandaNumber(numero)) ?? null;
     if (!existing) {
       return null;
     }
@@ -467,7 +512,7 @@ export class ComandaStateMachineService {
   }
 
   transition(numero: string, to: ComandaStatus, reason?: string) {
-    const normalized = numero.trim();
+    const normalized = normalizeComandaNumber(numero);
     const existing = this.comandas.get(normalized);
     if (!existing) {
       throw new Error('Comanda não encontrada.');
@@ -512,7 +557,7 @@ export class ComandaStateMachineService {
     targetStatus: Extract<ComandaStatus, 'FECHADA_ORCAMENTO' | 'FECHADA_VENDA'>,
     reason?: string
   ) {
-    const normalizedNumbers = [...new Set(numeros.map((numero) => numero.trim()).filter(Boolean))];
+    const normalizedNumbers = [...new Set(numeros.map(normalizeComandaNumber).filter(Boolean))];
     if (normalizedNumbers.length === 0) {
       throw new Error('Informe ao menos uma comanda para fechamento.');
     }

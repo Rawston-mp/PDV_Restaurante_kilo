@@ -13,6 +13,7 @@ export interface ItemComanda {
   categoriaId: string;
   subtotal: number;
   porUnidade: boolean;
+  origemLancamento?: 'BALANCA' | 'CAIXA';
 }
 
 export interface Comanda {
