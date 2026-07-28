@@ -1315,25 +1315,33 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 0.8rem;
+    min-height: auto;
+    padding: 0.15rem 0 0.4rem;
 }
 
 .products-cadastro-header>div {
-    display: grid;
-    gap: 0.15rem;
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
 }
 
 .products-cadastro-header h3 {
     margin: 0;
+    line-height: 1.15;
 }
 
 .products-cadastro-tabs {
     display: flex;
     gap: 0.45rem;
     align-items: center;
+    flex-wrap: nowrap;
 }
 
 .content .products-cadastro-tabs button {
-    min-width: 108px;
+    min-width: 86px;
+    min-height: 34px;
+    height: 34px;
+    padding: 0 0.8rem;
     border: 1px solid #dbe3ef;
     background: linear-gradient(120deg, #ffffff 0%, #f8fafc 100%);
     color: #64748b;
@@ -1348,9 +1356,9 @@ body {
 }
 
 .content .products-cadastro-tabs .products-cadastro-close {
-    min-width: 42px;
-    width: 42px;
-    height: 38px;
+    min-width: 38px;
+    width: 38px;
+    height: 34px;
     padding: 0;
     border-color: rgba(15, 118, 110, 0.35);
     background: linear-gradient(120deg, #0f766e 0%, #14b8a6 100%);
@@ -1810,16 +1818,18 @@ body {
 .products-list li {
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    align-items: center;
+    gap: 0.85rem;
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 0.75rem 0.8rem;
+    border-radius: 10px;
+    min-height: 56px;
+    padding: 0.48rem 0.62rem;
     background: linear-gradient(120deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .products-list li>div {
     display: grid;
-    gap: 0.2rem;
+    gap: 0.16rem;
 }
 
 .products-list li span {
@@ -1829,22 +1839,34 @@ body {
 
 .products-edit-button {
     width: fit-content;
-    margin-top: 0.15rem;
+    margin-top: 0;
     padding: 0.32rem 0.62rem;
     border-radius: 8px;
     font-size: 0.76rem;
     background: linear-gradient(120deg, #1d4ed8 0%, #2563eb 100%);
 }
 
+.products-list-actions-cell {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.42rem;
+    min-width: max-content;
+}
+
+.products-list-actions-cell>strong {
+    white-space: nowrap;
+}
+
 .products-row-actions {
     display: flex;
     gap: 0.4rem;
-    margin-top: 0.12rem;
+    margin-top: 0;
 }
 
 .products-delete-button {
     width: fit-content;
-    margin-top: 0.15rem;
+    margin-top: 0;
     padding: 0.32rem 0.62rem;
     border-radius: 8px;
     font-size: 0.76rem;
@@ -1869,7 +1891,7 @@ body {
     align-items: center;
     gap: 0.3rem;
     width: fit-content;
-    margin-top: 0.15rem;
+    margin-top: 0;
     border-radius: 999px;
     border: 1px solid #cbd5e1;
     padding: 0.16rem 0.55rem;
@@ -6042,14 +6064,14 @@ body {
         min-width: 0;
     }
     .products-cadastro-header {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
     }
     .products-cadastro-tabs {
-        width: 100%;
+        width: auto;
     }
     .products-cadastro-tabs button {
-        flex: 1;
+        flex: 0 0 auto;
     }
     .cadastro-tabs-nav {
         width: 100%;

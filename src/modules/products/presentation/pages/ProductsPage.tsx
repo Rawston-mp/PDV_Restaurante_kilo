@@ -988,7 +988,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   setFormError(null);
                 }}
               >
-                ×
+                +
               </button>
             </div>
           </header>
@@ -1526,31 +1526,12 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                       <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
                       {getProductDisplayName(product)}
                     </strong>
-                    {product.description ? <span>{product.description}</span> : <span />}
                     <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
                       <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
                     </span>
                   </div>
-                  <div>
+                  <div className="products-list-actions-cell">
                     <strong>{currency.format(product.price)}</strong>
-                    <span>estoque {product.stock} {product.saleUnit ?? 'UN'}</span>
-                    <span>
-                      compra {product.purchaseUnit ?? 'UN'} | 1 {product.purchaseUnit ?? 'UN'} = {product.unitsPerPurchase ?? 1} {product.saleUnit ?? 'UN'}
-                    </span>
-                    <span>
-                      {product.isUnavailable ? 'indisponível' : 'disponível'} | {product.isHidden ? 'oculto' : 'visível'}
-                    </span>
-                    {canEditOrDelete && (
-                      <span>
-                        custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
-                        {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
-                      </span>
-                    )}
-                    {canEditOrDelete && (
-                      <span>
-                        cod. barras {product.barcode ?? '-'} | NCM {product.ncm ?? '-'} | CFOP {product.cfop ?? '-'}
-                      </span>
-                    )}
                     {canEditOrDelete && (
                       <div className="products-row-actions">
                         <button
