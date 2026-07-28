@@ -7,6 +7,7 @@ import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
   buildComandaCategories,
   mergeCategoryOptions,
+  productCategoriesChangedEvent,
   readStoredProductCategories
 } from '@/modules/products/domain/services/productCategories';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
@@ -21,6 +22,7 @@ import {
   writeComandaCache
 } from '@/shared/infrastructure/storage/comandaCache';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
+import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 
 type ProdutoCatalogo = {
   id: string;
@@ -195,6 +197,11 @@ const isPorQuiloCategoryName = (value: string) => {
   return normalized === 'por quilo' || normalized === 'por kilo';
 };
 
+const isSelfServiceProductName = (value: string) => {
+  const normalized = normalizeSearchText(value).replace(/\s+/g, ' ').trim();
+  return normalized.includes('self-service') || normalized.includes('self service') || normalized.includes('sel-service');
+};
+
 export function useComanda(taxaImposto = 0) {
   const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
@@ -204,6 +211,7 @@ export function useComanda(taxaImposto = 0) {
   const [campoAtivo, setCampoAtivo] = useState<'COMANDA' | 'PESQUISA'>('COMANDA');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
+  const [categoryRefreshVersion, setCategoryRefreshVersion] = useState(0);
   const [catalogoProdutos, setCatalogoProdutos] = useState<ProdutoCatalogo[]>([]);
   const [pesquisa, setPesquisa] = useState('');
   const [itens, setItens] = useState<ItemComanda[]>([]);
@@ -225,6 +233,18 @@ export function useComanda(taxaImposto = 0) {
     origem: 'sensor' | 'manual';
   }>>([]);
   const lockContext = useMemo(() => roleToLockContext(user?.role), [user?.role]);
+
+  useEffect(() => {
+    const refreshCategories = () => setCategoryRefreshVersion((current) => current + 1);
+
+    window.addEventListener(productCategoriesChangedEvent, refreshCategories);
+    window.addEventListener('storage', refreshCategories);
+
+    return () => {
+      window.removeEventListener(productCategoriesChangedEvent, refreshCategories);
+      window.removeEventListener('storage', refreshCategories);
+    };
+  }, []);
 
   useEffect(() => {
     const loadCatalogo = async () => {
@@ -261,7 +281,7 @@ export function useComanda(taxaImposto = 0) {
     };
 
     void loadCatalogo();
-  }, []);
+  }, [categoryRefreshVersion]);
 
   const subtotal = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens]);
   const impostos = useMemo(() => Number((subtotal * taxaImposto).toFixed(2)), [subtotal, taxaImposto]);
@@ -585,8 +605,46 @@ export function useComanda(taxaImposto = 0) {
         isBuscaGlobalPorNome || !categoriaSelecionada || produto.categoriaId === categoriaSelecionada;
       const matchPesquisa = termo.length === 0 || produto.nome.toLowerCase().includes(termo);
       return matchCategoria && matchPesquisa;
+    }).sort((left, right) => {
+      if (isBuscaGlobalPorNome || categoriaSelecionada !== porQuiloCategoryId) {
+        return 0;
+      }
+
+      const leftIsSelfService = isSelfServiceProductName(left.nome);
+      const rightIsSelfService = isSelfServiceProductName(right.nome);
+
+      if (leftIsSelfService === rightIsSelfService) {
+        return 0;
+      }
+
+      return leftIsSelfService ? -1 : 1;
     });
-  }, [catalogoProdutos, categoriaSelecionada, pesquisa]);
+  }, [catalogoProdutos, categoriaSelecionada, pesquisa, porQuiloCategoryId]);
+
+  const getDefaultScaleProduct = (categoryId = porQuiloCategoryId) => {
+    if (!categoryId) {
+      return catalogoProdutos.find((produto) => isSelfServiceProductName(produto.nome)) ?? null;
+    }
+
+    const categoryProducts = catalogoProdutos.filter((produto) => produto.categoriaId === categoryId);
+    return categoryProducts.find((produto) => isSelfServiceProductName(produto.nome))
+      ?? catalogoProdutos.find((produto) => isSelfServiceProductName(produto.nome))
+      ?? categoryProducts[0]
+      ?? null;
+  };
+
+  const prepareScaleDefaultSelection = () => {
+    if (!porQuiloCategoryId) {
+      const defaultProduct = getDefaultScaleProduct(null);
+      setPrecoAtual(defaultProduct?.precoUnitario ?? null);
+      return;
+    }
+
+    const defaultProduct = getDefaultScaleProduct(porQuiloCategoryId);
+    setCategoriaSelecionada(porQuiloCategoryId);
+    setPesquisa('');
+    setPrecoAtual(defaultProduct?.precoUnitario ?? null);
+  };
 
   const salvarSnapshotComandaAtual = () => {
     if (!comandaAtivaId) {
@@ -603,13 +661,14 @@ export function useComanda(taxaImposto = 0) {
   };
 
   const abrirComanda = async () => {
-    const nextId = comandaNumber.trim();
+    const nextId = normalizeComandaNumber(comandaNumber);
     if (!nextId) {
       setErro('Informe o número da comanda e pressione Enter para abrir.');
       return false;
     }
 
     if (comandaAtivaId === nextId) {
+      setComandaNumber(nextId);
       setErro(null);
       return true;
     }
@@ -689,17 +748,14 @@ export function useComanda(taxaImposto = 0) {
 
     setItens(nextItems);
     setDataAberturaAtual(nextDataAbertura);
-    setPrecoAtual(nextItems[0]?.precoUnitario ?? null);
+    prepareScaleDefaultSelection();
 
     if (shouldHydrateBackendFromLocal) {
       persistItensNoBackend(nextId, nextItems, 'hydrate_backend_from_local_cache');
     }
 
-    if (!snapshotDestino && porQuiloCategoryId) {
-      setCategoriaSelecionada(porQuiloCategoryId);
-    }
-
     setComandaAtivaId(nextId);
+    setComandaNumber(nextId);
     lastSyncNumeroRef.current = nextId;
     if (!openedOffline) {
       unmarkComandaLocallyCancelled(nextId);
@@ -727,33 +783,57 @@ export function useComanda(taxaImposto = 0) {
       return;
     }
 
+    const itemExistente = itens.find((item) =>
+      normalizeSearchText(item.nome) === normalizeSearchText(produto.nome)
+      && item.categoriaId === produto.categoriaId
+      && item.porUnidade === produto.porUnidade
+      && item.precoUnitario === produto.precoUnitario
+    );
+
     const subtotalItem = Number((produto.precoUnitario * quantidade).toFixed(2));
-    const novoItem: ItemComanda = {
-      id: crypto.randomUUID(),
+    const itemParaPesagem: ItemComanda = {
+      id: itemExistente?.id ?? crypto.randomUUID(),
       nome: produto.nome,
       precoUnitario: produto.precoUnitario,
       quantidade,
       peso: produto.porUnidade ? undefined : quantidade,
       categoriaId: produto.categoriaId,
       subtotal: subtotalItem,
-      porUnidade: produto.porUnidade
+      porUnidade: produto.porUnidade,
+      origemLancamento: 'BALANCA'
     };
 
-    const nextItems = [novoItem, ...itens];
+    const nextItems = itemExistente
+      ? itens.map((item) => {
+          if (item.id !== itemExistente.id) {
+            return item;
+          }
+
+          const proximaQuantidade = Number((item.quantidade + quantidade).toFixed(3));
+          return {
+            ...item,
+            quantidade: proximaQuantidade,
+            peso: item.porUnidade ? undefined : proximaQuantidade,
+            subtotal: Number((item.precoUnitario * proximaQuantidade).toFixed(2)),
+            origemLancamento: item.origemLancamento ?? 'BALANCA'
+          };
+        })
+      : [itemParaPesagem, ...itens];
+
     setItens(nextItems);
     if (comandaAtivaId) {
       persistItensNoBackend(comandaAtivaId, nextItems, 'item_added');
       if (!produto.porUnidade) {
         registrarPesagemNoBackend(
           comandaAtivaId,
-          novoItem,
+          itemParaPesagem,
           possuiPesoManualInformado || pesoManual !== null ? 'manual' : 'sensor'
         );
       }
     }
     setPesquisa('');
     setErro(null);
-    setFeedback(`${produto.nome} adicionado.`);
+    setFeedback(itemExistente ? `${produto.nome} somado ao item lançado.` : `${produto.nome} adicionado.`);
     setPrecoAtual(produto.precoUnitario);
 
     if (!produto.porUnidade && (possuiPesoManualInformado || pesoManual !== null)) {
@@ -860,7 +940,7 @@ export function useComanda(taxaImposto = 0) {
 
   const focarPesquisa = () => {
     void (async () => {
-      if (isComandaAberta && comandaAtivaId === comandaNumber.trim()) {
+      if (isComandaAberta && comandaAtivaId === normalizeComandaNumber(comandaNumber)) {
         setCampoAtivo('PESQUISA');
         toggleToVirtual();
         return;
@@ -967,7 +1047,7 @@ export function useComanda(taxaImposto = 0) {
     pendingSyncCount,
     feedback,
     erro,
-    canOpen: Boolean(comandaNumber.trim()),
+    canOpen: Boolean(normalizeComandaNumber(comandaNumber)),
     canDeleteItems,
     canFinalize: isComandaAberta
   };

@@ -15,7 +15,10 @@
     "electron:pack": "npm run build && electron-builder --win --x64",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:setup": "tsx scripts/setup-pdv-touch-dev-db.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.3",

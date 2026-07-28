@@ -1,6 +1,7 @@
 import { ShoppingCart } from 'lucide-react';
 import { CartItem, type CashierCartItem } from './CartItem';
 import { formatBRL } from '../../types';
+import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 
 type CartPanelProps = {
   items: CashierCartItem[];
@@ -9,6 +10,7 @@ type CartPanelProps = {
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
+  onEditValue?: (id: string, value: string) => boolean;
   onRefreshComanda: () => void;
   isComandaSyncing?: boolean;
   onReceive: () => void;
@@ -22,6 +24,7 @@ export function CartPanel({
   onIncrement,
   onDecrement,
   onRemove,
+  onEditValue,
   onRefreshComanda,
   isComandaSyncing = false,
   onReceive,
@@ -29,7 +32,7 @@ export function CartPanel({
 }: CartPanelProps) {
   const subtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
   const totalItems = items.reduce((acc, i) => acc + (i.unit === 'KG' ? 1 : i.quantity), 0);
-  const checkoutNumbers = [comandaNumber.trim(), ...joinedComandaNumbers.map((numero) => numero.trim())].filter(Boolean);
+  const checkoutNumbers = [...new Set([comandaNumber, ...joinedComandaNumbers].map(normalizeComandaNumber).filter(Boolean))];
   const attendanceLabel = checkoutNumbers.length > 1
     ? `Comandas ${checkoutNumbers.map((numero) => `#${numero}`).join(' + ')}`
     : checkoutNumbers.length === 1
@@ -69,6 +72,7 @@ export function CartPanel({
                 onIncrement={onIncrement}
                 onDecrement={onDecrement}
                 onRemove={onRemove}
+                onEditValue={onEditValue}
               />
             ))}
           </ul>

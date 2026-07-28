@@ -1,5 +1,6 @@
 import type { ItemComanda } from '@/types/comanda';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
+import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 
 const API_BASE = API_BASE_URL;
 
@@ -33,12 +34,12 @@ const parseBackendMessage = async (response: Response, fallback: string) => {
 };
 
 const ensureValidNumero = (numero: string) => {
-  const trimmed = numero.trim();
-  if (!trimmed) {
+  const normalized = normalizeComandaNumber(numero);
+  if (!normalized) {
     throw new Error('O número da comanda é obrigatório.');
   }
 
-  return trimmed;
+  return normalized;
 };
 
 export const fetchComandaItemsFromBackend = async (numero: string): Promise<ItemComanda[]> => {

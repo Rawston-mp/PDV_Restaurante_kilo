@@ -4,6 +4,7 @@ import type {
   ComandaRecord,
   ComandaStateSnapshot
 } from '../domain/comandaStateMachine';
+import { normalizeComandaNumber } from '../domain/comandaStateMachine';
 import type { ComandaAuditEvent } from './comandaFileStore';
 import { createPostgresPool } from './postgresConfig';
 
@@ -68,6 +69,12 @@ export type FinanceEntryFilters = {
   dateTo?: string;
 };
 
+export type ComandaLockTransactionContext = {
+  lockedComandas: unknown[];
+  mirrorComandas: (comandas: ComandaRecord[]) => Promise<void>;
+  registerSale: (input: RegisterSaleInput) => Promise<unknown>;
+};
+
 const toNumber = (value: unknown, fallback = 0) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -122,6 +129,7 @@ export class OperationalPostgresStore {
         subtotal NUMERIC(14, 2) NOT NULL DEFAULT 0,
         by_weight BOOLEAN NOT NULL DEFAULT FALSE,
         by_unit BOOLEAN NOT NULL DEFAULT FALSE,
+        launch_source TEXT,
         raw_json JSONB NOT NULL,
         created_at TIMESTAMPTZ,
         updated_at TIMESTAMPTZ
@@ -231,6 +239,7 @@ export class OperationalPostgresStore {
     `);
 
     await this.pool.query('CREATE INDEX IF NOT EXISTS idx_comandas_status ON comandas(status)');
+    await this.pool.query('ALTER TABLE comanda_items ADD COLUMN IF NOT EXISTS launch_source TEXT');
     await this.pool.query('CREATE INDEX IF NOT EXISTS idx_comanda_items_numero ON comanda_items(comanda_numero)');
     await this.pool.query('CREATE INDEX IF NOT EXISTS idx_vendas_closed_at ON vendas(closed_at)');
     await this.pool.query('CREATE INDEX IF NOT EXISTS idx_pagamentos_venda ON pagamentos(venda_id)');
@@ -286,9 +295,9 @@ export class OperationalPostgresStore {
             `
               INSERT INTO comanda_items (
                 id, comanda_numero, name, quantity, weight, unit_price, subtotal,
-                by_weight, by_unit, raw_json, created_at, updated_at
+                by_weight, by_unit, launch_source, raw_json, created_at, updated_at
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
             `,
             [
               item.id,
@@ -298,8 +307,9 @@ export class OperationalPostgresStore {
               item.peso ?? null,
               toNumber(item.precoUnitario),
               toNumber(item.subtotal),
-              Boolean(item.porPeso),
+              !Boolean(item.porUnidade),
               Boolean(item.porUnidade),
+              item.origemLancamento ?? null,
               JSON.stringify(item),
               item.createdAt ?? null,
               item.updatedAt ?? null
@@ -373,6 +383,98 @@ export class OperationalPostgresStore {
         event.at ?? new Date().toISOString()
       ]
     );
+  }
+
+  private async mirrorComandaRecordInClient(client: Pick<Pool, 'query'>, comanda: ComandaRecord) {
+    const total = sumItems(comanda);
+    const closedAt = findClosedAt(comanda) ?? null;
+    const active = !['FECHADA_ORCAMENTO', 'FECHADA_VENDA', 'CANCELADA', 'ARQUIVADA'].includes(comanda.status);
+
+    await client.query(
+      `
+        INSERT INTO comandas (
+          numero, status, total, item_count, opened_at, closed_at, updated_at,
+          active, lock_json, source_snapshot
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
+        ON CONFLICT (numero)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          total = EXCLUDED.total,
+          item_count = EXCLUDED.item_count,
+          closed_at = EXCLUDED.closed_at,
+          updated_at = EXCLUDED.updated_at,
+          active = EXCLUDED.active,
+          lock_json = EXCLUDED.lock_json,
+          source_snapshot = EXCLUDED.source_snapshot
+      `,
+      [
+        comanda.numero,
+        comanda.status,
+        total,
+        comanda.items.length,
+        comanda.createdAt,
+        closedAt,
+        comanda.updatedAt,
+        active,
+        comanda.lock ? JSON.stringify(comanda.lock) : null,
+        JSON.stringify(comanda)
+      ]
+    );
+
+    await client.query('DELETE FROM comanda_items WHERE comanda_numero = $1', [comanda.numero]);
+    for (const item of comanda.items) {
+      await client.query(
+        `
+          INSERT INTO comanda_items (
+            id, comanda_numero, name, quantity, weight, unit_price, subtotal,
+            by_weight, by_unit, launch_source, raw_json, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
+        `,
+        [
+          item.id,
+          comanda.numero,
+          item.nome,
+          toNumber(item.quantidade),
+          item.peso ?? null,
+          toNumber(item.precoUnitario),
+          toNumber(item.subtotal),
+          !Boolean(item.porUnidade),
+          Boolean(item.porUnidade),
+          item.origemLancamento ?? null,
+          JSON.stringify(item),
+          item.createdAt ?? null,
+          item.updatedAt ?? null
+        ]
+      );
+    }
+
+    await client.query('DELETE FROM comanda_pesagens WHERE comanda_numero = $1', [comanda.numero]);
+    for (const pesagem of comanda.pesagens) {
+      await client.query(
+        `
+          INSERT INTO comanda_pesagens (
+            id, comanda_numero, weight, origin, owner, station_id, item_id,
+            product_name, reason, created_at, raw_json
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+        `,
+        [
+          pesagem.id,
+          comanda.numero,
+          pesagem.peso,
+          pesagem.origem ?? null,
+          pesagem.owner ?? null,
+          pesagem.stationId ?? null,
+          pesagem.itemId ?? null,
+          pesagem.productName ?? null,
+          pesagem.reason ?? null,
+          pesagem.createdAt,
+          JSON.stringify(pesagem)
+        ]
+      );
+    }
   }
 
   async registerSale(input: RegisterSaleInput) {
@@ -611,13 +713,61 @@ export class OperationalPostgresStore {
   }
 
   /**
+   * Bloqueia um lote de comandas em ordem fixa e executa o fechamento em uma única transação.
+   * A ordenação evita deadlocks quando dois caixas tentam fechar comandas em conjunto.
+   */
+  async withComandaLocks<T>(
+    numeros: string[],
+    fn: (context: ComandaLockTransactionContext) => Promise<T>
+  ): Promise<T> {
+    const normalizedNumbers = [...new Set(numeros.map(normalizeComandaNumber).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true }));
+    const client = await this.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const lockedComandas = normalizedNumbers.length > 0
+        ? (await client.query(
+          `
+            SELECT *
+            FROM comandas
+            WHERE numero = ANY($1::text[])
+            ORDER BY numero
+            FOR UPDATE
+          `,
+          [normalizedNumbers]
+        )).rows
+        : [];
+
+      const result = await fn({
+        lockedComandas,
+        mirrorComandas: async (comandas) => {
+          for (const comanda of comandas) {
+            await this.mirrorComandaRecordInClient(client, comanda);
+          }
+        },
+        registerSale: (input) => this.registerSaleInClient(client, input)
+      });
+
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Bloqueio pessimista para o caixa / balança no PostgreSQL (FOR UPDATE)
    * Impede condições de corrida entre a Balança e o Caixa ao ler a comanda para alteração/fechamento.
    */
   async findComandaForUpdate(client: Pick<Pool, 'query'>, numero: string) {
     const result = await client.query(
       'SELECT * FROM comandas WHERE numero = $1 FOR UPDATE',
-      [numero]
+      [normalizeComandaNumber(numero)]
     );
     return result.rowCount ? result.rows[0] : null;
   }
@@ -629,7 +779,7 @@ export class OperationalPostgresStore {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const comandaRow = await this.findComandaForUpdate(client, numero);
+      const comandaRow = await this.findComandaForUpdate(client, normalizeComandaNumber(numero));
       const result = await fn(comandaRow);
       await client.query('COMMIT');
       return result;
