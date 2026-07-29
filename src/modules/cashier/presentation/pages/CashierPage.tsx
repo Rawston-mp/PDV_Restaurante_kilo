@@ -16,6 +16,7 @@ import {
   productCategoriesChangedEvent,
   readStoredProductCategories
 } from '@/modules/products/domain/services/productCategories';
+import { loadSharedProductCategories } from '@/modules/products/infrastructure/api/productCategoryCatalog';
 import { type CashierCartItem } from '@/modules/cashier/presentation/components/CartItem';
 import { type CashierProduct } from '@/modules/cashier/presentation/components/ProductCard';
 import { SmartInput } from '@/modules/cashier/presentation/components/SmartInput';
@@ -1116,20 +1117,37 @@ export function CashierPage() {
 
   const dynamicCategories = useMemo(() => {
     const categories = mergeCategoryOptions(storedProductCategories, products);
-    return ['Todos', ...categories.sort((a, b) => a.localeCompare(b, 'pt-BR'))];
+    return ['Todos', ...categories];
   }, [products, storedProductCategories]);
 
   useEffect(() => {
-    const refreshStoredCategories = () => setStoredProductCategories(readStoredProductCategories());
+    let cancelled = false;
+
+    const refreshStoredCategories = () => {
+      void loadSharedProductCategories(products)
+        .then((categories) => {
+          if (!cancelled) {
+            setStoredProductCategories(categories);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setStoredProductCategories(readStoredProductCategories());
+          }
+        });
+    };
+
+    refreshStoredCategories();
 
     window.addEventListener(productCategoriesChangedEvent, refreshStoredCategories);
     window.addEventListener('storage', refreshStoredCategories);
 
     return () => {
+      cancelled = true;
       window.removeEventListener(productCategoriesChangedEvent, refreshStoredCategories);
       window.removeEventListener('storage', refreshStoredCategories);
     };
-  }, []);
+  }, [products]);
 
   const refreshComandaIndicators = useCallback(async () => {
     const response = await fetch(`${API_BASE}/api/v1/comandas`);

@@ -1,5 +1,6 @@
 import type { ProductSyncGateway } from '@/modules/products/application/ports/ProductSyncGateway';
 import type { Product } from '@/modules/products/domain/entities/Product';
+import { readPendingProductDeletionIds } from '@/modules/products/infrastructure/local/productDeletionTombstones';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ApiProduct = Omit<Product, 'createdAt' | 'updatedAt' | 'lastSyncedAt'> & {
@@ -45,11 +46,21 @@ export class ApiProductSyncGateway implements ProductSyncGateway {
       throw new Error(payload.message ?? 'Falha ao buscar produtos no backend.');
     }
 
-    return (payload.products ?? []).map(toProduct);
+    const pendingDeletedIds = new Set(readPendingProductDeletionIds());
+
+    return (payload.products ?? [])
+      .map(toProduct)
+      .filter((product) => !pendingDeletedIds.has(product.id));
   }
 
   async pushProducts(products: Product[]): Promise<void> {
+    const pendingDeletedIds = new Set(readPendingProductDeletionIds());
+
     for (const product of products) {
+      if (pendingDeletedIds.has(product.id)) {
+        continue;
+      }
+
       const response = await fetch(endpoint(`/api/v1/products/${encodeURIComponent(product.id)}`), {
         method: 'PUT',
         headers: {

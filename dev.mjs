@@ -2,12 +2,49 @@ import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import net from 'node:net';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const services = [
-  ['backend', [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'watch', 'backend/src/server.ts']],
-  ['frontend', [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '0.0.0.0']]
-];
+const backendPort = Number(process.env.PORT ?? 3001);
+const frontendPort = Number(process.env.VITE_PORT ?? 5173);
+
+const isPortInUse = (port) =>
+  new Promise((resolve) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.once('error', () => resolve(false));
+    socket.setTimeout(500, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+
+const services = [];
+
+if (await isPortInUse(backendPort)) {
+  console.warn(`Backend ja esta em execucao em http://localhost:${backendPort}. Reutilizando o processo existente.`);
+} else {
+  services.push(['backend', [join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'watch', 'backend/src/server.ts']]);
+}
+
+if (await isPortInUse(frontendPort)) {
+  console.warn(`Frontend ja esta em execucao em http://localhost:${frontendPort}. Reutilizando o processo existente.`);
+} else {
+  services.push([
+    'frontend',
+    [join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '0.0.0.0', '--port', String(frontendPort), '--strictPort']
+  ]);
+}
+
+if (services.length === 0) {
+  console.log(`Ambiente de desenvolvimento ja esta ativo: http://localhost:${frontendPort}`);
+  process.exit(0);
+}
 
 const children = services.map(([name, args]) => {
   const child = spawn(process.execPath, args, { cwd: root, stdio: 'inherit' });

@@ -15,6 +15,8 @@ type SyncProductsOptions = {
   wait?: (ms: number) => Promise<void>;
 };
 
+const wasSyncedBefore = (product: Product) => Boolean(product.lastSyncedAt);
+
 export class SyncProducts {
   readonly type = 'SYNC_PRODUCTS' as const;
 
@@ -66,6 +68,11 @@ export class SyncProducts {
       }
 
       if (local) {
+        if (wasSyncedBefore(local)) {
+          await this.productRepository.delete(local.id);
+          continue;
+        }
+
         mergedProducts.push({
           ...local,
           lastSyncedAt: new Date()

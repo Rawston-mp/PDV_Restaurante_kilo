@@ -688,8 +688,8 @@ app.delete('/api/v1/products/:id', async (req, res) => {
   }
 
   try {
-    await store.delete(req.params.id);
-    res.status(200).json({ ok: true });
+    const deleted = await store.delete(req.params.id);
+    res.status(200).json({ ok: true, deleted });
   } catch (error) {
     res.status(500).json({
       ok: false,
@@ -1543,6 +1543,16 @@ void (async () => {
     await initializeProducts();
     await initializeOperationalStore();
     await initializeCatalogAdminStore();
+    httpServer.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        // eslint-disable-next-line no-console
+        console.error(`Backend nao iniciado: a porta ${PORT} ja esta em uso. Feche o backend antigo ou defina PORT em .env.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      throw error;
+    });
     httpServer.listen(PORT, () => {
       // eslint-disable-next-line no-console
       console.log(`Servidor backend rodando na porta ${PORT}`);

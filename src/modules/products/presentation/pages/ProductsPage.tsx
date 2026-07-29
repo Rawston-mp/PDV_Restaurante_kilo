@@ -2,16 +2,19 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
-  buildComandaCategories,
   defaultProductCategories,
   getCategoryVisual,
   isSameCategoryName,
-  mergeCategoryOptions,
   normalizeCategoryName,
   persistProductCategories,
   readStoredProductCategories,
   sanitizeCategoryOptions
 } from '@/modules/products/domain/services/productCategories';
+import {
+  cacheSharedProductCategories,
+  loadSharedProductCategories,
+  saveProductCategoriesCatalog
+} from '@/modules/products/infrastructure/api/productCategoryCatalog';
 import {
   calculateSaleUnitCost,
   inferUnitsPerPurchase,
@@ -389,18 +392,35 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
   };
 
   useEffect(() => {
-    const mergedCategories = mergeCategoryOptions(readStoredProductCategories(), products);
-    setCategoryOptions((current) => {
-      const currentNormalized = sanitizeCategoryOptions(current);
-      const nextNormalized = sanitizeCategoryOptions(mergedCategories);
+    let cancelled = false;
 
-      if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
-        return current;
+    const refreshCategories = async () => {
+      const sharedCategories = await loadSharedProductCategories(products);
+      const nextNormalized = sanitizeCategoryOptions(sharedCategories);
+
+      if (cancelled) {
+        return;
       }
 
-      persistProductCategories(nextNormalized);
-      return nextNormalized;
-    });
+      setCategoryOptions((current) => {
+        const currentNormalized = sanitizeCategoryOptions(current);
+
+        if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
+          return current;
+        }
+
+        cacheSharedProductCategories(nextNormalized);
+        return nextNormalized;
+      });
+
+      void saveProductCategoriesCatalog(nextNormalized).catch(() => undefined);
+    };
+
+    void refreshCategories();
+
+    return () => {
+      cancelled = true;
+    };
   }, [products]);
 
   useEffect(() => {
@@ -464,6 +484,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     const sanitized = sanitizeCategoryOptions(nextCategories);
     setCategoryOptions(sanitized);
     persistProductCategories(sanitized);
+    void saveProductCategoriesCatalog(sanitized).catch(() => undefined);
     return sanitized;
   };
 
