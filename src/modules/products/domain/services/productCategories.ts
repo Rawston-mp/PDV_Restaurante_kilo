@@ -1,7 +1,7 @@
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { Categoria } from '@/types/comanda';
 
-export const defaultProductCategories = ['Saladas', 'Quentes', 'Sobremesas', 'Bebidas'];
+export const defaultProductCategories = ['Saladas', 'Tabacaria', 'Bebidas', 'Delivery', 'Sobremesa', 'Por kilo', 'Rotisserie'];
 export const productCategoriesStorageKey = 'pdv.products.categories';
 export const productCategoriesChangedEvent = 'pdv:product-categories-changed';
 const legacyProductCategoriesStorageKey = 'pdv.products.groups';
@@ -12,6 +12,7 @@ const knownCategoryVisuals: Record<string, { label: string; icon: string; classN
   Saladas: { label: 'Saladas', icon: '🥗', className: 'is-saladas', color: '#10b981' },
   Quentes: { label: 'Quentes', icon: '🍛', className: 'is-quentes', color: '#f59e0b' },
   Sobremesas: { label: 'Sobremesas', icon: '🍰', className: 'is-sobremesas', color: '#a78bfa' },
+  Sobremesa: { label: 'Sobremesa', icon: '🍰', className: 'is-sobremesas', color: '#a78bfa' },
   Bebidas: { label: 'Bebidas', icon: '🥤', className: 'is-bebidas', color: '#38bdf8' }
 };
 

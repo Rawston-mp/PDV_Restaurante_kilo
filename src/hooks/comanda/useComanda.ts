@@ -6,10 +6,9 @@ import { useWeight } from '@/hooks/comanda/useWeight';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
   buildComandaCategories,
-  mergeCategoryOptions,
-  productCategoriesChangedEvent,
-  readStoredProductCategories
+  productCategoriesChangedEvent
 } from '@/modules/products/domain/services/productCategories';
+import { loadSharedProductCategories } from '@/modules/products/infrastructure/api/productCategoryCatalog';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
   fetchComandaItemsFromBackend,
@@ -258,9 +257,8 @@ export function useComanda(taxaImposto = 0) {
           porUnidade: !product.byWeight
         }));
 
-        const nextCategorias = buildComandaCategories(
-          mergeCategoryOptions(readStoredProductCategories(), products)
-        );
+        const nextCategoryOptions = await loadSharedProductCategories(products);
+        const nextCategorias = buildComandaCategories(nextCategoryOptions);
 
         setCatalogoProdutos(mappedProducts);
         setCategorias(nextCategorias);

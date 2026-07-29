@@ -58,4 +58,32 @@ describe('SyncProducts use case integration', () => {
     expect(local?.name).toBe('Feijao Premium');
     expect(local?.version).toBe(2);
   });
+
+  it('remove do cache local produto já sincronizado que não existe mais no backend', async () => {
+    const repository = new InMemoryProductRepository();
+    const syncedAt = new Date('2026-07-27T10:00:00Z');
+
+    await repository.save({
+      id: 'prd-dunhill',
+      productCode: '59',
+      name: 'Dunhill',
+      category: 'Tabacaria',
+      price: 16,
+      byWeight: false,
+      stock: 0,
+      version: 3,
+      createdAt: syncedAt,
+      updatedAt: syncedAt,
+      lastSyncedAt: syncedAt
+    });
+
+    const remoteGateway = new InMemoryProductSyncGateway([]);
+    const syncProducts = new SyncProducts(repository, remoteGateway);
+
+    const result = await syncProducts.execute({ baseDelayMs: 1 });
+
+    expect(result.mergedCount).toBe(0);
+    await expect(repository.findById('prd-dunhill')).resolves.toBeNull();
+    await expect(remoteGateway.pullProducts()).resolves.toHaveLength(0);
+  });
 });

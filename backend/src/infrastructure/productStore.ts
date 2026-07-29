@@ -41,7 +41,7 @@ export type ProductStore = {
   list: () => Promise<ProductRecord[]>;
   findById: (id: string) => Promise<ProductRecord | null>;
   save: (product: ProductRecord) => Promise<ProductRecord>;
-  delete: (id: string) => Promise<void>;
+  delete: (id: string) => Promise<boolean>;
 };
 
 const toOptionalText = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
@@ -336,7 +336,8 @@ class PostgresProductStore implements ProductStore {
   }
 
   async delete(id: string) {
-    await this.pool.query('DELETE FROM pdv_products WHERE id = $1', [id]);
+    const result = await this.pool.query('DELETE FROM pdv_products WHERE id = $1', [id]);
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

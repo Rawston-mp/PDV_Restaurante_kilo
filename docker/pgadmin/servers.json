@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "PDV Touch Dev - pdv_touch_dev",
+      "Group": "PDV Touch",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "pdv_touch_dev",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "Banco oficial de desenvolvimento do PDV Touch. Use este servidor para consultar pdv_products, comandas, vendas e financeiro."
+    }
+  }
+}

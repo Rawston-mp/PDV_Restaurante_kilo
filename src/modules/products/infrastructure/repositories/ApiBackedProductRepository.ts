@@ -1,5 +1,11 @@
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { ProductRepository } from '@/modules/products/domain/ports/ProductRepository';
+import {
+  clearPendingProductDeletion,
+  isProductDeletionPending,
+  markProductDeletionPending,
+  readPendingProductDeletionIds
+} from '@/modules/products/infrastructure/local/productDeletionTombstones';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ApiProduct = Omit<Product, 'createdAt' | 'updatedAt' | 'lastSyncedAt'> & {
@@ -39,6 +45,8 @@ const toProduct = (product: ApiProduct): Product => ({
 const isNewer = (left: Product, right: Product) =>
   new Date(left.updatedAt).getTime() > new Date(right.updatedAt).getTime();
 
+const wasSyncedBefore = (product: Product) => Boolean(product.lastSyncedAt);
+
 export class ApiBackedProductRepository implements ProductRepository {
   constructor(private readonly localRepository: ProductRepository) {}
 
@@ -66,14 +74,24 @@ export class ApiBackedProductRepository implements ProductRepository {
     const localProducts = await this.localRepository.list();
 
     try {
+      await this.flushPendingDeletions();
+      const pendingDeletedIds = new Set(readPendingProductDeletionIds());
       const response = await fetch(endpoint('/api/v1/products'));
       if (!response.ok) {
         throw new Error('Backend de produtos indisponível.');
       }
 
       const payload = await readProductsResponse(response);
-      const remoteProducts = (payload.products ?? []).map(toProduct);
-      const merged = this.mergeByFreshness(localProducts, remoteProducts);
+      const remoteProducts = (payload.products ?? [])
+        .map(toProduct)
+        .filter((product) => !pendingDeletedIds.has(product.id));
+      const activeLocalProducts = localProducts.filter((product) => !pendingDeletedIds.has(product.id));
+      const remoteIds = new Set(remoteProducts.map((product) => product.id));
+      const productsRemovedFromRemote = activeLocalProducts.filter(
+        (product) => wasSyncedBefore(product) && !remoteIds.has(product.id)
+      );
+      await Promise.all(productsRemovedFromRemote.map((product) => this.localRepository.delete(product.id)));
+      const merged = this.mergeByFreshness(activeLocalProducts, remoteProducts);
 
       await Promise.all(merged.map((product) => this.localRepository.save(product)));
       await Promise.all(
@@ -87,11 +105,16 @@ export class ApiBackedProductRepository implements ProductRepository {
 
       return this.sortProducts(merged);
     } catch {
-      return this.sortProducts(localProducts);
+      const pendingDeletedIds = new Set(readPendingProductDeletionIds());
+      return this.sortProducts(localProducts.filter((product) => !pendingDeletedIds.has(product.id)));
     }
   }
 
   async save(product: Product): Promise<void> {
+    if (isProductDeletionPending(product.id)) {
+      clearPendingProductDeletion(product.id);
+    }
+
     const nextProduct: Product = {
       ...product,
       updatedAt: product.updatedAt instanceof Date ? product.updatedAt : new Date(product.updatedAt)
@@ -111,11 +134,23 @@ export class ApiBackedProductRepository implements ProductRepository {
     await this.localRepository.delete(id);
 
     try {
-      await fetch(endpoint(`/api/v1/products/${encodeURIComponent(id)}`), {
-        method: 'DELETE'
-      });
+      await this.deleteRemoteProduct(id);
+      clearPendingProductDeletion(id);
     } catch {
-      // Exclusão remota será reavaliada quando houver sincronização definitiva.
+      markProductDeletionPending(id);
+    }
+  }
+
+  private async flushPendingDeletions() {
+    const pendingIds = readPendingProductDeletionIds();
+
+    for (const id of pendingIds) {
+      try {
+        await this.deleteRemoteProduct(id);
+        clearPendingProductDeletion(id);
+      } catch {
+        markProductDeletionPending(id);
+      }
     }
   }
 
@@ -127,6 +162,10 @@ export class ApiBackedProductRepository implements ProductRepository {
     }
 
     for (const product of localProducts) {
+      if (wasSyncedBefore(product) && !remoteProducts.some((remoteProduct) => remoteProduct.id === product.id)) {
+        continue;
+      }
+
       const current = productsById.get(product.id);
       if (!current || isNewer(product, current)) {
         productsById.set(product.id, product);
@@ -144,6 +183,10 @@ export class ApiBackedProductRepository implements ProductRepository {
   }
 
   private async pushProduct(product: Product): Promise<Product> {
+    if (isProductDeletionPending(product.id)) {
+      throw new Error(`Produto ${product.name} está pendente de exclusão e não pode ser reenviado.`);
+    }
+
     const response = await fetch(endpoint(`/api/v1/products/${encodeURIComponent(product.id)}`), {
       method: 'PUT',
       headers: {
@@ -158,5 +201,16 @@ export class ApiBackedProductRepository implements ProductRepository {
     }
 
     return toProduct(payload.product);
+  }
+
+  private async deleteRemoteProduct(id: string): Promise<void> {
+    const response = await fetch(endpoint(`/api/v1/products/${encodeURIComponent(id)}`), {
+      method: 'DELETE'
+    });
+    const payload = await readProductsResponse(response);
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? 'Falha ao excluir produto no backend.');
+    }
   }
 }

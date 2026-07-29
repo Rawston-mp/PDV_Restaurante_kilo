@@ -1,6 +1,36 @@
 import pg from 'pg';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const { Pool } = pg;
+
+const loadDotEnv = () => {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) {
+    return;
+  }
+
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  for (const line of envContent.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx <= 0) {
+      continue;
+    }
+
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim().replace(/^"|"$/g, '');
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+};
+
+loadDotEnv();
 
 const sourceDb = process.env.PDV_SOURCE_DATABASE || 'postgres';
 const targetDb = process.env.PDV_TARGET_DATABASE || 'pdv_touch_dev';
