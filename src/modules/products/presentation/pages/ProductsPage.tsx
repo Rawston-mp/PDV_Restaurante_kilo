@@ -23,6 +23,7 @@ import {
   productUnitOptions,
   type ProductUnit
 } from '@/modules/products/domain/services/productUnits';
+import { formatNcmCode, searchNcmCatalog } from '@/modules/products/domain/services/ncmLookup';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
   clearNfeProductDraft,
@@ -89,44 +90,6 @@ const cstPisCofinsOptions = [
 ];
 
 const taxSituationCodeOptions = ['61', '102', '300', '400', '500', '900'];
-
-const ncmLookupCatalog = [
-  { code: '02013000', description: 'Carne bovina desossada, fresca ou refrigerada' },
-  { code: '02071400', description: 'Cortes e miudezas de frango congelados' },
-  { code: '03038990', description: 'Peixes congelados (outros)' },
-  { code: '04012010', description: 'Leite UHT integral' },
-  { code: '07031019', description: 'Cebola fresca ou refrigerada (outras)' },
-  { code: '07133329', description: 'Feijão comum, seco, debulhado (outros)' },
-  { code: '09012100', description: 'Café torrado, não descafeinado' },
-  { code: '10063021', description: 'Arroz semibranqueado ou branqueado, polido' },
-  { code: '11010010', description: 'Farinha de trigo' },
-  { code: '16025000', description: 'Preparações alimentícias de carne bovina' },
-  { code: '17019900', description: 'Açúcares de cana ou de beterraba (outros)' },
-  { code: '19021900', description: 'Massas alimentícias não cozidas (outras)' },
-  { code: '19059090', description: 'Produtos de padaria e pastelaria (outros)' },
-  { code: '20057000', description: 'Azeitonas preparadas ou conservadas' },
-  { code: '21039021', description: 'Molhos preparados (maionese)' },
-  { code: '22011000', description: 'Água mineral e água gaseificada' },
-  { code: '22021000', description: 'Refrigerantes e bebidas não alcoólicas' },
-  { code: '22030000', description: 'Cervejas de malte' },
-  { code: '22042100', description: 'Vinhos em recipientes de até 2 litros' },
-  { code: '25010020', description: 'Sal refinado' }
-];
-
-const normalizeNcmDigits = (value: string) => value.replace(/\D/g, '').slice(0, 8);
-
-const formatNcmCode = (value: string) => {
-  const digits = normalizeNcmDigits(value);
-  if (digits.length <= 4) {
-    return digits;
-  }
-
-  if (digits.length <= 6) {
-    return `${digits.slice(0, 4)}.${digits.slice(4)}`;
-  }
-
-  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`;
-};
 
 const parseLegacyProductCode = (productName: string) => {
   const [firstChunk] = productName.split(' - ');
@@ -616,22 +579,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       : null;
 
   const ncmLookupResults = useMemo(() => {
-    const query = ncmSearchQuery.trim().toLowerCase();
-    if (!query) {
-      return ncmLookupCatalog.slice(0, 8);
-    }
-
-    const normalizedQueryDigits = normalizeNcmDigits(query);
-
-    return ncmLookupCatalog
-      .filter((item) => {
-        if (normalizedQueryDigits && item.code.includes(normalizedQueryDigits)) {
-          return true;
-        }
-
-        return item.description.toLowerCase().includes(query);
-      })
-      .slice(0, 12);
+    return searchNcmCatalog(ncmSearchQuery);
   }, [ncmSearchQuery]);
 
   const filteredProducts = useMemo(() => {
@@ -1362,32 +1310,34 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   </div>
                 </div>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={byWeight}
-                    onChange={(e) => setByWeight(e.target.checked)}
-                  />
-                  Produto por peso
-                </label>
+                <div className="products-options-row">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={byWeight}
+                      onChange={(e) => setByWeight(e.target.checked)}
+                    />
+                    Produto por peso
+                  </label>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={isUnavailable}
-                    onChange={(e) => setIsUnavailable(e.target.checked)}
-                  />
-                  Tornar indisponível no caixa
-                </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isUnavailable}
+                      onChange={(e) => setIsUnavailable(e.target.checked)}
+                    />
+                    Tornar indisponível no caixa
+                  </label>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={isHidden}
-                    onChange={(e) => setIsHidden(e.target.checked)}
-                  />
-                  Ocultar do caixa e dos terminais de balança
-                </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isHidden}
+                      onChange={(e) => setIsHidden(e.target.checked)}
+                    />
+                    Ocultar do caixa e dos terminais de balança
+                  </label>
+                </div>
               </>
             ) : (
               <>
