@@ -111,7 +111,7 @@ Force o Docker a deletar o container!!!
 
 🛠️ Derrubando e recriando o contêiner diretamente pelo comando global do Docker!!!
 # 1. Remove o contêiner do pgAdmin à força
-    docker rm -f pdv_pgadmin
+    docker rm -f pdv_plasmin
 
 # 2. Sobe toda a sua estrutura do zero aplicando o novo e-mail e limpando os volumes antigos
     docker compose up -d --force-recreate --renew-anon-volumes
@@ -129,3 +129,31 @@ Force o Docker a deletar o container!!!
     FROM public.pdv_products
     WHERE name ILIKE '%dunhill%'
         OR name ILIKE '%duhill%';
+
+🛠️ Adicionar um produto no pgAdmin
+INSERT INTO public.pdv_products (
+  id,
+  product_code,
+  name,
+  category,
+  price,
+  stock,
+  by_weight,
+  version,
+  created_at,
+  updated_at,
+  last_synced_at
+)
+VALUES (
+  gen_random_uuid()::text,
+  '91',
+  'Produto Teste',
+  'Bebidas',
+  10.00,
+  5.00,
+  false,
+  1,
+  NOW(),
+  NOW(),
+  NOW()
+);

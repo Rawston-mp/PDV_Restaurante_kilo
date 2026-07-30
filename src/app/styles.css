@@ -1217,14 +1217,17 @@ body {
 
 .products-supplier-picker-field {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 34px;
     gap: 0.45rem;
     align-items: center;
 }
 
 .products-supplier-picker-button {
-    width: 2rem;
-    height: 2rem;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
     border-radius: 8px;
     border: 1px solid #86efac;
     background: linear-gradient(120deg, #22c55e 0%, #4ade80 100%);
@@ -4505,6 +4508,7 @@ body {
 
 .finance-inline-add {
     margin-top: 0.45rem;
+    grid-template-columns: minmax(0, 1fr) 34px;
 }
 
 .finance-person-search-field {
@@ -5001,6 +5005,26 @@ body {
 .finance-entry-section .suppliers-row-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.65rem;
+}
+
+.finance-entry-section .products-supplier-picker-field {
+    grid-template-columns: minmax(0, 1fr) 36px;
+    width: 100%;
+}
+
+.finance-entry-section .products-supplier-picker-field input,
+.finance-entry-section .products-supplier-picker-field select {
+    min-width: 0;
+    width: 100%;
+}
+
+.finance-entry-section .products-supplier-picker-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    align-self: center;
+    justify-self: end;
 }
 
 .finance-entry-section .finance-option-chips {
@@ -6157,6 +6181,745 @@ body {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* Cadastro UX polish: padrão compacto, elegante e consistente para telas e modais administrativos. */
+.products-cadastro-overlay,
+.cadastro-span-overlay,
+.convenio-cadastro-overlay,
+.finance-cadastro-overlay {
+    background:
+        radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 30rem),
+        rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(6px);
+}
+
+.products-cadastro-modal,
+.cadastro-span-panel,
+.convenio-cadastro-span,
+.finance-cadastro-span,
+.products-cadastro-span {
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
+}
+
+.products-cadastro-modal,
+.cadastro-span-panel,
+.convenio-cadastro-span {
+    width: min(1080px, calc(100vw - 1.5rem));
+    max-height: min(94vh, 790px);
+}
+
+.products-cadastro-modal {
+    padding: 0.65rem 0.75rem;
+}
+
+.cadastro-span-panel,
+.convenio-cadastro-span {
+    padding: 0.65rem 0.75rem;
+}
+
+.products-cadastro-header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    margin: -0.65rem -0.75rem 0.4rem;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+}
+
+.cadastro-span-panel .products-cadastro-header,
+.convenio-cadastro-span .products-cadastro-header,
+.finance-cadastro-span .products-cadastro-header {
+    margin: -0.65rem -0.75rem 0.5rem;
+}
+
+.products-cadastro-header h3 {
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.content .products-cadastro-tabs button,
+.content .products-cadastro-tabs .products-cadastro-close,
+.products-cadastro-footer button,
+.cadastro-tabs-nav button,
+.convenio-form-tabs span,
+.finance-status-chips button,
+.employee-status-toggle button {
+    min-height: 32px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.76rem;
+    transition: all 0.15s ease;
+}
+
+.content .products-cadastro-tabs button {
+    min-width: 70px;
+    height: 32px;
+    padding-inline: 0.65rem;
+}
+
+.content .products-cadastro-tabs button.is-active {
+    border-color: rgba(15, 118, 110, 0.34);
+    background: linear-gradient(120deg, #0f766e 0%, #14b8a6 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(15, 118, 110, 0.18);
+}
+
+.content .products-cadastro-tabs .products-cadastro-close {
+    width: 32px;
+    height: 32px;
+}
+
+.products-form,
+.suppliers-form,
+.finance-entry-form {
+    gap: 0.85rem;
+}
+
+.products-cadastro-modal .products-form {
+    padding: 0.1rem 0.25rem 0.25rem 0;
+}
+
+.products-cadastro-modal .products-row-4:first-of-type {
+    align-items: start;
+}
+
+.products-form label,
+.suppliers-form label,
+.finance-entry-form label,
+.finance-entry-section label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 0.15rem;
+}
+
+.products-form input,
+.products-form select,
+.suppliers-form input,
+.suppliers-form select,
+.finance-entry-form input,
+.finance-entry-form select,
+.finance-entry-section input,
+.finance-entry-section select {
+    min-height: 34px;
+    padding: 0.38rem 0.55rem;
+    border-radius: 8px;
+    border-color: #cbd5e1;
+    background: #ffffff;
+    font-size: 0.85rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.products-form textarea,
+.suppliers-form textarea,
+.finance-entry-form textarea,
+.finance-entry-section textarea {
+    border-radius: 8px;
+    border-color: #cbd5e1;
+    background: #ffffff;
+    font-size: 0.85rem;
+}
+
+.products-form input:focus,
+.products-form select:focus,
+.products-form textarea:focus,
+.suppliers-form input:focus,
+.suppliers-form select:focus,
+.suppliers-form textarea:focus,
+.finance-entry-form input:focus,
+.finance-entry-form select:focus,
+.finance-entry-form textarea:focus,
+.finance-entry-section input:focus,
+.finance-entry-section select:focus,
+.finance-entry-section textarea:focus {
+    border-color: #0ea5e9;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.13);
+    outline: none;
+}
+
+.products-row-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 1rem;
+    row-gap: 0.75rem;
+}
+
+.products-cost-block .products-row-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 1.1rem;
+    row-gap: 0.75rem;
+}
+
+.products-row-3,
+.products-row-2,
+.products-fiscal-row-top,
+.products-fiscal-row-bottom,
+.products-fiscal-row-end,
+.suppliers-row-3,
+.suppliers-row-4,
+.suppliers-row-2-wide,
+.suppliers-row-address-top,
+.suppliers-row-address-bottom,
+.finance-entry-section .suppliers-row-3 {
+    column-gap: 1rem;
+    row-gap: 0.75rem;
+}
+
+.products-row-4>div,
+.products-row-3>div,
+.products-row-2>div,
+.suppliers-row-3>div,
+.suppliers-row-4>div,
+.suppliers-row-2-wide>div,
+.suppliers-row-address-top>div,
+.suppliers-row-address-bottom>div {
+    gap: 0.3rem;
+}
+
+.products-photo-field,
+.products-group-row,
+.products-cost-block,
+.finance-entry-section,
+.finance-account-summary,
+.client-history-list li {
+    border-color: rgba(203, 213, 225, 0.8);
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f8fbff 0%, #f1f5f9 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.products-photo-field,
+.products-group-row,
+.products-cost-block,
+.finance-entry-section {
+    padding: 0.48rem 0.6rem;
+}
+
+.products-cadastro-modal .products-row-4:first-of-type .products-photo-field,
+.products-cadastro-modal .products-row-4:first-of-type .products-group-row {
+    min-height: 0;
+}
+
+.products-cadastro-modal .products-row-4:first-of-type+.products-row-2 {
+    margin-top: -3.6rem;
+    max-width: 46%;
+}
+
+.products-cost-block h4 {
+    font-size: 0.8rem;
+    letter-spacing: -0.01em;
+}
+
+.products-help-note,
+.products-group-help-note,
+.suppliers-cep-feedback,
+.client-history-empty {
+    font-size: 0.7rem;
+    line-height: 1.25;
+}
+
+.products-image-preview {
+    width: min(100%, 160px);
+    gap: 0.35rem;
+}
+
+.products-image-preview-img {
+    max-height: 110px;
+    padding: 0.2rem;
+}
+
+.products-category-quickbar {
+    gap: 0.35rem;
+}
+
+.content .products-category-chip {
+    min-height: 30px;
+    padding: 0.2rem 0.55rem;
+    border-radius: 8px;
+    font-size: 0.74rem;
+}
+
+.products-group-input-row {
+    grid-template-columns: minmax(0, 1fr) 34px 34px 34px;
+    gap: 0.35rem;
+}
+
+.products-group-action-button,
+.ncm-search-trigger {
+    min-height: 30px;
+    border-radius: 8px;
+}
+
+.ncm-input-row {
+    grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.ncm-lookup-panel {
+    border-radius: 10px;
+    padding: 0.35rem;
+}
+
+.products-form .checkbox-label {
+    min-height: 24px;
+    align-items: center;
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.products-form .checkbox-label input,
+.suppliers-form input[type='checkbox'],
+.finance-entry-form input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+}
+
+.products-options-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.85rem;
+    margin-top: -0.1rem;
+}
+
+.products-cadastro-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    margin: 0 -0.15rem -0.15rem;
+    padding: 0.45rem 0.15rem 0.1rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    background: rgba(248, 251, 255, 0.95);
+    backdrop-filter: blur(8px);
+}
+
+.products-cadastro-footer button {
+    min-width: 96px;
+    padding: 0.35rem 0.7rem;
+}
+
+.products-form-warning {
+    border-radius: 8px;
+    padding: 0.4rem 0.55rem;
+    font-weight: 700;
+}
+
+.cadastro-tabs-card {
+    border-radius: 12px;
+    padding: 0.5rem;
+}
+
+.cadastro-tabs-nav {
+    gap: 0.4rem;
+}
+
+.cadastro-tabs-nav button {
+    min-height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    border: 1px solid #0f766e;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.78rem;
+    box-shadow: 0 2px 6px rgba(15, 118, 110, 0.15);
+}
+
+.cadastro-tabs-nav button.is-active {
+    background: linear-gradient(135deg, #0d5c56 0%, #0f766e 100%);
+    border-color: #0b4a45;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.convenio-form-tabs {
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+}
+
+.convenio-form-tabs span {
+    white-space: nowrap;
+    padding: 0.35rem 0.6rem;
+}
+
+.convenio-cadastro-close,
+.cadastro-span-close,
+.finance-cadastro-close {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    float: none;
+    margin: 0;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    border-radius: 8px;
+    background: linear-gradient(120deg, #0f766e 0%, #14b8a6 100%);
+    font-size: 1.05rem;
+}
+
+.cadastro-span-panel .products-cadastro-header,
+.convenio-cadastro-span .products-cadastro-header,
+.finance-cadastro-span .products-cadastro-header {
+    padding-right: 3rem;
+}
+
+.finance-cadastro-span {
+    width: min(880px, calc(100vw - 1.5rem));
+    border-radius: 14px;
+}
+
+.finance-cadastro-span .finance-cadastro-close {
+    top: 0.7rem;
+    right: 0.7rem;
+    z-index: 12;
+    transform: none;
+}
+
+.finance-cadastro-span>.finance-cadastro-close {
+    top: 0.75rem;
+    right: 0.75rem;
+}
+
+.finance-cadastro-span .products-cadastro-header {
+    min-height: 68px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 38px;
+    align-items: start;
+    gap: 0.45rem 0.65rem;
+    padding: 0.15rem 3rem 0.55rem 0;
+    border-bottom: 1px solid rgba(191, 219, 254, 0.75);
+}
+
+.finance-cadastro-span .products-cadastro-tabs {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-right: 0;
+}
+
+.finance-cadastro-span .products-cadastro-tabs button {
+    min-height: 30px;
+    padding: 0.32rem 0.68rem;
+    border-radius: 8px;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 640px) {
+    .finance-cadastro-span .products-cadastro-header {
+        grid-template-columns: minmax(0, 1fr) 38px;
+        padding-right: 2.8rem;
+    }
+
+    .finance-cadastro-span .products-cadastro-tabs {
+        justify-content: stretch;
+    }
+
+    .finance-cadastro-span .products-cadastro-tabs button {
+        flex: 1 1 0;
+    }
+}
+
+.finance-entry-form>.products-cadastro-footer {
+    margin-inline: -0.1rem;
+    background: rgba(248, 251, 255, 0.95);
+}
+
+.admin-config-card,
+.admin-config-section,
+.admin-peripheral-section,
+.admin-scale-item,
+.admin-store-pin-card,
+.admin-commercial-section,
+.admin-certificate,
+.admin-fiscal-section {
+    border-color: rgba(191, 219, 254, 0.86);
+    border-radius: 14px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.admin-config-card {
+    padding: 0.85rem;
+}
+
+.admin-config-section,
+.admin-peripheral-section,
+.admin-scale-item,
+.admin-store-pin-card,
+.admin-certificate,
+.admin-fiscal-section {
+    padding: 0.68rem;
+}
+
+.admin-config-form,
+.admin-certificate-form,
+.admin-scale-list {
+    gap: 0.78rem;
+}
+
+.admin-config-header,
+.admin-config-section-title,
+.admin-scale-item-header {
+    gap: 0.65rem;
+}
+
+.admin-config-header h3,
+.admin-config-section h4,
+.admin-fiscal-section h4,
+.admin-pin-form h4 {
+    font-size: 0.98rem;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+}
+
+.admin-config-toolbar,
+.admin-config-grid,
+.admin-address-grid,
+.admin-commercial-grid,
+.admin-fiscal-grid,
+.admin-peripheral-grid,
+.admin-scale-grid,
+.admin-store-pin-grid,
+.admin-role-grid,
+.admin-test-row {
+    gap: 0.62rem;
+}
+
+.admin-config-toolbar label,
+.admin-config-grid label,
+.admin-commercial-grid label,
+.admin-fiscal-grid label,
+.admin-config-field,
+.admin-store-pin-card label,
+.admin-pin-form label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #475569;
+}
+
+.admin-config-toolbar input,
+.admin-config-toolbar select,
+.admin-config-form input,
+.admin-config-form select,
+.admin-commercial-grid input,
+.admin-commercial-grid select,
+.admin-fiscal-grid input,
+.admin-fiscal-grid select,
+.admin-pin-form input,
+.admin-pin-form select,
+.admin-audit-filters input,
+.admin-audit-filters select {
+    min-height: 34px;
+    padding: 0.36rem 0.52rem;
+    border-radius: 9px;
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    font-size: 0.84rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.admin-textarea,
+.admin-config-form textarea,
+.admin-commercial-grid textarea,
+.admin-fiscal-grid textarea {
+    border-radius: 10px;
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    font-size: 0.84rem;
+}
+
+.admin-config-toolbar input:focus,
+.admin-config-toolbar select:focus,
+.admin-config-form input:focus,
+.admin-config-form select:focus,
+.admin-config-form textarea:focus,
+.admin-commercial-grid input:focus,
+.admin-commercial-grid select:focus,
+.admin-commercial-grid textarea:focus,
+.admin-fiscal-grid input:focus,
+.admin-fiscal-grid select:focus,
+.admin-fiscal-grid textarea:focus,
+.admin-pin-form input:focus,
+.admin-pin-form select:focus,
+.admin-audit-filters input:focus,
+.admin-audit-filters select:focus {
+    border-color: #0ea5e9;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.13);
+    outline: none;
+}
+
+.admin-role-grid {
+    padding: 0.62rem;
+}
+
+.admin-role-grid label,
+.admin-inline-check {
+    min-height: 34px;
+    font-size: 0.82rem;
+}
+
+.admin-store-pin-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-store-pin-card {
+    gap: 0.42rem;
+}
+
+.admin-peripheral-toolbar,
+.admin-test-row,
+.admin-peripheral-test-row {
+    padding: 0.6rem;
+}
+
+.admin-help-text,
+.admin-certificate-meta,
+.admin-test-row span {
+    font-size: 0.76rem;
+    line-height: 1.3;
+}
+
+.admin-message,
+.admin-certificate-alert,
+.admin-access-notice-preview {
+    border-radius: 10px;
+    padding: 0.55rem 0.68rem;
+}
+
+.admin-actions {
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+}
+
+.admin-actions button,
+.admin-config-toolbar button,
+.admin-peripheral-toolbar button,
+.admin-test-row button {
+    min-height: 38px;
+    border-radius: 10px;
+    font-weight: 800;
+}
+
+@media (max-width: 1180px) {
+    .products-cadastro-modal,
+    .cadastro-span-panel,
+    .convenio-cadastro-span {
+        width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+    }
+
+    .products-row-4 {
+        grid-template-columns: minmax(120px, 160px) repeat(3, minmax(170px, 1fr));
+        column-gap: 0.75rem;
+    }
+}
+
+@media (max-width: 860px) {
+    .products-cadastro-overlay,
+    .cadastro-span-overlay,
+    .convenio-cadastro-overlay,
+    .finance-cadastro-overlay {
+        padding: 0.45rem;
+        align-items: start;
+    }
+
+    .products-cadastro-modal,
+    .cadastro-span-panel,
+    .convenio-cadastro-span,
+    .finance-cadastro-span {
+        width: calc(100vw - 0.9rem);
+        max-height: calc(100vh - 0.9rem);
+        padding: 0.65rem;
+    }
+
+    .products-cadastro-header,
+    .cadastro-span-panel .products-cadastro-header,
+    .convenio-cadastro-span .products-cadastro-header,
+    .finance-cadastro-span .products-cadastro-header {
+        margin: -0.65rem -0.65rem 0.65rem;
+        padding: 0.65rem;
+        padding-right: 3.25rem;
+    }
+
+    .products-cadastro-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .products-cadastro-tabs {
+        width: 100%;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+    }
+
+    .products-row-4,
+    .products-row-3,
+    .products-row-2,
+    .suppliers-row-3,
+    .suppliers-row-4,
+    .suppliers-row-2-wide,
+    .finance-entry-section .suppliers-row-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .products-row-4>.products-photo-field,
+    .products-row-4>.products-group-field {
+        grid-column: 1 / -1;
+    }
+
+    .products-cadastro-modal .products-row-4:first-of-type+.products-row-2 {
+        margin-top: 0;
+        max-width: none;
+    }
+}
+
+@media (max-width: 620px) {
+    .products-cadastro-overlay,
+    .cadastro-span-overlay,
+    .convenio-cadastro-overlay,
+    .finance-cadastro-overlay {
+        padding: 0;
+    }
+
+    .products-cadastro-modal,
+    .cadastro-span-panel,
+    .convenio-cadastro-span,
+    .finance-cadastro-span {
+        width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .products-row-4,
+    .products-row-3,
+    .products-row-2,
+    .suppliers-row-3,
+    .suppliers-row-4,
+    .suppliers-row-2-wide,
+    .suppliers-row-address-top,
+    .suppliers-row-address-bottom,
+    .finance-entry-section .suppliers-row-3 {
+        grid-template-columns: 1fr;
+    }
+
+    .products-cadastro-footer {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .products-cadastro-footer button {
+        width: 100%;
+    }
 }
 
 .restaurant-dashboard-page {
