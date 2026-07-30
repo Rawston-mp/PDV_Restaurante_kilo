@@ -19,7 +19,7 @@ permissions:
 jobs:
   build-windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference = 'Stop'
 
           npm run build
 
