@@ -5,3 +5,6 @@ backend/data/
 vite.config.js
 vite.config.d.ts
 release-electron/
+
+release-electron*/
+release-electron-auth/
