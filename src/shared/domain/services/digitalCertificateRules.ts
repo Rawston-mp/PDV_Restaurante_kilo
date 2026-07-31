@@ -34,6 +34,8 @@ export type DigitalCertificateSettings = {
   fileName: string;
   fileSize: number;
   fileExtension: string;
+  secureStorageId?: string;
+  hasSecureCertificate?: boolean;
   importSource: CertificateImportSource;
   expirationDate: string;
   renewAlertDays: number;
@@ -61,7 +63,7 @@ const ufRules: Record<string, UfRule> = {
   SP: {
     message: 'SP: exija CSC e CSC ID válidos e mantenha certificado aderente às regras estaduais de NFC-e.',
     cscIdPattern: /^\d{1,6}$/,
-    cscCodePattern: /^[A-Za-z0-9]+$/,
+    cscCodePattern: /^[A-Za-z0-9-]+$/,
     cscMinLength: 36,
     cscMaxLength: 36
   },
@@ -109,6 +111,45 @@ export const isValidCnpjFormat = (value: string) => /^\d{14}$/.test(normalizeDig
 
 export const getUfNfceRuleMessage = (uf: string) => `${uf}: ${getRuleForUf(uf).message}`;
 
+export const validateNfceNextNumber = (value: string) => {
+  const normalizedValue = value.trim();
+
+  if (!/^\d{1,9}$/.test(normalizedValue)) {
+    return 'Próximo número da NFC-e deve conter somente números, de 1 a 9 dígitos.';
+  }
+
+  if (Number(normalizedValue) <= 0) {
+    return 'Próximo número da NFC-e deve ser maior que zero.';
+  }
+
+  return null;
+};
+
+export const validateStateRegistrationByUf = (input: { uf: string; stateRegistration: string }) => {
+  const rawValue = input.stateRegistration.trim();
+  if (!rawValue) {
+    return 'Informe a inscrição estadual antes de emitir NFC-e real.';
+  }
+
+  if (rawValue.toUpperCase() === 'ISENTO') {
+    return null;
+  }
+
+  const digits = normalizeDigits(rawValue);
+  if (input.uf === 'SP' && digits.length !== 12) {
+    return 'Inscrição estadual de SP deve conter 12 dígitos ou ISENTO.';
+  }
+
+  if (digits.length < 2) {
+    return `Inscrição estadual inválida para ${input.uf}.`;
+  }
+
+  return null;
+};
+
+export const looksLikeSefazSpCscCode = (value: string) => {
+  return /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/.test(value.trim());
+};
 export const validateCscByUf = (input: { uf: string; cscId: string; cscCode: string }) => {
   const { uf, cscId, cscCode } = input;
   const rule = getRuleForUf(uf);
@@ -127,7 +168,7 @@ export const validateCscByUf = (input: { uf: string; cscId: string; cscCode: str
   }
 
   if (!rule.cscCodePattern.test(normalizedCsc)) {
-    return `CSC inválido para ${uf}. Use apenas caracteres alfanuméricos.`;
+    return `CSC inválido para ${uf}. Use caracteres alfanuméricos e hífen quando fornecido pela SEFAZ.`;
   }
 
   if (normalizedCsc.length < rule.cscMinLength || normalizedCsc.length > rule.cscMaxLength) {
@@ -198,3 +239,4 @@ export const getCertificateFiscalBlockReason = () => {
 
   return null;
 };
+

@@ -53,7 +53,7 @@ import {
   unmarkComandaLocallyCancelled,
   upsertComandaItems
 } from '@/shared/infrastructure/storage/comandaCache';
-import { loadDigitalCertificateSettings, SEFAZ_PRODUCTION_READY } from '@/shared/domain/services/digitalCertificateRules';
+import { CERTIFICATE_SETTINGS_STORAGE_KEY, loadDigitalCertificateSettings, SEFAZ_PRODUCTION_READY } from '@/shared/domain/services/digitalCertificateRules';
 import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 import { parseCurrencyInput } from '@/shared/domain/services/currencyInput';
 
@@ -488,6 +488,24 @@ export function CashierPage() {
 
   const showNotice = (message: string, tone: CashierNotice['tone'] = 'info') => {
     setNotice({ message, tone });
+  };
+
+  const advanceNfceNextNumber = () => {
+    const settings = loadDigitalCertificateSettings();
+    const currentNumber = Number(settings?.nfceNextNumber?.replace(/\D/g, '') || '0');
+
+    if (!settings || !Number.isFinite(currentNumber) || currentNumber <= 0) {
+      return;
+    }
+
+    const nextSettings = {
+      ...settings,
+      nfceNextNumber: String(currentNumber + 1),
+      updatedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem(CERTIFICATE_SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+    window.dispatchEvent(new CustomEvent('pdv.fiscal-settings-updated'));
   };
 
   const ensureCashierOpen = (actionLabel = 'operar o caixa') => {
@@ -2175,6 +2193,10 @@ export function CashierPage() {
           'warning'
         );
       }
+
+      if (fiscalDocument.status !== 'REJECTED') {
+        advanceNfceNextNumber();
+      }
     }
 
     accumulateSaleInCashierSession(payments, payableTotal);
@@ -2573,3 +2595,4 @@ export function CashierPage() {
     </div>
   );
 }
+

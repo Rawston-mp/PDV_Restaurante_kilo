@@ -1,10 +1,11 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 
 const PORT = process.env.PORT || '3001';
@@ -133,6 +134,65 @@ const buildEscPosTestPayload = (config) => {
     return Buffer.from(`\x1B@${title}\n${line}\nConexao: REDE\nData: ${new Date().toLocaleString('pt-BR')}\n\n\n${cutCommand}`, 'binary');
 };
 
+const getSecureCertificateDirectory = () => path.join(app.getPath('userData'), 'secure-certificates');
+
+const ensureSecureCertificateDirectory = () => {
+    const certificateDirectory = getSecureCertificateDirectory();
+    fs.mkdirSync(certificateDirectory, { recursive: true });
+    return certificateDirectory;
+};
+
+const getFileExtension = (filePath) => path.extname(filePath).replace('.', '').toLowerCase();
+
+const storeCertificateSecurely = async(filePath, importSource) => {
+    const extension = getFileExtension(filePath);
+    if (!['pfx', 'p12'].includes(extension)) {
+        throw new Error('Selecione um certificado A1 nos formatos .pfx ou .p12.');
+    }
+
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Armazenamento criptografado indisponível neste computador.');
+    }
+
+    const stats = await fs.promises.stat(filePath);
+    if (stats.size <= 0) {
+        throw new Error('Arquivo de certificado vazio ou inválido.');
+    }
+
+    if (stats.size > 10 * 1024 * 1024) {
+        throw new Error('Arquivo de certificado acima de 10 MB.');
+    }
+
+    const fileBuffer = await fs.promises.readFile(filePath);
+    const secureStorageId = crypto.randomUUID();
+    const encryptedPayload = safeStorage.encryptString(fileBuffer.toString('base64')).toString('base64');
+    const certificateDirectory = ensureSecureCertificateDirectory();
+    const targetPath = path.join(certificateDirectory, `${secureStorageId}.json`);
+
+    const record = {
+        version: 1,
+        encryptedPayload,
+        algorithm: 'electron.safeStorage',
+        fileName: path.basename(filePath),
+        fileExtension: extension,
+        fileSize: stats.size,
+        sha256: crypto.createHash('sha256').update(fileBuffer).digest('hex'),
+        importSource: importSource === 'PENDRIVE' ? 'PENDRIVE' : 'MAQUINA',
+        importedAt: new Date().toISOString()
+    };
+
+    await fs.promises.writeFile(targetPath, JSON.stringify(record, null, 2), { encoding: 'utf8' });
+
+    return {
+        secureStorageId,
+        fileName: record.fileName,
+        fileExtension: record.fileExtension,
+        fileSize: record.fileSize,
+        importSource: record.importSource,
+        importedAt: record.importedAt,
+        hasSecureCertificate: true
+    };
+};
 const sendNetworkPrinterTest = (config) =>
     new Promise((resolve, reject) => {
         const host = String(config && config.caminhoPorta ? config.caminhoPorta : '').trim();
@@ -157,6 +217,31 @@ const sendNetworkPrinterTest = (config) =>
         socket.on('error', reject);
     });
 
+ipcMain.handle('certificate:select-and-store', async(_event, options = {}) => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Selecionar certificado digital A1',
+            properties: ['openFile'],
+            filters: [
+                { name: 'Certificado A1', extensions: ['pfx', 'p12'] }
+            ]
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { ok: false, canceled: true };
+        }
+
+        const metadata = await storeCertificateSecurely(result.filePaths[0], options && options.importSource);
+        writeStartupLog(`Certificado A1 armazenado com seguranca: ${metadata.fileName}.`);
+        return { ok: true, metadata };
+    } catch (error) {
+        writeStartupLog('Falha ao armazenar certificado A1.', error);
+        return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error)
+        };
+    }
+});
 ipcMain.on('print-job:test', (event, config) => {
     const safeConfig = config && typeof config === 'object' ? config : {};
 
@@ -246,3 +331,4 @@ app.on('before-quit', () => {
         backendProcess = null;
     }
 });
+

@@ -32,16 +32,6 @@ type InstalledPrinter = {
   status?: number;
 };
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      testarImpressora?: (config: PrinterConfigState) => void;
-      imprimirCupom?: (dados: unknown) => void;
-      listarImpressoras?: () => Promise<InstalledPrinter[]>;
-    };
-  }
-}
-
 const STORAGE_KEY = 'pdv.printer.thermal.configs';
 const LEGACY_STORAGE_KEY = 'pdv.printer.thermal.config';
 
@@ -474,3 +464,4 @@ export function PrinterConfig() {
     </>
   );
 }
+
