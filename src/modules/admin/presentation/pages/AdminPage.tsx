@@ -48,11 +48,14 @@ import {
   formatCertificateFileSize,
   getCertificateExpiryStatus,
   getUfNfceRuleMessage,
+  looksLikeSefazSpCscCode,
   parseDigitalCertificateSettings,
   type CertificateImportSource,
   type CertificateModel,
   type DigitalCertificateSettings,
-  validateCscByUf
+  validateCscByUf,
+  validateNfceNextNumber,
+  validateStateRegistrationByUf
 } from '@/shared/domain/services/digitalCertificateRules';
 import { formatCnpj, isValidCnpj, normalizeCnpj } from '@/shared/domain/services/documentValidation';
 
@@ -159,6 +162,8 @@ export function AdminPage() {
   const [certificateFileName, setCertificateFileName] = useState('');
   const [certificateFileSize, setCertificateFileSize] = useState<number | null>(null);
   const [certificateFileExtension, setCertificateFileExtension] = useState('');
+  const [certificateSecureStorageId, setCertificateSecureStorageId] = useState('');
+  const [certificateHasSecureCertificate, setCertificateHasSecureCertificate] = useState(false);
   const [certificateImportSource, setCertificateImportSource] = useState<CertificateImportSource>('MAQUINA');
   const [certificateImportedAt, setCertificateImportedAt] = useState('');
   const [certificateExpirationDate, setCertificateExpirationDate] = useState('');
@@ -232,6 +237,8 @@ export function AdminPage() {
       setCertificateFileName(parsedSettings.fileName);
       setCertificateFileSize(parsedSettings.fileSize);
       setCertificateFileExtension(parsedSettings.fileExtension);
+      setCertificateSecureStorageId(parsedSettings.secureStorageId ?? '');
+      setCertificateHasSecureCertificate(Boolean(parsedSettings.hasSecureCertificate));
       setCertificateImportSource(parsedSettings.importSource);
       setCertificateImportedAt(parsedSettings.importedAt);
       setCertificateExpirationDate(parsedSettings.expirationDate);
@@ -370,26 +377,30 @@ export function AdminPage() {
   const sefazActiveEnvironment = savedCertificateSettings?.nfceEnvironment ?? certificateNfceEnvironment;
 
   const sefazProductionReadiness = useMemo(() => {
-    const issues = [
-      !certificateCompanyName.trim() ? 'Razão social não informada' : null,
-      !isValidCnpj(certificateCnpj) ? 'CNPJ inválido ou ausente' : null,
-      !certificateStateRegistration.trim() ? 'Inscrição estadual não informada' : null,
-      !certificateCnae.trim() ? 'CNAE principal não selecionado' : null,
-      !certificateTaxRegime.trim() ? 'Regime tributário não selecionado' : null,
-      !certificateCscId.trim() ? 'CSC ID não informado' : null,
-      !certificateCscCode.trim() ? 'CSC não informado' : null,
-      !certificateFileName.trim() ? 'Certificado A1 não importado' : null
-    ].filter(Boolean) as string[];
-
     const cscError = validateCscByUf({
       uf: certificateUf,
       cscId: certificateCscId,
       cscCode: certificateCscCode
     });
+    const nextNumberError = validateNfceNextNumber(certificateNfceNextNumber);
+    const stateRegistrationError = validateStateRegistrationByUf({
+      uf: certificateUf,
+      stateRegistration: certificateStateRegistration
+    });
+    const cscCodeInNextNumber = looksLikeSefazSpCscCode(certificateNfceNextNumber);
 
-    if (cscError) {
-      issues.push(cscError);
-    }
+    const issues = [
+      !certificateCompanyName.trim() ? 'Razão social não informada' : null,
+      !isValidCnpj(certificateCnpj) ? 'CNPJ inválido ou ausente' : null,
+      stateRegistrationError,
+      !certificateCnae.trim() ? 'CNAE principal não selecionado' : null,
+      !certificateTaxRegime.trim() ? 'Regime tributário não selecionado' : null,
+      cscError,
+      nextNumberError,
+      cscCodeInNextNumber ? 'O Código de Segurança da SEFAZ parece estar no campo Próximo número.' : null,
+      !certificateFileName.trim() ? 'Certificado A1 não importado' : null,
+      certificateFileName.trim() && !certificateHasSecureCertificate ? 'Certificado A1 referenciado, mas ainda não armazenado com segurança pelo Electron' : null
+    ].filter(Boolean) as string[];
 
     return {
       isReady: issues.length === 0,
@@ -402,6 +413,8 @@ export function AdminPage() {
     certificateCscCode,
     certificateCscId,
     certificateFileName,
+    certificateHasSecureCertificate,
+    certificateNfceNextNumber,
     certificateStateRegistration,
     certificateTaxRegime,
     certificateUf
@@ -443,14 +456,40 @@ export function AdminPage() {
     setCertificateFileName('');
     setCertificateFileSize(null);
     setCertificateFileExtension('');
+    setCertificateSecureStorageId('');
+    setCertificateHasSecureCertificate(false);
     setCertificateImportSource('MAQUINA');
     setCertificateImportedAt('');
     setCertificateExpirationDate('');
     setCertificateRenewAlertDays(String(DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS));
   };
 
-  const openCertificateFilePicker = (source: CertificateImportSource) => {
+  const openCertificateFilePicker = async (source: CertificateImportSource) => {
     setCertificateImportSource(source);
+
+    if (window.electronAPI?.selecionarCertificadoDigital) {
+      const result = await window.electronAPI.selecionarCertificadoDigital({ importSource: source });
+
+      if (!result.ok) {
+        if (!result.canceled) {
+          setCertificateFormError(result.error ?? 'Não foi possível armazenar o certificado digital.');
+        }
+        return;
+      }
+
+      setCertificateFileName(result.metadata.fileName);
+      setCertificateFileSize(result.metadata.fileSize);
+      setCertificateFileExtension(result.metadata.fileExtension);
+      setCertificateImportSource(result.metadata.importSource);
+      setCertificateImportedAt(result.metadata.importedAt);
+      setCertificateSecureStorageId(result.metadata.secureStorageId);
+      setCertificateHasSecureCertificate(result.metadata.hasSecureCertificate);
+      setCertificateModel('A1');
+      setCertificateFormError(null);
+      setCertificateMessage('Certificado A1 armazenado com segurança neste computador. Revise os dados e salve a configuração.');
+      return;
+    }
+
     const fileInput = document.getElementById('admin-certificate-file-input') as HTMLInputElement | null;
     fileInput?.click();
   };
@@ -469,9 +508,11 @@ export function AdminPage() {
     setCertificateFileName(file.name);
     setCertificateFileSize(file.size);
     setCertificateFileExtension(extension);
+    setCertificateSecureStorageId('');
+    setCertificateHasSecureCertificate(false);
     setCertificateImportedAt(new Date().toISOString());
     setCertificateFormError(null);
-    setCertificateMessage('Arquivo de certificado importado. Revise os dados e salve a configuração.');
+    setCertificateMessage('Arquivo de certificado referenciado. No navegador, o .pfx não é armazenado; no app Electron, use Importar para salvar com segurança.');
 
     if (extension === 'pfx' || extension === 'p12') {
       setCertificateModel('A1');
@@ -488,6 +529,12 @@ export function AdminPage() {
           cscCode: certificateCscCode
         })
       : null;
+    const nextNumberValidationError = validateNfceNextNumber(certificateNfceNextNumber);
+    const stateRegistrationValidationError = validateStateRegistrationByUf({
+      uf: certificateUf,
+      stateRegistration: certificateStateRegistration
+    });
+    const cscCodeInNextNumber = looksLikeSefazSpCscCode(certificateNfceNextNumber);
     const renewAlertDays = Number(certificateRenewAlertDays);
     const hasInvalidRenewAlertDays =
       !Number.isFinite(renewAlertDays) || renewAlertDays < 1 || renewAlertDays > 180;
@@ -516,6 +563,8 @@ export function AdminPage() {
       fileName: certificateFileName,
       fileSize: certificateFileSize ?? 0,
       fileExtension: certificateFileExtension,
+      secureStorageId: certificateSecureStorageId || undefined,
+      hasSecureCertificate: certificateHasSecureCertificate,
       importSource: certificateImportSource,
       expirationDate: certificateExpirationDate,
       renewAlertDays: safeRenewAlertDays,
@@ -533,9 +582,12 @@ export function AdminPage() {
       !certificateCnae.trim() ? 'selecione o CNAE principal' : null,
       !certificateTaxRegime.trim() ? 'selecione o regime tributário' : null,
       cscValidationError,
+      nextNumberValidationError,
+      stateRegistrationValidationError,
+      cscCodeInNextNumber ? 'o Código de Segurança da SEFAZ parece estar no campo Próximo número; mova esse código para CSC e deixe Próximo número como 1' : null,
       hasInvalidRenewAlertDays ? 'ajuste o alerta de renovação para um valor entre 1 e 180 dias' : null,
       !certificateFileName.trim() ? 'importe o A1 antes de emitir NFC-e real' : null,
-      !certificateStateRegistration.trim() ? 'informe a inscrição estadual antes de emitir NFC-e real' : null
+      certificateFileName.trim() && !certificateHasSecureCertificate ? 'reimporte o A1 pelo app Electron para armazenar o arquivo com segurança' : null
     ].filter(Boolean);
     setCertificateMessage(
       pendingWarnings.length > 0
@@ -602,6 +654,8 @@ export function AdminPage() {
       fileName: certificateFileName,
       fileSize: certificateFileSize ?? 0,
       fileExtension: certificateFileExtension,
+      secureStorageId: certificateSecureStorageId || undefined,
+      hasSecureCertificate: certificateHasSecureCertificate,
       importSource: certificateImportSource,
       expirationDate: certificateExpirationDate,
       renewAlertDays: Number(certificateRenewAlertDays) || DEFAULT_CERTIFICATE_RENEW_ALERT_DAYS,
@@ -1729,14 +1783,19 @@ export function AdminPage() {
                 </label>
                 <label>
                   Próximo número
-                  <input value={certificateNfceNextNumber} onChange={(e) => setCertificateNfceNextNumber(e.target.value)} inputMode="numeric" />
+                  <input
+                    value={certificateNfceNextNumber}
+                    onChange={(e) => setCertificateNfceNextNumber(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Ex.: 1"
+                  />
                 </label>
                 <label>
                   CSC ID {isCscRequired ? '*' : ''}
                   <input
                     value={certificateCscId}
                     onChange={(e) => setCertificateCscId(e.target.value)}
-                    placeholder={`CSC ID${isCscRequired ? ' obrigatório' : ''}`}
+                    placeholder="Ex.: 000001"
                   />
                 </label>
                 <label>
@@ -1744,10 +1803,13 @@ export function AdminPage() {
                   <input
                     value={certificateCscCode}
                     onChange={(e) => setCertificateCscCode(e.target.value)}
-                    placeholder={`CSC${isCscRequired ? ' obrigatório' : ''}`}
+                    placeholder="Cole o Código de Segurança da SEFAZ"
                   />
                 </label>
               </div>
+              <p className="admin-certificate-meta">
+                Na tela da SEFAZ: ID Cód Segurança vai em CSC ID; Cód Segurança vai em CSC. Próximo número é apenas a sequência numérica da NFC-e.
+              </p>
             </section>
 
             <section className="admin-fiscal-section">
@@ -1781,7 +1843,7 @@ export function AdminPage() {
             </div>
 
             <p className="admin-certificate-meta">
-              Arquivo: {certificateFileName || '-'} | Tamanho: {formatCertificateFileSize(certificateFileSize)} | Origem: {certificateImportSource}
+              Arquivo: {certificateFileName || '-'} | Tamanho: {formatCertificateFileSize(certificateFileSize)} | Origem: {certificateImportSource} | Armazenamento: {certificateHasSecureCertificate ? 'SEGURO' : 'PENDENTE'}
             </p>
             <p className="admin-certificate-meta">Regra UF: {getUfNfceRuleMessage(certificateUf)}</p>
 
@@ -1819,3 +1881,4 @@ export function AdminPage() {
     </section>
   );
 }
+
