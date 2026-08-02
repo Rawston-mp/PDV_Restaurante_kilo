@@ -2611,6 +2611,31 @@ body {
     font-size: 0.88rem;
 }
 
+.admin-certificate-password-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-certificate-password-row input {
+    min-width: 0;
+}
+
+.admin-certificate-password-row button {
+    min-height: 42px;
+    padding-inline: 0.9rem;
+    white-space: nowrap;
+}
+
+.admin-certificate-password-hint {
+    display: block;
+    margin-top: 0.25rem;
+    color: #64748b;
+    font-size: 0.78rem;
+    line-height: 1.25;
+}
+
 .admin-certificate-alert {
     margin: 0;
     border-radius: 10px;
@@ -7643,5 +7668,149 @@ body {
 
     .restaurant-dashboard-shift-actions button {
         width: 100%;
+    }
+}
+
+.pdv-sefaz-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.pdv-sefaz-header {
+    flex: 0 0 auto;
+}
+
+.pdv-sefaz-header h3 {
+    margin: 0;
+}
+
+.pdv-sefaz-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+}
+
+.pdv-sefaz-card,
+.pdv-sefaz-summary-card,
+.pdv-sefaz-gateway {
+    min-width: 0;
+}
+
+.pdv-sefaz-card h4,
+.pdv-sefaz-summary-card h4,
+.pdv-sefaz-gateway h4 {
+    margin: 0.1rem 0;
+}
+
+.pdv-sefaz-compact-copy {
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pdv-sefaz-gateway label {
+    gap: 0.25rem;
+    font-size: 0.72rem;
+}
+
+.pdv-sefaz-gateway input,
+.pdv-sefaz-gateway select {
+    min-height: 2rem;
+    height: 2rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.78rem;
+}
+
+.pdv-sefaz-gateway .admin-config-toolbar button,
+.pdv-sefaz-card .admin-config-toolbar button {
+    min-height: 2.25rem;
+    height: 2.25rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+}
+
+.pdv-sefaz-table-wrap {
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+}
+
+.pdv-sefaz-table-wrap .admin-table th,
+.pdv-sefaz-table-wrap .admin-table td {
+    padding: 0.35rem 0.45rem;
+    font-size: 0.72rem;
+}
+
+.pdv-sefaz-total-grid strong {
+    font-size: 1rem;
+}
+
+@media (max-width: 1280px), (max-height: 760px) {
+    .pdv-sefaz-panel {
+        height: calc(100vh - 0.5rem);
+        border-radius: 0.75rem;
+    }
+
+    .pdv-sefaz-header {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .pdv-sefaz-header .admin-subtitle {
+        display: none;
+    }
+
+    .pdv-sefaz-content {
+        padding: 0.5rem;
+        gap: 0.4rem;
+        grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+    }
+
+    .pdv-sefaz-card,
+    .pdv-sefaz-summary-card,
+    .pdv-sefaz-gateway {
+        padding: 0.55rem;
+    }
+
+    .pdv-sefaz-card:nth-child(3),
+    .pdv-sefaz-info-grid,
+    .pdv-sefaz-flow-grid,
+    .pdv-sefaz-content > .admin-message {
+        display: none;
+    }
+
+    .pdv-sefaz-top-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .pdv-sefaz-gateway > .grid:first-of-type {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .pdv-sefaz-total-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .pdv-sefaz-content > .admin-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.4rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .pdv-sefaz-content {
+        overflow-y: auto;
+    }
+
+    .pdv-sefaz-top-grid,
+    .pdv-sefaz-gateway > .grid:first-of-type,
+    .pdv-sefaz-total-grid,
+    .pdv-sefaz-content > .admin-actions {
+        grid-template-columns: 1fr;
     }
 }
