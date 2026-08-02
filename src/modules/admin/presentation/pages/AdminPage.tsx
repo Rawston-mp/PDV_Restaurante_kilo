@@ -90,11 +90,12 @@ const sefazEnvironmentLabels: Record<'ALL' | 'HOMOLOGACAO' | 'PRODUCAO', string>
 };
 
 const sefazProductionMissingItems = [
-  'Gateway real de autorização SEFAZ-SP ou API fiscal homologada',
-  'Assinatura XML NFC-e com certificado A1',
-  'Transmissão real para webservice da SEFAZ-SP',
-  'Retorno real de protocolo, cStat, xMotivo e QR Code',
-  'Contingência fiscal validada com contador antes do go-live'
+  'Certificado A1 armazenado com segurança pelo Electron/backend',
+  'Assinatura XMLDSig/C14N homologada com certificado A1 real',
+  'Gateway SOAP próprio validado em homologação SEFAZ-SP',
+  'QR Code NFC-e com CSC/cHashQRCode validado',
+  'Contingência e reenvio automático testados com queda e retorno de internet',
+  'Contador validou o fluxo antes do go-live'
 ];
 
 const roleOptions: Role[] = ['ADMIN', 'GERENTE', 'CAIXA', 'ATENDENTE', 'COMANDA_A', 'COMANDA_B'];
@@ -395,11 +396,15 @@ export function AdminPage() {
       stateRegistrationError,
       !certificateCnae.trim() ? 'CNAE principal não selecionado' : null,
       !certificateTaxRegime.trim() ? 'Regime tributário não selecionado' : null,
+      !certificateAddressLine1.trim() ? 'Endereço fiscal linha 1 não informado' : null,
+      !certificateCityUf.trim() ? 'Cidade/UF não informada' : null,
+      !certificateNfceSerie.trim() ? 'Série NFC-e não informada' : null,
       cscError,
       nextNumberError,
       cscCodeInNextNumber ? 'O Código de Segurança da SEFAZ parece estar no campo Próximo número.' : null,
       !certificateFileName.trim() ? 'Certificado A1 não importado' : null,
-      certificateFileName.trim() && !certificateHasSecureCertificate ? 'Certificado A1 referenciado, mas ainda não armazenado com segurança pelo Electron' : null
+      certificateFileName.trim() && !certificateHasSecureCertificate ? 'Certificado A1 referenciado, mas ainda não armazenado com segurança pelo Electron' : null,
+      !certificateExpirationDate.trim() ? 'Vencimento do certificado não informado' : null
     ].filter(Boolean) as string[];
 
     return {
@@ -412,9 +417,54 @@ export function AdminPage() {
     certificateCompanyName,
     certificateCscCode,
     certificateCscId,
+    certificateAddressLine1,
+    certificateCityUf,
+    certificateExpirationDate,
     certificateFileName,
     certificateHasSecureCertificate,
     certificateNfceNextNumber,
+    certificateNfceSerie,
+    certificateStateRegistration,
+    certificateTaxRegime,
+    certificateUf
+  ]);
+
+  const sefazFiscalConfigurationSummary = useMemo(() => {
+    const cnpj = normalizeCnpj(certificateCnpj);
+    const cscError = validateCscByUf({
+      uf: certificateUf,
+      cscId: certificateCscId,
+      cscCode: certificateCscCode
+    });
+
+    return {
+      companyName: certificateCompanyName.trim() || 'Não informada',
+      cnpj: cnpj ? formatCnpj(cnpj) : 'Não informado',
+      stateRegistration: certificateStateRegistration.trim() || 'Não informada',
+      cnae: certificateCnae.trim() || 'Não selecionado',
+      taxRegime: certificateTaxRegime.trim() || 'Não selecionado',
+      environment: sefazEnvironmentLabels[certificateNfceEnvironment],
+      serie: certificateNfceSerie.trim() || 'Não informada',
+      nextNumber: certificateNfceNextNumber.trim() || 'Não informado',
+      cscId: certificateCscId.trim() || 'Não informado',
+      cscStatus: cscError ? 'Pendente' : 'Válido para SP',
+      certificateStatus: certificateHasSecureCertificate
+        ? 'Armazenado com segurança'
+        : certificateFileName.trim()
+          ? 'Referenciado, pendente de armazenamento seguro'
+          : 'Não importado'
+    };
+  }, [
+    certificateCnae,
+    certificateCnpj,
+    certificateCompanyName,
+    certificateCscCode,
+    certificateCscId,
+    certificateFileName,
+    certificateHasSecureCertificate,
+    certificateNfceEnvironment,
+    certificateNfceNextNumber,
+    certificateNfceSerie,
     certificateStateRegistration,
     certificateTaxRegime,
     certificateUf
@@ -629,7 +679,7 @@ export function AdminPage() {
 
   const onSelectSefazEnvironment = (environment: 'HOMOLOGACAO' | 'PRODUCAO') => {
     if (environment === 'PRODUCAO' && !SEFAZ_PRODUCTION_READY) {
-      setMessage('Produção bloqueada: configure e valide o gateway real SEFAZ-SP/API fiscal antes de vender com NFC-e real.');
+      setMessage('Produção bloqueada: configure e valide o gateway SOAP próprio com a SEFAZ-SP antes de vender com NFC-e real.');
       return;
     }
 
@@ -938,14 +988,14 @@ export function AdminPage() {
                     <p className="admin-eyebrow">Fiscal</p>
                     <h3>Pdv_Sefaz</h3>
                     <p className="admin-subtitle">
-                      Controle de ambiente, pendências e reenvio automático das NFC-e.
+                      Controle de ambiente, fila fiscal, pendências e reenvio automático das NFC-e.
                     </p>
                   </div>
                   <button type="button" className="button-muted" onClick={() => setIsPdvSefazOpen(false)}>Fechar</button>
                 </div>
 
                 <div className="p-4 space-y-4">
-                  <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  <section className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <p className="admin-eyebrow relative inline-flex group cursor-help">
                         Ambiente ativo
@@ -960,7 +1010,7 @@ export function AdminPage() {
                       </p>
                       <h4>{SEFAZ_PRODUCTION_READY ? sefazEnvironmentLabels[sefazActiveEnvironment] : 'Homologação (testes)'}</h4>
                       <p className="admin-subtitle">
-                        Homologação é o ambiente disponível para testes fiscais até a integração real com a SEFAZ estar validada.
+                        Homologação é o ambiente disponível para testes fiscais até o gateway próprio estar validado na SEFAZ-SP.
                       </p>
                       <div className="admin-config-toolbar admin-compact-toolbar mt-3">
                         <button
@@ -990,11 +1040,42 @@ export function AdminPage() {
                       </div>
                     </div>
 
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                      <p className="admin-eyebrow">Configuração fiscal vinculada</p>
+                      <h4>{sefazFiscalConfigurationSummary.companyName}</h4>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-700">
+                        <dt>CNPJ</dt>
+                        <dd className="font-semibold text-right">{sefazFiscalConfigurationSummary.cnpj}</dd>
+                        <dt>IE</dt>
+                        <dd className="font-semibold text-right">{sefazFiscalConfigurationSummary.stateRegistration}</dd>
+                        <dt>Ambiente</dt>
+                        <dd className="font-semibold text-right">{sefazFiscalConfigurationSummary.environment}</dd>
+                        <dt>Série / Nº</dt>
+                        <dd className="font-semibold text-right">
+                          {sefazFiscalConfigurationSummary.serie} / {sefazFiscalConfigurationSummary.nextNumber}
+                        </dd>
+                        <dt>CSC ID</dt>
+                        <dd className="font-semibold text-right">{sefazFiscalConfigurationSummary.cscId}</dd>
+                        <dt>CSC</dt>
+                        <dd className="font-semibold text-right">{sefazFiscalConfigurationSummary.cscStatus}</dd>
+                      </dl>
+                      <p className="mt-2 text-xs text-slate-600">
+                        Certificado: {sefazFiscalConfigurationSummary.certificateStatus}.
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-3 w-full"
+                        onClick={() => setIsFiscalSettingsOpen(true)}
+                      >
+                        Abrir configurações NFC-e
+                      </button>
+                    </div>
+
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <p className="admin-eyebrow">Emissor</p>
-                      <h4>Desenvolvimento / Simulador</h4>
+                      <h4>Gateway próprio em preparação</h4>
                       <p className="admin-subtitle">
-                        A fila, o offline e o reenvio estão prontos. Para venda real, conecte o gateway SEFAZ-SP direto ou uma API fiscal homologada.
+                        O Pdv_Sefaz usa os dados desta configuração fiscal. A fila, o offline e o reenvio estão prontos para testes; venda real depende da validação SOAP em homologação.
                       </p>
                     </div>
 
@@ -1002,10 +1083,10 @@ export function AdminPage() {
                       <p className="admin-eyebrow">Prontidão para produção</p>
                       <h4>{sefazProductionReadiness.isReady ? 'Cadastro fiscal completo' : `${sefazProductionReadiness.issues.length} pendência(s)`}</h4>
                       {sefazProductionReadiness.isReady ? (
-                        <p className="admin-subtitle">Dados mínimos informados. Falta apenas validar o emissor real antes do go-live.</p>
+                        <p className="admin-subtitle">Dados mínimos informados. Falta apenas homologar assinatura, QR Code e transmissão SOAP antes do go-live.</p>
                       ) : (
                         <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                          {sefazProductionReadiness.issues.slice(0, 5).map((issue) => (
+                          {sefazProductionReadiness.issues.slice(0, 7).map((issue) => (
                             <li key={issue}>- {issue}</li>
                           ))}
                         </ul>
@@ -1038,9 +1119,9 @@ export function AdminPage() {
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
                         <p className="admin-eyebrow">Gateway Fiscal PDVTouch</p>
-                        <h4>Nossa API fiscal assíncrona, webhooks e contingência</h4>
+                        <h4>SOAP SEFAZ-SP, fila assíncrona e contingência</h4>
                         <p className="admin-subtitle">
-                          O PDV enfileira a NFC-e, nossa API fiscal processa em segundo plano e retorna status por webhook ou consulta.
+                          O PDV enfileira a NFC-e, o gateway fiscal próprio processa em segundo plano e retorna status por consulta ou webhook interno.
                         </p>
                       </div>
                       <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
@@ -1124,10 +1205,10 @@ export function AdminPage() {
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <strong>Fluxo assíncrono</strong>
                         <ol className="mt-2 space-y-1 text-xs text-slate-700">
-                          <li>1. PDV envia a NFC-e para nossa API fiscal.</li>
-                          <li>2. A API valida, registra idempotência e retorna `enqueued`.</li>
-                          <li>3. O worker fiscal transmite para a SEFAZ em segundo plano.</li>
-                          <li>4. Webhook ou consulta atualiza para `authorized`, `rejected`, `canceled` ou `inContingent`.</li>
+                          <li>1. PDV grava a NFC-e na fila fiscal local/persistente.</li>
+                          <li>2. O gateway valida dados, numeração, certificado e idempotência.</li>
+                          <li>3. O worker fiscal assina e transmite para a SEFAZ-SP em segundo plano.</li>
+                          <li>4. Consulta ou webhook interno atualiza para autorizada, rejeitada, cancelada ou revisão manual.</li>
                         </ol>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">

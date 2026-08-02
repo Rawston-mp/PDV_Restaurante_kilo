@@ -16,7 +16,9 @@ export class RetryPendingFiscalDocuments {
   async execute() {
     const now = new Date();
     const documents = await this.repository.listByStatus(['PENDING', 'OFFLINE']);
-    const dueDocuments = documents.filter((document) => document.nextRetryAt <= now);
+    const dueDocuments = documents.filter(
+      (document) => !document.nextRetryAt || document.nextRetryAt <= now
+    );
     const processed: FiscalDocument[] = [];
 
     for (const document of dueDocuments) {
