@@ -24,7 +24,7 @@ export type FiscalDocument = {
   authorizedXml?: string;
   payload: FiscalReceipt;
   attempts: number;
-  nextRetryAt: Date;
+  nextRetryAt?: Date | null;
   cstat?: string;
   xmotivo?: string;
   lastError?: string;
