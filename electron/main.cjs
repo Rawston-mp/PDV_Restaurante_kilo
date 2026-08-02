@@ -6,6 +6,7 @@ const net = require('node:net');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const tls = require('node:tls');
 const { pathToFileURL } = require('node:url');
 
 const PORT = process.env.PORT || '3001';
@@ -193,6 +194,55 @@ const storeCertificateSecurely = async(filePath, importSource) => {
         hasSecureCertificate: true
     };
 };
+
+const loadSecureCertificateBuffer = async(secureStorageId) => {
+    const normalizedId = String(secureStorageId || '').trim();
+    if (!/^[a-f0-9-]{32,}$/i.test(normalizedId)) {
+        throw new Error('Identificador do certificado inválido. Importe o A1 novamente.');
+    }
+
+    const certificatePath = path.join(getSecureCertificateDirectory(), `${normalizedId}.json`);
+    const recordText = await fs.promises.readFile(certificatePath, 'utf8');
+    const record = JSON.parse(recordText);
+
+    if (!record.encryptedPayload || record.algorithm !== 'electron.safeStorage') {
+        throw new Error('Registro do certificado está incompleto ou em formato inválido.');
+    }
+
+    if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Armazenamento criptografado indisponível neste computador.');
+    }
+
+    const decryptedBase64 = safeStorage.decryptString(Buffer.from(record.encryptedPayload, 'base64'));
+    return {
+        buffer: Buffer.from(decryptedBase64, 'base64'),
+        fileName: record.fileName || 'certificado-a1.pfx',
+        fileSize: Number(record.fileSize) || 0,
+        importedAt: record.importedAt || null,
+        sha256: record.sha256 || null
+    };
+};
+
+const validateStoredCertificate = async({ secureStorageId, password }) => {
+    const passphrase = String(password || '');
+    if (!passphrase) {
+        throw new Error('Informe a senha do certificado A1 para validar.');
+    }
+
+    const certificate = await loadSecureCertificateBuffer(secureStorageId);
+    tls.createSecureContext({
+        pfx: certificate.buffer,
+        passphrase
+    });
+
+    return {
+        fileName: certificate.fileName,
+        fileSize: certificate.fileSize,
+        importedAt: certificate.importedAt,
+        sha256: certificate.sha256,
+        validatedAt: new Date().toISOString()
+    };
+};
 const sendNetworkPrinterTest = (config) =>
     new Promise((resolve, reject) => {
         const host = String(config && config.caminhoPorta ? config.caminhoPorta : '').trim();
@@ -242,6 +292,21 @@ ipcMain.handle('certificate:select-and-store', async(_event, options = {}) => {
         };
     }
 });
+
+ipcMain.handle('certificate:validate', async(_event, input = {}) => {
+    try {
+        const result = await validateStoredCertificate(input);
+        writeStartupLog(`Certificado A1 validado: ${result.fileName}.`);
+        return { ok: true, result };
+    } catch (error) {
+        writeStartupLog('Falha ao validar certificado A1.', error);
+        return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error)
+        };
+    }
+});
+
 ipcMain.on('print-job:test', (event, config) => {
     const safeConfig = config && typeof config === 'object' ? config : {};
 
