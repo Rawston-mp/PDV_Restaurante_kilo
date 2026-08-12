@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
+import { readStoreSettings } from '@/modules/admin/infrastructure/local/platformSettings';
 
 const roleLabel: Record<Role, string> = {
   ADMIN: 'Admin',
@@ -16,6 +17,8 @@ export function AuthAccessPanel() {
   const { user, signInWithPassword, signOut, availableRoles } = useAuth();
 
   const [role, setRole] = useState<Role>('CAIXA');
+  const [stores, setStores] = useState(() => readStoreSettings());
+  const [selectedStoreId, setSelectedStoreId] = useState(stores[0]?.id ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -23,7 +26,7 @@ export function AuthAccessPanel() {
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    const result = signInWithPassword(role, password);
+    const result = signInWithPassword(role, password, selectedStoreId);
     setMessage(result.message);
 
     if (result.success) {
@@ -34,7 +37,7 @@ export function AuthAccessPanel() {
   if (user) {
     return (
       <section className="auth-sidebar-status">
-        <p className="auth-sidebar-label">Usuario logado</p>
+        <p className="auth-sidebar-label">Usuário logado</p>
         <strong>{user.name}</strong>
         <span>{roleLabel[user.role]}</span>
         <span>Logado em: {roleLabel[user.role]}</span>
@@ -48,7 +51,7 @@ export function AuthAccessPanel() {
             signOut();
           }}
         >
-          Trocar usuario
+          Trocar usuário
         </button>
       </section>
     );
@@ -64,17 +67,34 @@ export function AuthAccessPanel() {
 
         <div className="auth-panel-header">
           <strong>Acessar o sistema</strong>
-          <span>Selecione seu perfil e informe o PIN</span>
+          <span>Selecione seu perfil, a loja e informe o PIN</span>
         </div>
 
         <form onSubmit={onSubmit} className="auth-form">
-          <label htmlFor="role">Perfil</label>
+          <label htmlFor="role">Usuário</label>
           <select id="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
             {availableRoles.map((option) => (
               <option key={option} value={option}>
                 {roleLabel[option]}
               </option>
             ))}
+          </select>
+
+          <label htmlFor="store-select">Loja</label>
+          <select
+            id="store-select"
+            value={selectedStoreId}
+            onChange={(event) => setSelectedStoreId(event.target.value)}
+          >
+            {stores.length === 0 ? (
+              <option value="">Nenhuma loja</option>
+            ) : (
+              stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.tradeName || s.name}
+                </option>
+              ))
+            )}
           </select>
 
           <label htmlFor="password">Senha</label>
