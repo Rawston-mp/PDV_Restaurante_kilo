@@ -1,9 +1,7 @@
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 
 import type { ComandaStateSnapshot } from '../domain/comandaStateMachine';
 import { ComandaFileStore, type ComandaAuditEvent } from './comandaFileStore';
-import { createOperationalStore, type OperationalPostgresStore } from './operationalStore';
-import { createPostgresPool, parseBoolean } from './postgresConfig';
 
 export type ComandaStore = {
   loadState: () => Promise<ComandaStateSnapshot | null>;
@@ -11,11 +9,64 @@ export type ComandaStore = {
   appendAudit: (event: ComandaAuditEvent) => Promise<void>;
 };
 
+type PostgresConfig = {
+  connectionString?: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password?: string;
+  ssl: boolean;
+};
+
+const parseBoolean = (value: string | undefined, fallback = false) => {
+  if (!value) {
+    return fallback;
+  }
+
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+};
+
+const buildPostgresConfig = (): PostgresConfig => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+
+  return {
+    connectionString: connectionString || undefined,
+    host: process.env.PGHOST?.trim() || '127.0.0.1',
+    port: Number(process.env.PGPORT ?? 5432),
+    database: process.env.PGDATABASE?.trim() || 'postgres',
+    user: process.env.PGUSER?.trim() || 'postgres',
+    password: process.env.PGPASSWORD,
+    ssl: parseBoolean(process.env.PGSSL, false)
+  };
+};
+
+const createPool = () => {
+  const config = buildPostgresConfig();
+
+  if (config.connectionString) {
+    return new Pool({
+      connectionString: config.connectionString,
+      ssl: config.ssl ? { rejectUnauthorized: false } : undefined
+    });
+  }
+
+  return new Pool({
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    ssl: config.ssl ? { rejectUnauthorized: false } : undefined
+  });
+};
+
 class ComandaPostgresStore implements ComandaStore {
-  constructor(
-    private readonly pool: Pool,
-    private readonly operationalStore: OperationalPostgresStore
-  ) {}
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
 
   async initialize() {
     await this.pool.query(`
@@ -61,8 +112,6 @@ class ComandaPostgresStore implements ComandaStore {
       `,
       [JSON.stringify(snapshot)]
     );
-
-    await this.operationalStore.mirrorComandaSnapshot(snapshot);
   }
 
   async appendAudit(event: ComandaAuditEvent) {
@@ -73,8 +122,6 @@ class ComandaPostgresStore implements ComandaStore {
       `,
       [event.action, event.numero, JSON.stringify(event)]
     );
-
-    await this.operationalStore.appendAudit(event);
   }
 }
 
@@ -85,13 +132,17 @@ export const createComandaStore = async (): Promise<{ store: ComandaStore; using
     return { store: new ComandaFileStore(), usingPostgres: false };
   }
 
+  const pool = createPool();
+  const pgStore = new ComandaPostgresStore(pool);
+
   try {
-    const operationalStore = await createOperationalStore();
-    const store = new ComandaPostgresStore(createPostgresPool(), operationalStore);
-    await store.initialize();
-    return { store, usingPostgres: true };
-  } catch (e) {
-    console.error('Failed to initialize PostgreSQL comanda store, falling back to file store:', e);
+    await pgStore.initialize();
+    return { store: pgStore, usingPostgres: true };
+  } catch {
+    await pool.end().catch(() => {
+      // ignore pool close errors in fallback path
+    });
+
     return { store: new ComandaFileStore(), usingPostgres: false };
   }
 };

@@ -3,19 +3,20 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import type {
+  ComandaLockOwner,
   ComandaLockStationId,
   ComandaStateSnapshot,
   ComandaStatus
 } from '../domain/comandaStateMachine';
 
 export type ComandaAuditEvent = {
-  action: string;
+  action: 'OPEN_COMANDA' | 'TRANSITION' | 'LOCK_ACQUIRED' | 'LOCK_RENEWED' | 'LOCK_RELEASED' | 'LOCK_EXPIRED' | 'ITEMS_SYNCED' | 'ITEM_ADDED' | 'PESAGEM_RECORDED';
   numero: string;
   fromStatus?: ComandaStatus;
   toStatus?: ComandaStatus;
   at: string;
   reason?: string;
-  lockOwner?: string;
+  lockOwner?: ComandaLockOwner;
   lockStationId?: ComandaLockStationId;
   lockExpiresAt?: string;
   itemId?: string;
@@ -30,8 +31,8 @@ const defaultDataDir = join(currentDir, '..', '..', 'data');
 export class ComandaFileStore {
   private readonly stateFilePath: string;
   private readonly auditFilePath: string;
-  private stateWriteQueue: Promise<void> = Promise.resolve();
-  private auditWriteQueue: Promise<void> = Promise.resolve();
+  private stateWriteQueue = Promise.resolve();
+  private auditWriteQueue = Promise.resolve();
 
   constructor(dataDir = defaultDataDir) {
     this.stateFilePath = join(dataDir, 'comandas-state.json');
@@ -58,30 +59,34 @@ export class ComandaFileStore {
     }
   }
 
-  saveState(snapshot: ComandaStateSnapshot) {
-    const serializedSnapshot = JSON.stringify(snapshot, null, 2);
-    this.stateWriteQueue = this.stateWriteQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await fs.mkdir(dirname(this.stateFilePath), { recursive: true });
-        const tempPath = `${this.stateFilePath}.tmp`;
-
-        await fs.writeFile(tempPath, serializedSnapshot, 'utf-8');
-        await fs.rename(tempPath, this.stateFilePath);
-      });
-
-    return this.stateWriteQueue;
+  async saveState(snapshot: ComandaStateSnapshot) {
+    const write = this.stateWriteQueue.then(
+      () => this.writeState(snapshot),
+      () => this.writeState(snapshot)
+    );
+    this.stateWriteQueue = write.catch(() => undefined);
+    return write;
   }
 
-  appendAudit(event: ComandaAuditEvent) {
-    const serializedEvent = `${JSON.stringify(event)}\n`;
-    this.auditWriteQueue = this.auditWriteQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await fs.mkdir(dirname(this.auditFilePath), { recursive: true });
-        await fs.appendFile(this.auditFilePath, serializedEvent, 'utf-8');
-      });
+  private async writeState(snapshot: ComandaStateSnapshot) {
+    await fs.mkdir(dirname(this.stateFilePath), { recursive: true });
+    const tempPath = `${this.stateFilePath}.tmp`;
 
-    return this.auditWriteQueue;
+    await fs.writeFile(tempPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+    await fs.rename(tempPath, this.stateFilePath);
+  }
+
+  async appendAudit(event: ComandaAuditEvent) {
+    const write = this.auditWriteQueue.then(
+      () => this.writeAudit(event),
+      () => this.writeAudit(event)
+    );
+    this.auditWriteQueue = write.catch(() => undefined);
+    return write;
+  }
+
+  private async writeAudit(event: ComandaAuditEvent) {
+    await fs.mkdir(dirname(this.auditFilePath), { recursive: true });
+    await fs.appendFile(this.auditFilePath, `${JSON.stringify(event)}\n`, 'utf-8');
   }
 }

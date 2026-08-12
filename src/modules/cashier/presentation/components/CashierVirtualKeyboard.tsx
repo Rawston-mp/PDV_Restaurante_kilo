@@ -1,10 +1,13 @@
 import { CornerDownLeft, Delete, Space, X } from 'lucide-react';
 import type { MouseEvent } from 'react';
+import type { CashierProduct } from './ProductCard';
 
 type CashierVirtualKeyboardProps = {
   onKeyPress: (key: string) => void;
   onClose: () => void;
   enterLabel?: string;
+  products?: CashierProduct[];
+  onAddProduct?: (product: CashierProduct) => void;
 };
 
 const numericRows = [
@@ -20,7 +23,13 @@ const alphaRows = [
   ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
 ] as const;
 
-export function CashierVirtualKeyboard({ onKeyPress, onClose, enterLabel = 'Enter' }: CashierVirtualKeyboardProps) {
+export function CashierVirtualKeyboard({
+  onKeyPress,
+  onClose,
+  enterLabel = 'Enter',
+  products = [],
+  onAddProduct
+}: CashierVirtualKeyboardProps) {
   const keepInputFocused = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
   };
@@ -134,6 +143,36 @@ export function CashierVirtualKeyboard({ onKeyPress, onClose, enterLabel = 'Ente
           </div>
         </div>
       </div>
+
+      {products.length > 0 && onAddProduct ? (
+        <div className="mt-3 rounded-xl border border-slate-800 bg-slate-900 p-3">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-sky-300">Resultados</p>
+          <div className="grid max-h-40 gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+            {products.slice(0, 6).map((product) => (
+              <div
+                key={product.id}
+                className="flex min-h-[48px] items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-black text-white">{product.name}</p>
+                  <p className="text-[11px] font-semibold text-sky-300">
+                    {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Adicionar"
+                  onMouseDown={keepInputFocused}
+                  onClick={() => onAddProduct(product)}
+                  className="min-h-[44px] rounded-lg bg-emerald-500 px-4 text-xs font-black uppercase text-white hover:bg-emerald-600"
+                >
+                  Adicionar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
