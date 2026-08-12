@@ -1,17 +1,17 @@
 import { ShoppingCart } from 'lucide-react';
 import { CartItem, type CashierCartItem } from './CartItem';
 import { formatBRL } from '../../types';
-import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
 
 type CartPanelProps = {
   items: CashierCartItem[];
   comandaNumber: string;
-  joinedComandaNumbers?: string[];
+  activeLabel?: string;
+  hasActiveComanda?: boolean;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
-  onEditValue?: (id: string, value: string) => boolean;
   onRefreshComanda: () => void;
+  onLeaveComandaOpen?: () => void;
   isComandaSyncing?: boolean;
   onReceive: () => void;
   onCashClose: () => void;
@@ -20,37 +20,35 @@ type CartPanelProps = {
 export function CartPanel({
   items,
   comandaNumber,
-  joinedComandaNumbers = [],
+  activeLabel,
+  hasActiveComanda = false,
   onIncrement,
   onDecrement,
   onRemove,
-  onEditValue,
   onRefreshComanda,
+  onLeaveComandaOpen,
   isComandaSyncing = false,
   onReceive,
   onCashClose,
 }: CartPanelProps) {
   const subtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
   const totalItems = items.reduce((acc, i) => acc + (i.unit === 'KG' ? 1 : i.quantity), 0);
-  const checkoutNumbers = [...new Set([comandaNumber, ...joinedComandaNumbers].map(normalizeComandaNumber).filter(Boolean))];
-  const attendanceLabel = checkoutNumbers.length > 1
-    ? `Comandas ${checkoutNumbers.map((numero) => `#${numero}`).join(' + ')}`
-    : checkoutNumbers.length === 1
-      ? `Atendimento #${checkoutNumbers[0]}`
-      : 'Venda avulsa';
+  const attendanceLabel = hasActiveComanda
+    ? activeLabel ?? (comandaNumber.trim() ? `#${comandaNumber.trim()}` : 'Sem comanda')
+    : 'Venda avulsa';
 
   return (
     <div className="flex flex-col h-full bg-white">
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+      <header className="flex items-center justify-between px-5 py-5 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={21} className="text-sky-600" />
-          <span className="text-xl font-bold text-slate-800">
+          <ShoppingCart size={24} className="text-sky-600" />
+          <span className="text-2xl font-bold text-slate-800">
             Carrinho
           </span>
         </div>
-        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">
+        <span className="text-xs font-semibold bg-sky-100 text-sky-700 px-3 py-1 rounded-full">
           {totalItems} {totalItems === 1 ? 'item' : 'itens'}
         </span>
       </header>
@@ -68,11 +66,9 @@ export function CartPanel({
               <CartItem
                 key={item.id}
                 item={item}
-                showSource={checkoutNumbers.length > 1}
                 onIncrement={onIncrement}
                 onDecrement={onDecrement}
                 onRemove={onRemove}
-                onEditValue={onEditValue}
               />
             ))}
           </ul>
@@ -81,8 +77,14 @@ export function CartPanel({
 
       {/* ── Footer ─────────────────────────────────────────────── */}
       <footer className="border-t border-slate-200 px-5 pt-4 pb-5 space-y-2.5">
-        <div className="mb-1 text-sm text-slate-500">
-          {attendanceLabel}
+        <div className="text-sm text-slate-500 mb-1">
+          {attendanceLabel === 'Venda avulsa' ? (
+            <>
+              Atendimento <span>{attendanceLabel}</span>
+            </>
+          ) : (
+            `Atendimento ${attendanceLabel}`
+          )}
         </div>
         <div className="flex justify-between text-xl text-slate-500">
           <span>Subtotal</span>
@@ -96,28 +98,40 @@ export function CartPanel({
           </span>
         </div>
 
-        {checkoutNumbers.length > 0 && (
-          <button
-            type="button"
-            onClick={onRefreshComanda}
-            disabled={isComandaSyncing}
-            className="
-              w-full h-11 rounded-xl
-              border border-slate-300 bg-slate-50 hover:bg-slate-100
-              disabled:cursor-wait disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400
-              text-slate-700 text-sm font-semibold
-              transition-colors duration-150
-            "
-          >
-            {isComandaSyncing ? 'Salvando comanda...' : 'Atualizar comanda'}
-          </button>
-        )}
+        {hasActiveComanda ? (
+          <>
+            <button
+              type="button"
+              onClick={onRefreshComanda}
+              disabled={isComandaSyncing}
+              className="
+                w-full h-11 rounded-xl
+                border border-slate-300 bg-slate-50 hover:bg-slate-100
+                disabled:cursor-not-allowed disabled:opacity-60
+                text-slate-700 text-sm font-semibold
+                transition-colors duration-150
+              "
+            >
+              {isComandaSyncing ? 'Salvando comanda...' : 'Atualizar comanda'}
+            </button>
+
+            {onLeaveComandaOpen ? (
+              <button
+                type="button"
+                onClick={onLeaveComandaOpen}
+                className="w-full h-11 rounded-xl border border-orange-200 bg-orange-50 text-sm font-semibold text-orange-700 hover:bg-orange-100 transition-colors"
+              >
+                Manter comanda aberta
+              </button>
+            ) : null}
+          </>
+        ) : null}
 
         <button
           type="button"
+          aria-label="Receber"
           disabled={items.length === 0}
           onClick={onReceive}
-          aria-label="Receber"
           className="
             mt-2 w-full h-14 rounded-2xl
             border border-sky-400
@@ -128,7 +142,7 @@ export function CartPanel({
             active:scale-95
           "
         >
-          Receber <span className="ml-2 text-sm font-black opacity-70">F9</span>
+          Receber <span className="ml-2 rounded-md bg-white/70 px-2 py-0.5 text-xs font-black text-sky-700">F9</span>
         </button>
 
         <button

@@ -1,5 +1,4 @@
-import { Check, Minus, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Minus, Plus, Trash2 } from 'lucide-react';
 import { formatBRL } from '../../types';
 
 export type CashierCartItem = {
@@ -9,187 +8,100 @@ export type CashierCartItem = {
   quantity: number;
   unitPrice: number;
   unit: 'KG' | 'UN';
-  category?: string;
   productCode?: string;
   barcode?: string;
   ncm?: string;
   cfop?: string;
   taxSituationCode?: string;
-  cstIcms?: string;
   fiscalType?: string;
-  aliqIcms?: string;
-  aliqPis?: string;
-  aliqCofins?: string;
   imageUrl?: string;
-  sourceComandaNumber?: string;
-  sourceItemId?: string;
-  catalogProductId?: string;
-  createdInCashier?: boolean;
+  sourceComanda?: string;
+  source?: 'BALANCA' | 'CAIXA';
 };
 
 type CartItemProps = {
   item: CashierCartItem;
-  showSource?: boolean;
   onIncrement: (id: string) => void;
   onDecrement: (id: string) => void;
   onRemove: (id: string) => void;
-  onEditValue?: (id: string, value: string) => boolean;
 };
 
-export function CartItem({ item, showSource = false, onIncrement, onDecrement, onRemove, onEditValue }: CartItemProps) {
-  const [isEditingValue, setIsEditingValue] = useState(false);
-  const [editableValue, setEditableValue] = useState('');
+export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemProps) {
   const total = item.quantity * item.unitPrice;
   const isKg = item.unit === 'KG';
-  const canEditValue = isKg && Boolean(item.createdInCashier) && Boolean(onEditValue);
-  const formattedQuantity = item.quantity.toLocaleString('pt-BR', {
-    minimumFractionDigits: isKg ? 3 : 0,
-    maximumFractionDigits: isKg ? 3 : 0,
-  });
-  const formattedTotalInput = total.toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  const openValueEditor = () => {
-    if (!canEditValue) {
-      return;
-    }
-
-    setEditableValue(formattedTotalInput);
-    setIsEditingValue(true);
-  };
-
-  const cancelValueEditor = () => {
-    setEditableValue('');
-    setIsEditingValue(false);
-  };
-
-  const confirmValueEditor = () => {
-    const wasUpdated = onEditValue?.(item.id, editableValue);
-    if (wasUpdated) {
-      setIsEditingValue(false);
-    }
-  };
 
   return (
-    <li
-      className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-slate-200 px-3 py-2 ${canEditValue ? 'hover:bg-sky-50' : ''}`}
-      title={canEditValue ? 'Clique para editar o valor lançado no caixa' : undefined}
-    >
-      <div className="flex-1 min-w-0">
-        <p className="truncate text-sm font-bold text-slate-900">{item.name}</p>
-        <p className="mt-0.5 truncate text-xs font-medium text-sky-700">
-          {showSource && item.sourceComandaNumber ? `Comanda #${item.sourceComandaNumber} · ` : ''}
-          {formattedQuantity} {isKg ? 'kg' : 'un'} · {formatBRL(item.unitPrice)} / {isKg ? 'kg' : 'un'}
-        </p>
+    <li className="flex items-center gap-3 py-3 px-4 border-b border-slate-100">
+      <div className="h-14 w-14 shrink-0 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
+        {item.imageUrl ? (
+          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-slate-100 to-slate-200" />
+        )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
-        {isEditingValue ? (
-          <form
-            className="flex items-center gap-1.5 rounded-xl border border-sky-200 bg-white p-1.5 shadow-lg shadow-slate-200"
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              confirmValueEditor();
-            }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <span className="pl-2 text-xs font-black text-slate-500">R$</span>
-            <input
-              autoFocus
-              value={editableValue}
-              onChange={(event) => setEditableValue(event.target.value.replace(/[^\d,.]/g, ''))}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  cancelValueEditor();
-                }
-              }}
-              inputMode="decimal"
-              aria-label={`Valor de ${item.name}`}
-              className="h-10 w-24 rounded-lg border border-slate-200 bg-slate-50 px-2 text-right text-sm font-black text-slate-900 outline-none focus:border-sky-400 focus:bg-white"
-            />
-            <button
-              type="submit"
-              onClick={(event) => event.stopPropagation()}
-              aria-label={`Confirmar valor de ${item.name}`}
-              title="Confirmar valor"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500 text-white transition-colors hover:bg-emerald-600"
-            >
-              <Check size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                cancelValueEditor();
-              }}
-              aria-label={`Cancelar edição de ${item.name}`}
-              title="Cancelar edição"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100"
-            >
-              <X size={16} />
-            </button>
-          </form>
-        ) : (
+      <div className="flex-1 min-w-0">
+        <p className="text-base font-semibold text-slate-800 truncate">{item.name}</p>
+        {item.description ? <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{item.description}</p> : null}
+        {item.sourceComanda ? (
+          <p className="text-[11px] font-semibold text-sky-600 mt-0.5">
+            Comanda #{item.sourceComanda} · {item.source === 'BALANCA' ? 'Balança' : 'Caixa'}
+          </p>
+        ) : null}
+        <p className="text-sm text-slate-500 mt-0.5">
+          {isKg
+            ? formatBRL(item.unitPrice)
+            : `${item.quantity.toLocaleString('pt-BR', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+              })} un · ${formatBRL(item.unitPrice)} / un`}
+        </p>
+        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+          ID {item.productCode ?? '--'}
+        </p>
+
+        {!isKg ? (
+        <div className="mt-1.5 inline-flex items-center rounded-lg border border-slate-200 overflow-hidden">
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              openValueEditor();
-            }}
-            disabled={!canEditValue}
-            aria-label={canEditValue ? `Editar valor de ${item.name}` : undefined}
-            title={canEditValue ? 'Editar valor do lançamento' : undefined}
-            className={`flex min-w-[72px] items-center justify-end gap-1 rounded-lg px-2 py-1 text-right text-base font-black ${
-              canEditValue
-                ? 'text-slate-900 transition-colors hover:bg-sky-50 hover:text-sky-700'
-                : 'cursor-default text-slate-900'
-            }`}
+            onClick={() => onDecrement(item.id)}
+            aria-label={`Diminuir ${item.name}`}
+            className="h-12 w-12 text-slate-500 hover:bg-slate-100 transition-colors"
           >
-            {formatBRL(total)}
-            {canEditValue && <Pencil size={13} className="text-sky-500" />}
+            <Minus size={14} className="mx-auto" />
           </button>
-        )}
-        <div className="inline-flex items-center gap-1.5">
-          {!isKg && (
-            <>
-              <button
-                type="button"
-                onClick={() => onDecrement(item.id)}
-                aria-label={`Diminuir ${item.name}`}
-                title="Diminuir quantidade"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-slate-300 text-slate-600 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-              >
-                <Minus size={17} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onIncrement(item.id)}
-                aria-label={`Aumentar ${item.name}`}
-                title="Aumentar quantidade"
-                className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-sky-300 text-sky-700 transition-colors hover:bg-sky-50"
-              >
-                <Plus size={17} />
-              </button>
-            </>
-          )}
+          <span className="h-12 min-w-[48px] px-2 flex items-center justify-center text-sm font-semibold text-slate-700 border-x border-slate-200">
+            {item.quantity.toLocaleString('pt-BR', {
+              minimumFractionDigits: isKg ? 3 : 0,
+              maximumFractionDigits: isKg ? 3 : 0,
+            })}
+          </span>
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemove(item.id);
-            }}
-            aria-label={`Remover ${item.name}`}
-            title="Remover item"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-red-300 bg-red-50 text-red-700 transition-colors hover:bg-red-100"
+            onClick={() => onIncrement(item.id)}
+            aria-label={`Aumentar ${item.name}`}
+            className="h-12 w-12 text-sky-600 hover:bg-sky-50 transition-colors"
           >
-            <Trash2 size={16} />
+            <Plus size={14} className="mx-auto" />
           </button>
         </div>
+        ) : (
+          <p className="mt-1.5 text-sm font-semibold text-slate-600">
+            {item.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
+          </p>
+        )}
+      </div>
+
+      <div className="min-w-[100px] text-right">
+        <p className="text-xl font-bold text-slate-800">{formatBRL(total)}</p>
+        <button
+          type="button"
+          onClick={() => onRemove(item.id)}
+          aria-label={`Remover ${item.name}`}
+          className="mt-1 inline-flex h-12 w-12 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+        >
+          <Trash2 size={16} />
+        </button>
       </div>
     </li>
   );

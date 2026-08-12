@@ -13,7 +13,6 @@ export interface ItemComanda {
   categoriaId: string;
   subtotal: number;
   porUnidade: boolean;
-  origemLancamento?: 'BALANCA' | 'CAIXA';
 }
 
 export interface Comanda {
@@ -41,15 +40,10 @@ export interface EstadoComanda {
   total: number;
   pesoAtual: number;
   pesoManual: number | null;
-  precoAtual: number | null;
+  precoAtual: number;
   pesquisa: string;
   tecladoAtivo: 'NUMERICO' | 'VIRTUAL';
   isComandaConectada: boolean;
-  isSyncing: boolean;
-  pendingSyncCount: number;
-  feedback: string | null;
   erro: string | null;
-  canOpen: boolean;
-  canDeleteItems: boolean;
   canFinalize: boolean;
 }

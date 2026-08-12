@@ -713,7 +713,7 @@ Body: { accessKey, status, protocol, cstat, xmotivo, authorizedXml, qrCodeUrl }
 ### Como aplicar:
 ```bash
 # 1. Configurar variável de ambiente
-export DATABASE_URL="postgresql://postgres:SUA_SENHA_AQUI@localhost:55432/pdv_touch_dev"
+export DATABASE_URL="postgresql://postgres:<senha_local>@localhost:55432/pdv_touch_dev"
 
 # 2. Aplicar migration
 npx prisma migrate deploy
@@ -728,3 +728,68 @@ npx prisma generate
 - `FiscalDocumentRepository` (a implementar) deve usar Prisma Client com as novas tabelas
 
 **Status:** Migração de BD fiscal pronta para produção.
+
+---
+
+## Checkpoint Fiscal Atualizado (2026-08-11)
+
+### Preparação de XML NFC-e em homologação
+
+O sistema agora possui um fluxo inicial de preparação local de XML NFC-e para homologação, acionado pela tela **Configurações Fiscais NFC-e**.
+
+O botão **Preparar XML homologação** deve:
+- Usar apenas o ambiente de homologação.
+- Bloquear execução quando o ambiente estiver em produção.
+- Usar o certificado A1 previamente importado e armazenado com segurança pelo Electron `safeStorage`.
+- Solicitar/usar a senha apenas no momento do teste/preparação.
+- Limpar o campo de senha após a operação.
+- Montar XML NFC-e de homologação.
+- Gerar chave de acesso e estrutura de QR Code com CSC/CSC ID.
+- Assinar o XML localmente com o certificado A1.
+- Validar a estrutura básica do XML assinado antes de qualquer transmissão.
+
+### Arquivos envolvidos
+
+- `electron/main.cjs`
+  - IPC `nfce:prepare-homologation`.
+  - Leitura segura do certificado armazenado.
+  - Preparação de XML NFC-e homologação.
+  - Assinatura local com `node-forge`.
+  - Validação estrutural mínima.
+
+- `electron/preload.cjs`
+  - Exposição segura de `prepararNfceHomologacao`.
+
+- `src/vite-env.d.ts`
+  - Tipos de entrada e retorno da preparação NFC-e.
+
+- `src/modules/admin/presentation/pages/AdminPage.tsx`
+  - Botão **Preparar XML homologação**.
+  - Bloqueio de produção.
+  - Uso temporário da senha do certificado.
+
+### Status técnico real
+
+Implementado:
+- Importação/referência de certificado A1.
+- Armazenamento seguro do arquivo do certificado no computador local.
+- Validação do certificado com senha informada no momento do teste.
+- Preparação local de XML NFC-e homologação.
+- Assinatura local preparatória.
+- QR Code preparatório com CSC/CSC ID.
+- Bloqueio de produção.
+
+Ainda pendente antes de emissão real:
+- Validação XSD oficial do XML NFC-e.
+- Endurecimento da assinatura XMLDSig/C14N conforme exigência SEFAZ.
+- Geração final do QR Code NFC-e com `cHashQRCode` validado oficialmente.
+- Envio SOAP real para SEFAZ-SP em homologação.
+- Tratamento completo de retornos `cStat`.
+- Persistência final da fila fiscal e reenvio automático em produção.
+- Validação do contador antes do go-live.
+
+### Regra de segurança
+
+Produção deve permanecer bloqueada enquanto a homologação oficial SEFAZ-SP não estiver concluída e validada.
+
+A senha do certificado A1 não deve ser salva em banco, localStorage, arquivo texto ou documentação. Ela deve ser usada somente em memória durante a validação/preparação.

@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react';
 import { useClientsQuery } from '@/modules/clients/presentation/hooks/useClientsQuery';
-import {
-  formatCpfCnpj,
-  isValidCpfCnpj,
-  normalizeCpfCnpj
-} from '@/shared/domain/services/documentValidation';
 import { type CashierCartItem } from './CartItem';
 import {
   type PaymentDocumentMode,
@@ -19,7 +14,6 @@ export type PaymentConfirmPayload = {
   payments: PaymentEntry[];
   discountAmount: number;
   documentMode: PaymentDocumentMode;
-  customerDocument?: string;
   fiadoClientId?: string;
 };
 
@@ -56,24 +50,11 @@ function Numpad({ onKey }: { onKey: (k: string) => void }) {
   );
 }
 
-function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return target.isContentEditable
-    || target instanceof HTMLInputElement
-    || target instanceof HTMLSelectElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLButtonElement;
-}
-
-export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', onConfirm, onBack }: PaymentPanelProps) {
+export function PaymentPanel({ total, items, onConfirm, onBack, initialDocumentMode = 'ORCAMENTO' }: PaymentPanelProps) {
   const { clients } = useClientsQuery();
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('DINHEIRO');
   const [documentMode, setDocumentMode] = useState<PaymentDocumentMode>(initialDocumentMode);
-  const [customerDocument, setCustomerDocument] = useState('');
   const [inputRaw, setInputRaw] = useState('');
   const [discountAmount, setDiscountAmount] = useState(0);
   const [selectedFiadoClientId, setSelectedFiadoClientId] = useState('');
@@ -85,29 +66,10 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
     [clients]
   );
 
-  useEffect(() => {
-    setDocumentMode(initialDocumentMode);
-  }, [initialDocumentMode]);
-
   const payableTotal = Math.max(0, total - discountAmount);
   const totalPaid = entries.reduce((sum, entry) => sum + entry.amount, 0);
   const remaining = Math.max(0, payableTotal - totalPaid);
   const change = totalPaid > payableTotal ? totalPaid - payableTotal : 0;
-  const customerDocumentDigits = normalizeCpfCnpj(customerDocument);
-  const isCustomerDocumentValid = !customerDocumentDigits
-    || isValidCpfCnpj(customerDocumentDigits);
-  const customerDocumentError = documentMode === 'NFCE' && !isCustomerDocumentValid
-    ? 'CPF/CNPJ do cliente inválido.'
-    : null;
-  const documentModeBadge = documentMode === 'NFCE'
-    ? {
-        label: 'Fiscal',
-        className: 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      }
-    : {
-        label: 'Orçamento',
-        className: 'border-red-200 bg-red-50 text-red-700'
-      };
   const fiscalSummary = items.map((item) => ({
     id: item.id,
     name: item.name,
@@ -155,22 +117,17 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
   const handleAddPayment = () => {
     if (selectedMethod === 'DESCONTO') {
       const amount = parseAmount(inputRaw, 0);
-      if (amount <= 0) return false;
+      if (amount <= 0) return;
       setDiscountAmount((current) => Math.min(total, current + amount));
       setInputRaw('');
-      return true;
-    }
-
-    if (selectedMethod === 'FIADO') {
-      return false;
+      return;
     }
 
     const amount = parseAmount(inputRaw, remaining);
-    if (amount <= 0) return false;
+    if (amount <= 0) return;
     const label = PAYMENT_METHODS.find((method) => method.method === selectedMethod)?.label ?? selectedMethod;
     setEntries((prev) => [...prev, { method: selectedMethod, label, amount }]);
     setInputRaw('');
-    return true;
   };
 
   const handleRemoveEntry = (index: number) => {
@@ -194,54 +151,34 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
         fiadoClientId: clientId
       });
     } catch {
-      setFiadoFeedback('Não foi possível lançar o fiado neste momento.');
+      setFiadoFeedback('Nao foi possivel lancar o fiado neste momento.');
     } finally {
       setIsLaunchingFiado(false);
     }
   };
 
-  const canConfirm = selectedMethod !== 'FIADO'
-    && totalPaid >= payableTotal
-    && (entries.length > 0 || payableTotal === 0)
-    && !customerDocumentError;
-
-  const handleConfirmAndClose = () => {
-    if (!canConfirm) {
-      return false;
-    }
-
-    void onConfirm({
-      payments: entries,
-      discountAmount,
-      documentMode,
-      customerDocument: documentMode === 'NFCE' ? customerDocumentDigits : undefined
-    });
-    return true;
-  };
+  const canConfirm = selectedMethod !== 'FIADO' && totalPaid >= payableTotal && (entries.length > 0 || payableTotal === 0);
 
   useEffect(() => {
-    const handlePaymentEnter = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter' || event.ctrlKey || event.altKey || event.metaKey) {
-        return;
-      }
-
-      if (isEditableKeyboardTarget(event.target)) {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || selectedMethod === 'FIADO') {
         return;
       }
 
       event.preventDefault();
-
       if (canConfirm) {
-        handleConfirmAndClose();
+        void onConfirm({ payments: entries, discountAmount, documentMode });
         return;
       }
 
       handleAddPayment();
     };
 
-    window.addEventListener('keydown', handlePaymentEnter);
-    return () => window.removeEventListener('keydown', handlePaymentEnter);
-  }, [canConfirm, customerDocumentDigits, discountAmount, documentMode, entries, handleAddPayment, inputRaw, onConfirm, remaining, selectedMethod, total]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [canConfirm, discountAmount, documentMode, entries, inputRaw, remaining, selectedMethod]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -255,18 +192,18 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="font-bold text-slate-800 text-base">Recebimento</h2>
-            <span
-              aria-label={`Documento selecionado: ${documentModeBadge.label}`}
-              className={`inline-flex min-h-6 items-center rounded-full border px-2 text-[11px] font-black uppercase tracking-wide ${documentModeBadge.className}`}
-            >
-              {documentModeBadge.label}
-            </span>
-          </div>
+          <h2 className="font-bold text-slate-800 text-base">Recebimento</h2>
           <p className="text-xs text-slate-500">Total da compra: {formatBRL(total)}</p>
         </div>
-        <span className="text-xl font-extrabold text-orange-500">{formatBRL(remaining)}</span>
+        <div className="text-right">
+          <span
+            aria-label={documentMode === 'NFCE' ? 'Documento selecionado: Fiscal' : 'Documento selecionado: Orçamento'}
+            className={`mb-1 block text-xs font-black uppercase tracking-wide ${documentMode === 'NFCE' ? 'text-emerald-700' : 'text-red-700'}`}
+          >
+            {documentMode === 'NFCE' ? 'Fiscal' : 'Orçamento'}
+          </span>
+          <span className="text-xl font-extrabold text-orange-500">{formatBRL(remaining)}</span>
+        </div>
       </header>
 
       <div className="flex flex-1 gap-0 overflow-hidden">
@@ -301,37 +238,20 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
               <button
                 type="button"
                 onClick={() => setDocumentMode('NFCE')}
+                aria-label="NFC-e F3"
                 className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'NFCE' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                NFC-e <span className="ml-1 text-[11px] font-black opacity-70">F3</span>
+                NFC-e <span className="text-[11px] font-black opacity-70">F3</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDocumentMode('ORCAMENTO')}
+                aria-label="Orçamento F2"
                 className={`min-h-[48px] rounded-lg border px-3 text-sm font-bold ${documentMode === 'ORCAMENTO' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                Orçamento <span className="ml-1 text-[11px] font-black opacity-70">F2</span>
+                Orçamento <span className="text-[11px] font-black opacity-70">F2</span>
               </button>
             </div>
-            {documentMode === 'NFCE' && (
-              <div className="mt-3">
-                <label htmlFor="nfce-customer-document" className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  CPF/CNPJ do cliente
-                </label>
-                <input
-                  id="nfce-customer-document"
-                  value={customerDocument}
-                  onChange={(event) => setCustomerDocument(formatCpfCnpj(event.target.value))}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="Opcional, se o cliente solicitar"
-                  className={`min-h-[44px] w-full rounded-lg border px-3 text-sm outline-none ${customerDocumentError ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 bg-white text-slate-700 focus:border-emerald-400'}`}
-                />
-                {customerDocumentError && (
-                  <p className="mt-1 text-xs font-semibold text-red-600">{customerDocumentError}</p>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="mx-2 mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -371,7 +291,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
             <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cliente do fiado</p>
               {activeClients.length === 0 ? (
-                <p className="text-sm text-slate-500">Nenhum cliente ativo cadastrado para lançamento de fiado.</p>
+                <p className="text-sm text-slate-500">Nenhum cliente ativo cadastrado para lancamento de fiado.</p>
               ) : (
                 <select
                   value={selectedFiadoClientId}
@@ -395,7 +315,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
               )}
 
               <p className="text-xs text-slate-500">
-                Fiado fecha a comanda como orçamento não fiscal e mantém a cobrança para acerto futuro.
+                Fiado fecha a comanda como orçamento nao fiscal e mantém a cobrança para acerto futuro.
               </p>
 
               {fiadoFeedback && (
@@ -487,7 +407,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
                           ID {item.productCode ?? '--'} · NCM {item.ncm ?? '--'} · CFOP {item.cfop ?? '--'}
                         </p>
                         <p className="text-[11px] text-slate-500">
-                          {item.fiscalType ?? 'Fiscal não informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
+                          {item.fiscalType ?? 'Fiscal nao informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
@@ -512,7 +432,7 @@ export function PaymentPanel({ total, items, initialDocumentMode = 'ORCAMENTO', 
         <button
           type="button"
           disabled={!canConfirm}
-          onClick={handleConfirmAndClose}
+          onClick={() => onConfirm({ payments: entries, discountAmount, documentMode })}
           className="
             w-full h-14 rounded-xl flex items-center justify-center gap-2
             bg-emerald-500 hover:bg-emerald-600

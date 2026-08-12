@@ -605,6 +605,69 @@ export function AdminPage() {
     );
   };
 
+  const onPrepareNfceHomologation = async () => {
+    setCertificateFormError(null);
+
+    if (certificateNfceEnvironment !== 'HOMOLOGACAO') {
+      setCertificateFormError('Preparação de XML disponível apenas em homologação. Produção permanece bloqueada.');
+      return;
+    }
+
+    if (!certificateSecureStorageId || !certificateHasSecureCertificate) {
+      setCertificateFormError('Importe o certificado A1 pelo app Electron antes de preparar o XML.');
+      return;
+    }
+
+    if (!certificatePassword.trim()) {
+      setCertificateFormError('Informe a senha do certificado A1 para assinar o XML de homologação.');
+      return;
+    }
+
+    if (!window.electronAPI?.prepararNfceHomologacao) {
+      setCertificateFormError('Preparação de XML disponível apenas no aplicativo Electron atualizado.');
+      return;
+    }
+
+    const result = await window.electronAPI.prepararNfceHomologacao({
+      secureStorageId: certificateSecureStorageId,
+      password: certificatePassword,
+      settings: {
+        companyName: certificateCompanyName,
+        cnpj: normalizeCnpj(certificateCnpj),
+        stateRegistration: certificateStateRegistration,
+        cnae: certificateCnae,
+        taxRegime: certificateTaxRegime,
+        addressLine1: certificateAddressLine1,
+        addressLine2: certificateAddressLine2,
+        cityUf: certificateCityUf,
+        uf: certificateUf,
+        cscId: certificateCscId,
+        cscCode: certificateCscCode,
+        nfceEnvironment: certificateNfceEnvironment,
+        nfceSerie: certificateNfceSerie,
+        nfceNextNumber: certificateNfceNextNumber
+      }
+    });
+
+    setCertificatePassword('');
+
+    if (!result.ok) {
+      setCertificateFormError(result.error ?? 'Não foi possível preparar o XML NFC-e de homologação.');
+      return;
+    }
+
+    const preparedAt = new Date(result.result.preparedAt).toLocaleString('pt-BR');
+    const errors = result.result.validation.errors;
+    const warnings = result.result.validation.warnings;
+    const validationText = errors.length
+      ? `Pendências: ${errors.join('; ')}.`
+      : `Validação local sem erros. Avisos: ${warnings.join('; ') || 'nenhum'}.`;
+
+    setCertificateMessage(
+      `XML NFC-e de homologação preparado e assinado em ${preparedAt}. Chave: ${result.result.accessKey}. ${validationText}`
+    );
+  };
+
   const onSaveCertificateSettings = (event: FormEvent) => {
     event.preventDefault();
 
@@ -1965,6 +2028,15 @@ export function AdminPage() {
               </button>
               <button type="button" className="button-muted" onClick={() => openCertificateFilePicker('PENDRIVE')}>
                 Importar do pen drive
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => void onPrepareNfceHomologation()}
+                disabled={!certificateHasSecureCertificate || certificateNfceEnvironment !== 'HOMOLOGACAO'}
+                title="Gera e assina localmente um XML NFC-e de homologação. Não envia para a SEFAZ."
+              >
+                Preparar XML homologação
               </button>
               <input
                 id="admin-certificate-file-input"

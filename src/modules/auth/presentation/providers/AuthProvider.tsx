@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import type { User } from '@/modules/auth/domain/entities/User';
 import { hasPermission } from '@/modules/auth/domain/services/permissionPolicy';
 import type { Permission } from '@/modules/auth/domain/types/Permission';
-import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
+import type { Role } from '@/modules/auth/domain/types/Role';
 import {
   changeRolePin,
   getPinPolicySummary,
@@ -11,12 +11,6 @@ import {
   verifySensitivePin,
   type PinKind
 } from '@/modules/auth/infrastructure/local/pinPolicy';
-import {
-  findStoreSettingById,
-  getStoreSettingsForRole,
-  isStoreCommerciallyBlocked,
-  roleCanAccessStore
-} from '@/modules/admin/infrastructure/local/platformSettings';
 import { logInfo, logWarn } from '@/shared/infrastructure/logging/structuredLogger';
 
 export type SensitiveAction = 'CLOSE_COMANDA' | 'CANCEL_ORDER';
@@ -32,7 +26,7 @@ type ChangePinInput = {
 type AuthContextValue = {
   user: User | null;
   signInAs: (user: User) => void;
-  signInWithPassword: (role: Role, password: string, storeId?: string) => { success: boolean; message: string };
+  signInWithPassword: (role: Role, password: string) => { success: boolean; message: string };
   confirmSensitiveAction: (
     action: SensitiveAction,
     password: string
@@ -53,31 +47,72 @@ const actionNameMap: Record<SensitiveAction, string> = {
   CANCEL_ORDER: 'cancelamento de pedido'
 };
 
-const getStoreDisplayName = (store: { name: string; tradeName?: string }) => store.tradeName || store.name;
+const roleNames: Record<Role, string> = {
+  ADMIN: 'Administrador',
+  GERENTE: 'Gerente',
+  CAIXA: 'Caixa',
+  ATENDENTE: 'Atendente',
+  COMANDA_A: 'Balança A',
+  COMANDA_B: 'Balança B'
+};
 
 const availableRoles: Role[] = ['ADMIN', 'CAIXA', 'COMANDA_A', 'COMANDA_B', 'GERENTE', 'ATENDENTE'];
 
-const clearStoredUser = () => {
+const defaultUser: User = {
+  id: 'u-admin-default',
+  name: 'Administrador',
+  role: 'ADMIN'
+};
+
+const loadStoredUser = (): User | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  if (import.meta.env.DEV) {
+    if (window.localStorage && typeof window.localStorage.removeItem === 'function') {
+      window.localStorage.removeItem(storageKey);
+    }
+
+    return null;
+  }
+
+  if (!window.localStorage || typeof window.localStorage.getItem !== 'function') {
+    return defaultUser;
+  }
+
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) {
+    return defaultUser;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as User;
+    if (!parsed.id || !parsed.name || !parsed.role) {
+      return defaultUser;
+    }
+
+    return parsed;
+  } catch {
+    return defaultUser;
+  }
+};
+
+const persistUser = (user: User | null) => {
   if (typeof window === 'undefined') {
     return;
   }
 
-  if (!window.localStorage || typeof window.localStorage.removeItem !== 'function') {
+  if (!window.localStorage || typeof window.localStorage.setItem !== 'function') {
     return;
   }
 
-  window.localStorage.removeItem(storageKey);
-};
-
-const loadStoredUser = (): User | null => {
-  clearStoredUser();
-  return null;
-};
-
-const persistUser = (user: User | null) => {
   if (!user) {
-    clearStoredUser();
+    window.localStorage.removeItem(storageKey);
+    return;
   }
+
+  window.localStorage.setItem(storageKey, JSON.stringify(user));
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -90,62 +125,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser);
         persistUser(nextUser);
       },
-      signInWithPassword: (role: Role, password: string, storeId?: string) => {
-        const selectedStore = storeId ? findStoreSettingById(storeId) : getStoreSettingsForRole(role)[0] ?? null;
-
-        if (!selectedStore) {
+      signInWithPassword: (role: Role, password: string) => {
+        if (!verifyLoginPin(role, password)) {
           logWarn({
             event: 'AUTH_LOGIN_DENIED',
             module: 'auth',
-            details: { role, reason: 'STORE_NOT_FOUND' }
+            details: { role }
           });
 
           return {
             success: false,
-            message: 'Selecione uma loja ativa para acessar o sistema.'
-          };
-        }
-
-        if (!roleCanAccessStore(role, selectedStore)) {
-          const isCommercialBlock = isStoreCommerciallyBlocked(selectedStore);
-
-          logWarn({
-            event: 'AUTH_LOGIN_DENIED',
-            module: 'auth',
-            details: {
-              role,
-              storeId: selectedStore.id,
-              reason: isCommercialBlock ? 'STORE_COMMERCIAL_BLOCKED' : 'STORE_ROLE_NOT_LINKED'
-            }
-          });
-
-          return {
-            success: false,
-            message: isCommercialBlock
-              ? `A loja ${getStoreDisplayName(selectedStore)} está com acesso bloqueado. Entre em contato com o suporte.`
-              : `Perfil ${getRoleLabel(role)} não está vinculado à loja ${getStoreDisplayName(selectedStore)}.`
-          };
-        }
-
-        if (!verifyLoginPin(role, password, selectedStore.id)) {
-          logWarn({
-            event: 'AUTH_LOGIN_DENIED',
-            module: 'auth',
-            details: { role, storeId: selectedStore.id }
-          });
-
-          return {
-            success: false,
-            message: 'Senha inválida para o perfil selecionado.'
+            message: 'Senha invalida para o perfil selecionado.'
           };
         }
 
         const nextUser: User = {
           id: `u-${role.toLowerCase()}`,
-          name: getRoleLabel(role),
-          role,
-          storeId: selectedStore.id,
-          storeName: getStoreDisplayName(selectedStore)
+          name: roleNames[role],
+          role
         };
 
         setUser(nextUser);
@@ -154,23 +151,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logInfo({
           event: 'AUTH_LOGIN_SUCCESS',
           module: 'auth',
-          details: { role, storeId: selectedStore.id }
+          details: { role }
         });
 
         return {
           success: true,
-          message: `Acesso liberado: ${getRoleLabel(role)} em ${getStoreDisplayName(selectedStore)}.`
+          message: `Acesso liberado: ${roleNames[role]}.`
         };
       },
       confirmSensitiveAction: (action: SensitiveAction, password: string) => {
         if (!user) {
           return {
             success: false,
-            message: 'Usuário não autenticado para ação sensível.'
+            message: 'Usuario nao autenticado para acao sensivel.'
           };
         }
 
-        if (!verifySensitivePin(user.role, password, user.storeId)) {
+        if (!verifySensitivePin(user.role, password)) {
           logWarn({
             event: 'AUTH_SENSITIVE_DENIED',
             module: 'auth',
@@ -179,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: `Senha de confirmação inválida para ${actionNameMap[action]}.`
+            message: `Senha de confirmacao invalida para ${actionNameMap[action]}.`
           };
         }
 
@@ -191,21 +188,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          message: `Confirmação de ${actionNameMap[action]} aprovada.`
+          message: `Confirmacao de ${actionNameMap[action]} aprovada.`
         };
       },
       changePin: ({ kind, role, currentPin, nextPin, confirmPin }: ChangePinInput) => {
         if (!user || user.role !== 'ADMIN') {
           return {
             success: false,
-            message: 'Somente ADMIN pode alterar a política de PIN.'
+            message: 'Somente ADMIN pode alterar politica de PIN.'
           };
         }
 
         if (nextPin !== confirmPin) {
           return {
             success: false,
-            message: 'A confirmação do novo PIN não confere.'
+            message: 'Confirmacao do novo PIN nao confere.'
           };
         }
 
@@ -213,8 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           kind,
           role,
           currentPin,
-          nextPin,
-          storeId: user.storeId
+          nextPin
         });
 
         if (result.success) {
@@ -233,7 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return result;
       },
-      getPinHealth: () => getPinPolicySummary(user?.storeId),
+      getPinHealth: () => getPinPolicySummary(),
       signOut: () => {
         setUser(null);
         persistUser(null);
