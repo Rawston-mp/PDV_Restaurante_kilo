@@ -13,7 +13,7 @@ export type ComandaLockOwner = 'COMANDA_A' | 'COMANDA_B';
 export type ComandaLockStationId = 'BALANCA_A' | 'BALANCA_B';
 
 export type ComandaLock = {
-  owner?: ComandaLockOwner | string;
+  owner: ComandaLockOwner;
   stationId: ComandaLockStationId;
   acquiredAt: string;
   heartbeatAt: string;
@@ -38,7 +38,6 @@ export type ComandaItemRecord = {
   categoriaId: string;
   subtotal: number;
   porUnidade: boolean;
-  origemLancamento?: 'BALANCA' | 'CAIXA' | string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -47,11 +46,10 @@ export type ComandaPesagemRecord = {
   id: string;
   peso: number;
   origem?: string;
-  owner?: ComandaLockOwner | string;
+  owner?: ComandaLockOwner;
   stationId?: ComandaLockStationId;
   itemId?: string;
   productName?: string;
-  reason?: string;
   createdAt: string;
 };
 
@@ -59,7 +57,7 @@ export type ComandaPesagemInput = {
   id?: string;
   peso: number;
   origem?: string;
-  owner?: ComandaLockOwner | string;
+  owner?: ComandaLockOwner;
   stationId?: ComandaLockStationId;
   itemId?: string;
   productName?: string;
@@ -128,35 +126,6 @@ const normalizeFiniteNumber = (value: unknown) => {
 
 const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
-export const normalizeComandaNumber = (value: unknown) => {
-  const normalized = typeof value === 'number' && Number.isFinite(value)
-    ? String(Math.trunc(value))
-    : normalizeText(value);
-  if (!normalized) {
-    return '';
-  }
-
-  return /^\d+$/.test(normalized) ? String(Number.parseInt(normalized, 10)) : normalized;
-};
-
-const mergeComandaRecords = (current: ComandaRecord, incoming: ComandaRecord): ComandaRecord => {
-  const currentUpdatedAt = Date.parse(current.updatedAt);
-  const incomingUpdatedAt = Date.parse(incoming.updatedAt);
-  const base = Number.isFinite(incomingUpdatedAt)
-    && (!Number.isFinite(currentUpdatedAt) || incomingUpdatedAt >= currentUpdatedAt)
-    ? incoming
-    : current;
-
-  return {
-    ...base,
-    numero: normalizeComandaNumber(base.numero),
-    items: [...current.items, ...incoming.items],
-    pesagens: [...current.pesagens, ...incoming.pesagens],
-    transitions: [...current.transitions, ...incoming.transitions]
-      .sort((left, right) => Date.parse(left.at) - Date.parse(right.at))
-  };
-};
-
 const normalizeOptionalIso = (value: unknown) => {
   if (typeof value !== 'string') {
     return undefined;
@@ -187,7 +156,6 @@ const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
 
     const peso = normalizeFiniteNumber(item.peso);
     const subtotal = normalizeFiniteNumber(item.subtotal) ?? Number((precoUnitario * quantidade).toFixed(2));
-    const origemLancamento = normalizeText(item.origemLancamento).toUpperCase();
 
     acc.push({
       id,
@@ -198,9 +166,6 @@ const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
       categoriaId: normalizeText(item.categoriaId) || 'GERAL',
       subtotal: Number(subtotal.toFixed(2)),
       porUnidade: Boolean(item.porUnidade),
-      origemLancamento: origemLancamento === 'CAIXA' || origemLancamento === 'BALANCA'
-        ? origemLancamento
-        : undefined,
       createdAt: normalizeOptionalIso(item.createdAt),
       updatedAt: normalizeOptionalIso(item.updatedAt)
     });
@@ -227,17 +192,17 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
       return acc;
     }
 
+    const owner = pesagem.owner === 'COMANDA_A' || pesagem.owner === 'COMANDA_B' ? pesagem.owner : undefined;
     const stationId = pesagem.stationId === 'BALANCA_A' || pesagem.stationId === 'BALANCA_B' ? pesagem.stationId : undefined;
 
     acc.push({
       id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
       peso: Number(peso.toFixed(3)),
       origem: normalizeText(pesagem.origem) || undefined,
-      owner: normalizeText(pesagem.owner) || undefined,
+      owner,
       stationId,
       itemId: normalizeText(pesagem.itemId) || undefined,
       productName: normalizeText(pesagem.productName) || undefined,
-      reason: normalizeText(pesagem.reason) || undefined,
       createdAt
     });
 
@@ -247,7 +212,7 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
 
 const ensureMutableItemsStatus = (status: ComandaStatus) => {
   if (isInactiveStatus(status) || status === 'EM_FECHAMENTO') {
-    throw new Error(`Comanda em status ${status} não aceita alteração de itens.`);
+    throw new Error(`Comanda em status ${status} nao aceita alteracao de itens.`);
   }
 };
 
@@ -283,17 +248,15 @@ const normalizeStatus = (status: ComandaStatus | LegacyComandaStatus): ComandaSt
 const isInactiveStatus = (status: ComandaStatus) =>
   status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'CANCELADA' || status === 'ARQUIVADA';
 
-const isReusableClosedStatus = (status: ComandaStatus) =>
-  status === 'FECHADA_ORCAMENTO' || status === 'FECHADA_VENDA' || status === 'ARQUIVADA';
-
 const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   if (!lock) {
     return null;
   }
 
+  const lockOwner = lock.owner?.toUpperCase();
   const stationId = lock.stationId?.toUpperCase();
 
-  if (stationId !== 'BALANCA_A' && stationId !== 'BALANCA_B') {
+  if ((lockOwner !== 'COMANDA_A' && lockOwner !== 'COMANDA_B') || (stationId !== 'BALANCA_A' && stationId !== 'BALANCA_B')) {
     return null;
   }
 
@@ -302,7 +265,7 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   const expiresAt = lock.expiresAt || heartbeatAt;
 
   return {
-    owner: lock.owner,
+    owner: lockOwner,
     stationId,
     acquiredAt,
     heartbeatAt,
@@ -310,7 +273,7 @@ const normalizeLock = (lock: ComandaRecord['lock']): ComandaRecord['lock'] => {
   } as ComandaLock;
 };
 
-const buildLock = (stationId: ComandaLockStationId, ttlSeconds?: number, owner?: ComandaLockOwner | string): ComandaLock => {
+const buildLock = (owner: ComandaLockOwner, stationId: ComandaLockStationId, ttlSeconds?: number): ComandaLock => {
   const acquiredAt = nowIso();
   const ttl = sanitizeTtl(ttlSeconds);
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
@@ -340,7 +303,7 @@ export class ComandaLockConflictError extends Error {
   readonly lock: ComandaLock;
 
   constructor(lock: ComandaLock) {
-    super('Comanda já está em uso por outra balança.');
+    super('Comanda ja esta em uso por outra balanca.');
     this.name = 'ComandaLockConflictError';
     this.lock = lock;
   }
@@ -383,14 +346,8 @@ export class ComandaStateMachineService {
   loadSnapshot(snapshot: ComandaStateSnapshot) {
     this.comandas.clear();
     for (const comanda of snapshot.comandas) {
-      const numero = normalizeComandaNumber(comanda.numero);
-      if (!numero) {
-        continue;
-      }
-
       const normalizedComanda: ComandaRecord = {
         ...comanda,
-        numero,
         status: normalizeStatus(comanda.status),
         lock: normalizeLock(comanda.lock ?? null),
         transitions: comanda.transitions.map((transition) => ({
@@ -402,16 +359,11 @@ export class ComandaStateMachineService {
         pesagens: normalizeComandaPesagens((comanda as Partial<ComandaRecord>).pesagens)
       };
 
-      const existing = this.comandas.get(normalizedComanda.numero);
-      this.comandas.set(
-        normalizedComanda.numero,
-        existing ? mergeComandaRecords(existing, normalizedComanda) : normalizedComanda
-      );
+      this.comandas.set(normalizedComanda.numero, normalizedComanda);
     }
 
-    const activeNumero = normalizeComandaNumber(snapshot.activeComandaNumero);
-    const activeComanda = activeNumero
-      ? this.comandas.get(activeNumero)
+    const activeComanda = snapshot.activeComandaNumero
+      ? this.comandas.get(snapshot.activeComandaNumero)
       : null;
     this.activeComandaNumero = activeComanda && !isInactiveStatus(activeComanda.status)
       ? activeComanda.numero
@@ -427,41 +379,23 @@ export class ComandaStateMachineService {
   }
 
   open(numero: string) {
-    const normalized = normalizeComandaNumber(numero);
+    const normalized = numero.trim();
     if (!normalized) {
-      throw new Error('O número da comanda é obrigatório.');
+      throw new Error('Numero da comanda e obrigatorio.');
     }
 
     const existing = this.comandas.get(normalized);
     if (existing) {
-      if (isReusableClosedStatus(existing.status)) {
-        const openedAt = nowIso();
-        const reopened: ComandaRecord = {
-          numero: normalized,
-          status: 'ABERTA',
-          createdAt: openedAt,
-          updatedAt: openedAt,
-          lock: null,
-          transitions: [
-            ...existing.transitions,
-            {
-              from: existing.status,
-              to: 'ABERTA',
-              at: openedAt,
-              reason: 'reutilizacao_cartao_fisico'
-            }
-          ],
-          items: [],
-          pesagens: []
-        };
+      if (existing.status === 'ARQUIVADA') {
+        throw new Error('Comanda arquivada nao pode ser reaberta.');
+      }
 
-        this.comandas.set(normalized, reopened);
-        this.activeComandaNumero = normalized;
-        return reopened;
+      if (existing.status === 'FECHADA_ORCAMENTO' || existing.status === 'FECHADA_VENDA') {
+        throw new Error('Comanda fechada nao pode receber novos itens.');
       }
 
       if (existing.status === 'CANCELADA') {
-        throw new Error('A comanda cancelada não pode ser reaberta sem autorização.');
+        throw new Error('Comanda cancelada nao pode ser reaberta sem autorizacao.');
       }
 
       this.activeComandaNumero = normalized;
@@ -487,7 +421,7 @@ export class ComandaStateMachineService {
   }
 
   get(numero: string) {
-    const existing = this.comandas.get(normalizeComandaNumber(numero)) ?? null;
+    const existing = this.comandas.get(numero.trim()) ?? null;
     if (!existing) {
       return null;
     }
@@ -512,16 +446,16 @@ export class ComandaStateMachineService {
   }
 
   transition(numero: string, to: ComandaStatus, reason?: string) {
-    const normalized = normalizeComandaNumber(numero);
+    const normalized = numero.trim();
     const existing = this.comandas.get(normalized);
     if (!existing) {
-      throw new Error('Comanda não encontrada.');
+      throw new Error('Comanda nao encontrada.');
     }
 
     const { record } = this.clearExpiredLock(existing);
 
     if (!canTransition(record.status, to)) {
-      throw new Error(`Transição inválida: ${record.status} -> ${to}.`);
+      throw new Error(`Transicao invalida: ${record.status} -> ${to}.`);
     }
 
     const at = nowIso();
@@ -552,219 +486,234 @@ export class ComandaStateMachineService {
     return updated;
   }
 
-  closeMany(
-    numeros: string[],
-    targetStatus: Extract<ComandaStatus, 'FECHADA_ORCAMENTO' | 'FECHADA_VENDA'>,
-    reason?: string
-  ) {
-    const normalizedNumbers = [...new Set(numeros.map(normalizeComandaNumber).filter(Boolean))];
-    if (normalizedNumbers.length === 0) {
-      throw new Error('Informe ao menos uma comanda para fechamento.');
+  markEmUsoBalanca(numero: string, reason = 'peso_recebido') {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
     }
 
-    const plans = normalizedNumbers.map((numero) => {
-      const record = this.get(numero);
-      if (!record) {
-        throw new Error(`Comanda #${numero} não encontrada.`);
-      }
+    if (existing.status === 'ABERTA') {
+      return this.transition(numero, 'EM_USO_BALANCA', reason);
+    }
 
-      let transitions: ComandaStatus[];
-      switch (record.status) {
-        case 'ABERTA':
-        case 'EM_USO_BALANCA':
-          transitions = ['PRONTA_PARA_CAIXA', 'EM_FECHAMENTO', targetStatus];
-          break;
-        case 'PRONTA_PARA_CAIXA':
-          transitions = ['EM_FECHAMENTO', targetStatus];
-          break;
-        case 'EM_FECHAMENTO':
-          transitions = [targetStatus];
-          break;
-        case targetStatus:
-          transitions = [];
-          break;
-        default:
-          throw new Error(`Comanda #${numero} em status ${record.status} não pode ser fechada como ${targetStatus}.`);
-      }
+    if (existing.status === 'EM_USO_BALANCA') {
+      return existing;
+    }
 
-      let currentStatus: ComandaStatus = record.status;
-      for (const nextStatus of transitions) {
-        if (!canTransition(currentStatus, nextStatus)) {
-          throw new Error(`Transição inválida para a comanda #${numero}: ${currentStatus} -> ${nextStatus}.`);
-        }
-        currentStatus = nextStatus;
-      }
-
-      return { numero, transitions };
-    });
-
-    return plans.map((plan) => {
-      for (const status of plan.transitions) {
-        this.transition(plan.numero, status, reason);
-      }
-      return this.get(plan.numero)!;
-    });
+    throw new Error(`Comanda em status ${existing.status} nao aceita pesagem.`);
   }
 
-  isActive(active: ComandaRecord) {
-    return active.status === 'ABERTA' || active.status === 'EM_USO_BALANCA';
+  markPesagemEmAndamento(numero: string, reason = 'peso_recebido') {
+    return this.markEmUsoBalanca(numero, reason);
   }
 
-  // Acquire a lock for a comanda. Throws if already locked by another owner/station.
-  acquireLock(
-    numero: string,
-    lockInfo: { owner: ComandaLockOwner | string; stationId: ComandaLockStationId; ttlSeconds?: number },
-    ttlSeconds?: number
-  ) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
+  setItems(numero: string, items: ComandaItemRecord[], _reason = 'items_sync') {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
     }
-    const { record: freshRecord, expired } = this.clearExpiredLock(record);
-    if (freshRecord.lock) {
-      const existing = freshRecord.lock;
-      if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
-        throw new ComandaLockConflictError(existing);
-      }
-      const renewedLock = refreshLock(existing, lockInfo.ttlSeconds ?? ttlSeconds);
-      const renewedRecord: ComandaRecord = { ...freshRecord, lock: renewedLock, updatedAt: renewedLock.heartbeatAt };
-      this.comandas.set(renewedRecord.numero, renewedRecord);
-      return { comanda: renewedRecord, lock: renewedLock, expiredPreviousLock: expired };
-    }
-    const lock = buildLock(lockInfo.stationId, lockInfo.ttlSeconds ?? ttlSeconds, lockInfo.owner);
-    const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: lock.heartbeatAt };
+
+    ensureMutableItemsStatus(existing.status);
+
+    const updatedAt = nowIso();
+    const normalizedItems = normalizeComandaItems(items).map((item) => ({
+      ...item,
+      createdAt: item.createdAt ?? updatedAt,
+      updatedAt
+    }));
+
+    const updated: ComandaRecord = {
+      ...existing,
+      items: normalizedItems,
+      updatedAt
+    };
+
     this.comandas.set(updated.numero, updated);
-    return { comanda: updated, lock, expiredPreviousLock: expired };
-  }
 
-  // Renew an existing lock for the same owner/station.
-  renewLock(
-    numero: string,
-    lockInfo: { owner: ComandaLockOwner | string; stationId: ComandaLockStationId; ttlSeconds?: number },
-    ttlSeconds?: number
-  ) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
-    }
-    const { record: freshRecord } = this.clearExpiredLock(record);
-    if (!freshRecord.lock) {
-      throw new ComandaLockNotFoundError();
-    }
-    const existing = freshRecord.lock;
-    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
-      throw new ComandaLockOwnershipError();
-    }
-    const lock = refreshLock(existing, lockInfo.ttlSeconds ?? ttlSeconds);
-    const updated: ComandaRecord = { ...freshRecord, lock, updatedAt: lock.heartbeatAt };
-    this.comandas.set(updated.numero, updated);
-    return { comanda: updated, lock };
-  }
-
-  // Release a lock for the given owner/station.
-  releaseLock(
-    numero: string,
-    lockInfo: { owner: ComandaLockOwner | string; stationId: ComandaLockStationId }
-  ) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
-    }
-    const { record: freshRecord } = this.clearExpiredLock(record);
-    if (!freshRecord.lock) {
-      throw new ComandaLockNotFoundError();
-    }
-    const existing = freshRecord.lock;
-    if (existing.owner !== lockInfo.owner || existing.stationId !== lockInfo.stationId) {
-      throw new ComandaLockOwnershipError();
-    }
-    const updated: ComandaRecord = { ...freshRecord, lock: null, updatedAt: nowIso() };
-    this.comandas.set(updated.numero, updated);
     return updated;
   }
 
-  // Set items for a comanda.
-  setItems(numero: string, items: ComandaItemRecord[]) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
+  addItem(numero: string, item: ComandaItemRecord, reason = 'item_added') {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
     }
-    ensureMutableItemsStatus(record.status);
-    const updated: ComandaRecord = { ...record, items, updatedAt: nowIso() };
-    this.comandas.set(updated.numero, updated);
-    return updated;
+
+    ensureMutableItemsStatus(existing.status);
+
+    const normalizedItems = normalizeComandaItems([item]);
+    if (normalizedItems.length === 0) {
+      throw new Error('Item da comanda invalido.');
+    }
+
+    return this.setItems(numero, [normalizedItems[0], ...existing.items], reason);
   }
 
-  // Record a pesagem and put the comanda in use on a balança.
-  recordPesagem(
-    numero: string,
-    pesagem: {
-      peso: number;
-      origem?: string;
-      owner?: ComandaLockOwner | string;
-      stationId?: ComandaLockStationId;
-      itemId?: string;
-      productName?: string;
-      reason?: string;
-      id?: string;
-    }
-  ) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
+  recordPesagem(numero: string, input: ComandaPesagemInput) {
+    const peso = normalizeFiniteNumber(input.peso);
+    if (peso === null || peso <= 0) {
+      throw new Error('Peso da pesagem deve ser maior que zero.');
     }
 
-    let lock = record.lock;
-    if (pesagem.owner && pesagem.stationId && (!lock || lock.owner !== pesagem.owner || lock.stationId !== pesagem.stationId)) {
-      lock = buildLock(pesagem.stationId, undefined, pesagem.owner);
-    }
+    const record = this.markEmUsoBalanca(numero, input.reason ?? 'pesagem_registrada');
     const createdAt = nowIso();
-    const newPesagem: ComandaPesagemRecord = {
-      id: normalizeText(pesagem.id) || buildGeneratedId('pesagem'),
-      peso: Number(normalizeFiniteNumber(pesagem.peso)!.toFixed(3)),
-      origem: normalizeText(pesagem.origem) || undefined,
-      stationId: pesagem.stationId,
-      owner: normalizeText(pesagem.owner) || undefined,
-      itemId: normalizeText(pesagem.itemId) || undefined,
-      productName: normalizeText(pesagem.productName) || undefined,
-      reason: normalizeText(pesagem.reason) || undefined,
+    const pesagem: ComandaPesagemRecord = {
+      id: normalizeText(input.id) || buildGeneratedId('pesagem'),
+      peso: Number(peso.toFixed(3)),
+      origem: normalizeText(input.origem) || undefined,
+      owner: input.owner,
+      stationId: input.stationId,
+      itemId: normalizeText(input.itemId) || undefined,
+      productName: normalizeText(input.productName) || undefined,
       createdAt
     };
 
     const updated: ComandaRecord = {
       ...record,
-      status: 'EM_USO_BALANCA',
-      lock,
-      pesagens: [...record.pesagens, newPesagem],
+      pesagens: [pesagem, ...record.pesagens],
       updatedAt: createdAt
     };
+
     this.comandas.set(updated.numero, updated);
-    return { comanda: updated, pesagem: newPesagem };
+
+    return {
+      comanda: updated,
+      pesagem
+    };
   }
 
-  // Convenience method to mark comanda in use on a balança (with cancellation guard).
-  markEmUsoBalanca(numero: string, stationId?: string) {
-    const record = this.get(numero);
-    if (!record) {
-      throw new Error(`Comanda ${numero} não encontrada.`);
+  acquireLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+      ttlSeconds?: number;
     }
-    if (record.status === 'CANCELADA') {
-      throw new Error('Comanda em status CANCELADA não aceita pesagem.');
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
     }
+
+    const { owner, stationId, ttlSeconds } = params;
+    const { record, expired } = this.clearExpiredLock(existing);
+
+    if (record.lock) {
+      if (record.lock.owner === owner && record.lock.stationId === stationId) {
+        const renewedLock = refreshLock(record.lock, ttlSeconds);
+        const renewedRecord: ComandaRecord = {
+          ...record,
+          lock: renewedLock,
+          updatedAt: renewedLock.heartbeatAt
+        };
+
+        this.comandas.set(renewedRecord.numero, renewedRecord);
+
+        return {
+          comanda: renewedRecord,
+          lock: renewedLock,
+          expiredPreviousLock: expired
+        };
+      }
+
+      throw new ComandaLockConflictError(record.lock);
+    }
+
+    const lock = buildLock(owner, stationId, ttlSeconds);
     const updated: ComandaRecord = {
       ...record,
-      status: 'EM_USO_BALANCA',
-      lock: stationId
-        ? {
-            stationId: stationId.toUpperCase() as ComandaLockStationId,
-            acquiredAt: nowIso(),
-            heartbeatAt: nowIso(),
-            expiresAt: nowIso()
-          }
-        : record.lock,
+      lock,
+      updatedAt: lock.heartbeatAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return {
+      comanda: updated,
+      lock,
+      expiredPreviousLock: expired
+    };
+  }
+
+  renewLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+      ttlSeconds?: number;
+    }
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    const { owner, stationId, ttlSeconds } = params;
+    const { record } = this.clearExpiredLock(existing);
+
+    if (!record.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+
+    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+
+    const lock = refreshLock(record.lock, ttlSeconds);
+    const updated: ComandaRecord = {
+      ...record,
+      lock,
+      updatedAt: lock.heartbeatAt
+    };
+
+    this.comandas.set(updated.numero, updated);
+
+    return {
+      comanda: updated,
+      lock
+    };
+  }
+
+  releaseLock(
+    numero: string,
+    params: {
+      owner: ComandaLockOwner;
+      stationId: ComandaLockStationId;
+    }
+  ) {
+    const existing = this.get(numero);
+    if (!existing) {
+      throw new Error('Comanda nao encontrada.');
+    }
+
+    const { owner, stationId } = params;
+    const { record } = this.clearExpiredLock(existing);
+
+    if (!record.lock) {
+      throw new ComandaLockNotFoundError();
+    }
+
+    if (record.lock.owner !== owner || record.lock.stationId !== stationId) {
+      throw new ComandaLockOwnershipError();
+    }
+
+    const updated: ComandaRecord = {
+      ...record,
+      lock: null,
       updatedAt: nowIso()
     };
+
     this.comandas.set(updated.numero, updated);
+
     return updated;
+  }
+
+  canEmitWeight() {
+    const active = this.getActive();
+    if (!active) {
+      return false;
+    }
+
+    return active.status === 'ABERTA' || active.status === 'EM_USO_BALANCA';
   }
 }

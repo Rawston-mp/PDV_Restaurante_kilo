@@ -1,53 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { getRoleLabel, type Role } from '@/modules/auth/domain/types/Role';
+import type { Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
-import {
-  isStoreCommerciallyBlocked,
-  readPlatformOwnerSettings,
-  readStoreSettings,
-  roleIsLinkedToStore,
-  shouldWarnStoreAccess,
-  type StoreSettings
-} from '@/modules/admin/infrastructure/local/platformSettings';
-import { getDefaultPinHint } from '@/modules/auth/infrastructure/local/pinPolicy';
+import { getStoreSettingsForRole } from '@/modules/admin/infrastructure/local/platformSettings';
 
-const getStoreDisplayName = (store: StoreSettings) => store.tradeName || store.name;
+const roleLabel: Record<Role, string> = {
+  ADMIN: 'Admin',
+  GERENTE: 'Gerente',
+  CAIXA: 'Caixa',
+  ATENDENTE: 'Atendente',
+  COMANDA_A: 'Balança A',
+  COMANDA_B: 'Balança B'
+};
 
 export function AuthAccessPanel() {
   const { user, signInWithPassword, signOut, availableRoles } = useAuth();
 
   const [role, setRole] = useState<Role>('CAIXA');
-  const [stores, setStores] = useState<StoreSettings[]>(readStoreSettings);
-  const [ownerSettings, setOwnerSettings] = useState(readPlatformOwnerSettings);
-  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [stores, setStores] = useState(() => getStoreSettingsForRole(role));
+  const [selectedStoreId, setSelectedStoreId] = useState(stores[0]?.id ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  const accessibleStores = useMemo(
-    () => stores.filter((store) => roleIsLinkedToStore(role, store)),
-    [role, stores]
-  );
-  const selectedStore = accessibleStores.find((store) => store.id === selectedStoreId) ?? null;
-  const selectedStoreIsBlocked = selectedStore ? isStoreCommerciallyBlocked(selectedStore) : false;
-  const selectedStoreHasWarning = selectedStore ? shouldWarnStoreAccess(selectedStore) : false;
-
-  useEffect(() => {
-    if (!user) {
-      setStores(readStoreSettings());
-      setOwnerSettings(readPlatformOwnerSettings());
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (selectedStore && accessibleStores.some((store) => store.id === selectedStore.id)) {
-      return;
-    }
-
-    const firstStore = accessibleStores[0];
-    setSelectedStoreId(firstStore?.id ?? '');
-  }, [accessibleStores, selectedStore]);
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -60,12 +34,19 @@ export function AuthAccessPanel() {
     }
   };
 
+  useEffect(() => {
+    const accessible = getStoreSettingsForRole(role);
+    setStores(accessible);
+    setSelectedStoreId(accessible[0]?.id ?? '');
+  }, [role]);
+
   if (user) {
     return (
       <section className="auth-sidebar-status">
         <p className="auth-sidebar-label">Usuário logado</p>
         <strong>{user.name}</strong>
-        <span>{getRoleLabel(user.role)}</span>
+        <span>{roleLabel[user.role]}</span>
+        <span>Logado em: {roleLabel[user.role]}</span>
         <span>Loja: {user.storeName ?? 'Sem loja'}</span>
 
         <button
@@ -93,61 +74,34 @@ export function AuthAccessPanel() {
 
         <div className="auth-panel-header">
           <strong>Acessar o sistema</strong>
-          <span>Selecione a loja, o usuário e informe o PIN</span>
+          <span>Selecione seu perfil, a loja e informe o PIN</span>
         </div>
 
-        <form onSubmit={onSubmit} className="auth-form" autoComplete="off">
+        <form onSubmit={onSubmit} className="auth-form">
+          <label htmlFor="role">Usuário</label>
+          <select id="role" value={role} onChange={(event) => setRole(event.target.value as Role)}>
+            {availableRoles.map((option) => (
+              <option key={option} value={option}>
+                {roleLabel[option]}
+              </option>
+            ))}
+          </select>
+
           <label htmlFor="store-select">Loja</label>
           <select
             id="store-select"
             value={selectedStoreId}
-            onChange={(event) => {
-              setSelectedStoreId(event.target.value);
-              setMessage(null);
-            }}
-            disabled={accessibleStores.length === 0}
+            onChange={(event) => setSelectedStoreId(event.target.value)}
           >
-            {accessibleStores.length === 0 ? (
-              <option value="">Nenhuma loja vinculada</option>
+            {stores.length === 0 ? (
+              <option value="">Nenhuma loja</option>
             ) : (
-              accessibleStores.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {getStoreDisplayName(store)}
+              stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.tradeName || s.name}
                 </option>
               ))
             )}
-          </select>
-
-          {selectedStoreHasWarning && selectedStore && (
-            <div className="auth-access-notice">
-              <strong>{selectedStoreIsBlocked ? 'Acesso bloqueado' : 'Aviso de regularização'}</strong>
-              <p>
-                {selectedStoreIsBlocked
-                  ? 'O acesso desta loja está temporariamente bloqueado. Entre em contato com o suporte para regularização.'
-                  : `Seu acesso será negado em ${selectedStore.graceDays || selectedStore.accessNoticeDays || '10'} dia(s). Entre em contato com o suporte para regularização.`}
-              </p>
-              <span>{ownerSettings.companyName || selectedStore.supportCompanyName || 'Suporte'}</span>
-              <span>
-                {ownerSettings.phone || selectedStore.supportPhone || 'Telefone não informado'} | WhatsApp: {ownerSettings.whatsapp || selectedStore.supportWhatsapp || 'não informado'}
-              </span>
-              <span>{ownerSettings.email || selectedStore.supportEmail || 'E-mail não informado'}</span>
-            </div>
-          )}
-
-          <label htmlFor="role">Usuário</label>
-          <select
-            id="role"
-            value={role}
-            onChange={(event) => {
-              setRole(event.target.value as Role);
-              setSelectedStoreId('');
-            }}
-          >
-            {availableRoles.map((option) => (
-              <option key={option} value={option}>
-                {getRoleLabel(option)}
-              </option>
-            ))}
           </select>
 
           <label htmlFor="password">Senha</label>
@@ -158,7 +112,6 @@ export function AuthAccessPanel() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Digite o PIN"
-              autoComplete="new-password"
               required
             />
             <button
@@ -172,12 +125,14 @@ export function AuthAccessPanel() {
             </button>
           </div>
 
-          <button type="submit" className="auth-submit" disabled={!selectedStoreId || selectedStoreIsBlocked}>Entrar</button>
+          <button type="submit" className="auth-submit">Entrar</button>
         </form>
 
         {message && <p className="auth-message">{message}</p>}
 
-        <p className="auth-hint">{getDefaultPinHint()}</p>
+        <p className="auth-hint">
+          PIN login: Admin 9000, Caixa 2025, Balança A 1111, Balança B 2222. PIN sensivel: Admin 9900, Caixa 2200.
+        </p>
       </section>
     </div>
   );

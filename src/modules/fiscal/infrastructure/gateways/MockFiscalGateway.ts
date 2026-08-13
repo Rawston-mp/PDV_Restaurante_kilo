@@ -36,4 +36,21 @@ export class MockFiscalGateway implements FiscalGateway {
       authorizedAt
     };
   }
+
+  async cancelNfce() {
+    return {
+      status: 'REJECTED' as const,
+      cstat: 'DEV_GATEWAY',
+      xmotivo: 'Cancelamento real indisponível no emissor de desenvolvimento.'
+    };
+  }
+
+  async consultarStatus(): Promise<FiscalAuthorizationResult> {
+    return {
+      status: 'MANUAL_REVIEW',
+      cstat: 'DEV_GATEWAY',
+      xmotivo: 'Consulta real indisponível no emissor de desenvolvimento.',
+      lastError: 'Use o gateway SEFAZ homologado para consultar status real.'
+    };
+  }
 }

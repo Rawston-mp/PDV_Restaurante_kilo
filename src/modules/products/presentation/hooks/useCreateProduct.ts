@@ -21,10 +21,6 @@ type Input = {
   cstCofins: string;
   aliqCofins: string;
   fiscalType: string;
-  purchaseUnit: string;
-  saleUnit: string;
-  unitsPerPurchase: number;
-  purchaseCostValue: number;
   costValue: number;
   marginProfit: number;
   price: number;

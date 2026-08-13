@@ -30,4 +30,23 @@ export type FiscalAuthorizationResult =
 
 export interface FiscalGateway {
   authorizeNfce(receipt: FiscalReceipt): Promise<FiscalAuthorizationResult>;
+
+  /**
+   * Cancela uma NFC-e já autorizada
+   */
+  cancelNfce(params: {
+    chaveAcesso: string;
+    justificativa: string;
+    protocoloAutorizacao: string;
+  }): Promise<{
+    status: 'CANCELLED' | 'REJECTED';
+    protocoloCancelamento?: string;
+    cstat: string;
+    xmotivo: string;
+  }>;
+
+  /**
+   * Consulta status de uma NFC-e pela chave de acesso
+   */
+  consultarStatus(chaveAcesso: string): Promise<FiscalAuthorizationResult>;
 }

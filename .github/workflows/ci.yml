@@ -9,9 +9,6 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,11 +27,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Apply Prisma migrations
-        run: npx prisma migrate deploy --schema=prisma/schema.prisma
-        env:
-          DATABASE_URL: file:./dev.db
 
       - name: Run tests
         run: npm run test -- --run
@@ -69,4 +61,92 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  windows-installer:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 45
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          npm run build
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Falha no build web (npm run build)."
+            exit 1
+          }
+
+          $built = $false
+
+          npx electron-builder --win dir --x64 --publish never -c.npmRebuild=false -c.win.signAndEditExecutable=false -c.forceCodeSigning=false
+          if ($LASTEXITCODE -eq 0 -and (Test-Path "release-electron/win-unpacked/PDVTouch Restaurante.exe")) {
+            $built = $true
+            Write-Host "Build via electron-builder concluido com sucesso."
+          }
+
+          if (-not $built) {
+            Write-Host "electron-builder falhou no runner. Aplicando fallback com electron-packager..."
+            npx --yes @electron/packager . "PDVTouch Restaurante" --platform=win32 --arch=x64 --out=release-electron --overwrite --prune=true
+
+            if ($LASTEXITCODE -eq 0) {
+              $fallbackExe = Get-ChildItem -Path release-electron -Recurse -Filter "PDVTouch Restaurante.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($null -ne $fallbackExe) {
+                $built = $true
+                Write-Host "Fallback via electron-packager concluido com sucesso."
+              }
+            }
+          }
+
+          if (-not $built) {
+            Write-Error "Falha ao gerar executavel Windows no CI (electron-builder e fallback)."
+            exit 1
+          }
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          USE_HARD_LINKS: 'false'
+
+      - name: Prepare delivery zip (short paths)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force .\delivery -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path .\delivery\PDVTouch | Out-Null
+
+          $sourceRoot = "release-electron/win-unpacked"
+          if (-not (Test-Path $sourceRoot)) {
+            $candidate = Get-ChildItem -Path release-electron -Directory | Where-Object { $_.Name -like "*win32-x64*" } | Select-Object -First 1
+            if ($null -ne $candidate) {
+              $sourceRoot = $candidate.FullName
+            }
+          }
+
+          Copy-Item "$sourceRoot\*" ".\delivery\PDVTouch\" -Recurse -Force
+
+          if (Test-Path .\windows-portable-delivery.zip) {
+            Remove-Item .\windows-portable-delivery.zip -Force
+          }
+
+          Compress-Archive -Path .\delivery\PDVTouch\* -DestinationPath .\windows-portable-delivery.zip -CompressionLevel Optimal
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows-installer-${{ github.sha }}
+          path: windows-portable-delivery.zip
+          if-no-files-found: error
+          retention-days: 7

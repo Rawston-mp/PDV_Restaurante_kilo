@@ -20,29 +20,6 @@ describe('ComandaStateMachineService', () => {
     ]);
   });
 
-  it('normaliza zeros à esquerda para tratar 7, 07 e 007 como a mesma comanda', () => {
-    const service = new ComandaStateMachineService();
-
-    const opened = service.open('07');
-    service.setItems('7', [{
-      id: 'item-1',
-      nome: 'Costela Bovina',
-      precoUnitario: 29.5,
-      quantidade: 1,
-      categoriaId: 'Delivery',
-      subtotal: 29.5,
-      porUnidade: true
-    }]);
-
-    const closed = service.closeMany(['007', '7'], 'FECHADA_ORCAMENTO', 'teste_normalizacao');
-
-    expect(opened.numero).toBe('7');
-    expect(service.get('07')?.items).toHaveLength(1);
-    expect(closed).toHaveLength(1);
-    expect(closed[0].numero).toBe('7');
-    expect(closed[0].status).toBe('FECHADA_ORCAMENTO');
-  });
-
   it('permite fechar uma comanda como venda fiscal no caixa', () => {
     const service = new ComandaStateMachineService();
 
@@ -68,85 +45,6 @@ describe('ComandaStateMachineService', () => {
     expect(service.getActive()).toBeNull();
   });
 
-  it('fecha várias comandas de forma atômica no mesmo pagamento', () => {
-    const service = new ComandaStateMachineService();
-
-    service.open('110');
-    service.markEmUsoBalanca('110');
-    service.open('111');
-
-    const closed = service.closeMany(['110', '111'], 'FECHADA_VENDA', 'pagamento_conjunto');
-
-    expect(closed.map((comanda) => comanda.status)).toEqual(['FECHADA_VENDA', 'FECHADA_VENDA']);
-    expect(service.get('110')?.status).toBe('FECHADA_VENDA');
-    expect(service.get('111')?.status).toBe('FECHADA_VENDA');
-  });
-
-  it('reutiliza comanda fechada no caixa como novo ciclo limpo na balança', () => {
-    const service = new ComandaStateMachineService();
-
-    service.open('120');
-    service.setItems('120', [{
-      id: 'item-1',
-      nome: 'Self-Service',
-      precoUnitario: 59.9,
-      quantidade: 0.5,
-      peso: 0.5,
-      categoriaId: 'Por quilo',
-      subtotal: 29.95,
-      porUnidade: false
-    }]);
-    service.recordPesagem('120', {
-      peso: 0.5,
-      origem: 'sensor',
-      reason: 'teste_pesagem'
-    });
-
-    service.closeMany(['120'], 'FECHADA_VENDA', 'pagamento_caixa');
-
-    const reopened = service.open('120');
-
-    expect(reopened.status).toBe('ABERTA');
-    expect(reopened.items).toHaveLength(0);
-    expect(reopened.pesagens).toHaveLength(0);
-    expect(reopened.transitions.at(-1)).toMatchObject({
-      from: 'FECHADA_VENDA',
-      to: 'ABERTA',
-      reason: 'reutilizacao_cartao_fisico'
-    });
-    expect(service.getActive()?.numero).toBe('120');
-  });
-
-  it('reutiliza comanda arquivada como novo ciclo operacional', () => {
-    const service = new ComandaStateMachineService();
-
-    service.open('121');
-    service.closeMany(['121'], 'FECHADA_ORCAMENTO', 'orcamento_caixa');
-    service.transition('121', 'ARQUIVADA', 'fechamento_caixa');
-
-    const reopened = service.open('121');
-
-    expect(reopened.status).toBe('ABERTA');
-    expect(reopened.items).toEqual([]);
-    expect(reopened.transitions.at(-1)).toMatchObject({
-      from: 'ARQUIVADA',
-      to: 'ABERTA'
-    });
-  });
-
-  it('não fecha nenhuma comanda do grupo quando uma delas é inválida', () => {
-    const service = new ComandaStateMachineService();
-
-    service.open('112');
-    service.open('113');
-    service.transition('113', 'CANCELADA', 'cancelamento_teste');
-
-    expect(() => service.closeMany(['112', '113'], 'FECHADA_VENDA')).toThrow(
-      'Comanda #113 em status CANCELADA não pode ser fechada como FECHADA_VENDA.'
-    );
-    expect(service.get('112')?.status).toBe('ABERTA');
-  });
-
   it('permite cancelar uma comanda aberta e impede nova pesagem após cancelamento', () => {
     const service = new ComandaStateMachineService();
 
@@ -154,7 +52,7 @@ describe('ComandaStateMachineService', () => {
     service.transition('103', 'CANCELADA', 'cancelamento_autorizado');
 
     expect(() => service.markEmUsoBalanca('103', 'balanca_a')).toThrow(
-      'Comanda em status CANCELADA não aceita pesagem.'
+      'Comanda em status CANCELADA nao aceita pesagem.'
     );
     expect(service.getActive()).toBeNull();
   });
@@ -191,7 +89,7 @@ describe('ComandaStateMachineService', () => {
     expect(service.get('104')?.transitions[0]?.to).toBe('EM_USO_BALANCA');
   });
 
-  it('adquire lock para uma balança e bloqueia lock concorrente', () => {
+  it('adquire lock para uma balanca e bloqueia lock concorrente', () => {
     const service = new ComandaStateMachineService();
 
     service.open('201');
@@ -200,15 +98,15 @@ describe('ComandaStateMachineService', () => {
       stationId: 'BALANCA_A'
     });
 
-    expect(acquired.lock?.owner).toBe('COMANDA_A');
-    expect(acquired.lock?.stationId).toBe('BALANCA_A');
+    expect(acquired.lock.owner).toBe('COMANDA_A');
+    expect(acquired.lock.stationId).toBe('BALANCA_A');
 
     expect(() =>
       service.acquireLock('201', {
         owner: 'COMANDA_B',
         stationId: 'BALANCA_B'
       })
-    ).toThrow('Comanda já está em uso por outra balança.');
+    ).toThrow('Comanda ja esta em uso por outra balanca.');
   });
 
   it('renova e libera lock para o mesmo owner/estacao', () => {
@@ -225,11 +123,7 @@ describe('ComandaStateMachineService', () => {
       stationId: 'BALANCA_A'
     });
 
-    expect(renewed.lock).not.toBeNull();
-    expect(acquired.lock).not.toBeNull();
-    if (renewed.lock && acquired.lock) {
-      expect(Date.parse(renewed.lock.expiresAt)).toBeGreaterThanOrEqual(Date.parse(acquired.lock.expiresAt));
-    }
+    expect(Date.parse(renewed.lock.expiresAt)).toBeGreaterThanOrEqual(Date.parse(acquired.lock.expiresAt));
 
     const released = service.releaseLock('202', {
       owner: 'COMANDA_A',
@@ -284,7 +178,7 @@ describe('ComandaStateMachineService', () => {
     });
   });
 
-  it('registra pesagem vinculada ao item e coloca a comanda em uso na balança', () => {
+  it('registra pesagem vinculada ao item e coloca a comanda em uso na balanca', () => {
     const service = new ComandaStateMachineService();
 
     service.open('302');

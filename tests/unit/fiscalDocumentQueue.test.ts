@@ -37,6 +37,22 @@ class SequenceFiscalGateway implements FiscalGateway {
     }
     return result;
   }
+
+  async cancelNfce() {
+    return {
+      status: 'REJECTED' as const,
+      cstat: 'TEST_GATEWAY',
+      xmotivo: 'Cancelamento não usado neste teste.'
+    };
+  }
+
+  async consultarStatus(): Promise<FiscalAuthorizationResult> {
+    return {
+      status: 'MANUAL_REVIEW',
+      cstat: 'TEST_GATEWAY',
+      xmotivo: 'Consulta não usada neste teste.'
+    };
+  }
 }
 
 const makeReceipt = (): FiscalReceipt => ({

@@ -6,22 +6,16 @@ import { useWeight } from '@/hooks/comanda/useWeight';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
   buildComandaCategories,
-  productCategoriesChangedEvent
+  mergeCategoryOptions,
+  readStoredProductCategories
 } from '@/modules/products/domain/services/productCategories';
-import { loadSharedProductCategories } from '@/modules/products/infrastructure/api/productCategoryCatalog';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import {
   fetchComandaItemsFromBackend,
   registerComandaPesagemInBackend,
   saveComandaItemsToBackend
 } from '@/shared/infrastructure/api/comandaApi';
-import {
-  readComandaCache,
-  unmarkComandaLocallyCancelled,
-  writeComandaCache
-} from '@/shared/infrastructure/storage/comandaCache';
-import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
-import { normalizeComandaNumber } from '@/shared/domain/services/comandaNumber';
+import { readComandaCache, writeComandaCache } from '@/shared/infrastructure/storage/comandaCache';
 
 type ProdutoCatalogo = {
   id: string;
@@ -65,29 +59,7 @@ type AcquireLockResponse = {
   lock?: LockData;
 };
 
-type BackendComandaStatus =
-  | 'ABERTA'
-  | 'EM_USO_BALANCA'
-  | 'PRONTA_PARA_CAIXA'
-  | 'EM_FECHAMENTO'
-  | 'FECHADA_ORCAMENTO'
-  | 'FECHADA_VENDA'
-  | 'CANCELADA'
-  | 'ARQUIVADA';
-
-type BackendComandaResponse = {
-  ok?: boolean;
-  comanda?: {
-    numero: string;
-    status: BackendComandaStatus;
-  };
-};
-
-type OpenComandaResponse = BackendComandaResponse & {
-  reused?: boolean;
-};
-
-const API_BASE = API_BASE_URL;
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const LOCK_TTL_SECONDS = 120;
 
 type PersistedComandaSnapshot = {
@@ -146,7 +118,7 @@ const formatLockConflictMessage = (error: BackendError) => {
     return `Comanda em uso por ${owner ?? 'outro operador'} (${station ?? 'outra estacao'}).`;
   }
 
-  return error.message || 'Comanda em uso por outra balança.';
+  return error.message || 'Comanda em uso por outra balanca.';
 };
 
 const isConnectivityError = (error: unknown) => {
@@ -196,12 +168,12 @@ const isPorQuiloCategoryName = (value: string) => {
   return normalized === 'por quilo' || normalized === 'por kilo';
 };
 
-const isSelfServiceProductName = (value: string) => {
-  const normalized = normalizeSearchText(value).replace(/\s+/g, ' ').trim();
-  return normalized.includes('self-service') || normalized.includes('self service') || normalized.includes('sel-service');
+const isSelServiceProduct = (value: string) => {
+  const normalized = normalizeSearchText(value);
+  return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
 };
 
-export function useComanda(taxaImposto = 0) {
+export function useComanda(taxaImposto = 0.1) {
   const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
   const [comandaAtivaId, setComandaAtivaId] = useState<string | null>(null);
@@ -210,40 +182,18 @@ export function useComanda(taxaImposto = 0) {
   const [campoAtivo, setCampoAtivo] = useState<'COMANDA' | 'PESQUISA'>('COMANDA');
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('');
-  const [categoryRefreshVersion, setCategoryRefreshVersion] = useState(0);
   const [catalogoProdutos, setCatalogoProdutos] = useState<ProdutoCatalogo[]>([]);
   const [pesquisa, setPesquisa] = useState('');
   const [itens, setItens] = useState<ItemComanda[]>([]);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [precoAtual, setPrecoAtual] = useState<number | null>(null);
+  const [precoAtual, setPrecoAtual] = useState(0);
   const [lockData, setLockData] = useState<LockData | null>(null);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   const { tecladoAtivo, toggleToNumerico, toggleToVirtual } = useKeyboard('NUMERICO');
-  const { pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
+  const { pesoSensor, pesoAtual, pesoManual, setPesoManual, isComandaConectada } = useWeight(Boolean(comandaAtivaId));
   const activeComandaRef = useRef<string | null>(null);
-  const lastSyncNumeroRef = useRef<string | null>(null);
-  const pendingPesagensRef = useRef<Array<{
-    numero: string;
-    item: ItemComanda;
-    origem: 'sensor' | 'manual';
-  }>>([]);
   const lockContext = useMemo(() => roleToLockContext(user?.role), [user?.role]);
-
-  useEffect(() => {
-    const refreshCategories = () => setCategoryRefreshVersion((current) => current + 1);
-
-    window.addEventListener(productCategoriesChangedEvent, refreshCategories);
-    window.addEventListener('storage', refreshCategories);
-
-    return () => {
-      window.removeEventListener(productCategoriesChangedEvent, refreshCategories);
-      window.removeEventListener('storage', refreshCategories);
-    };
-  }, []);
 
   useEffect(() => {
     const loadCatalogo = async () => {
@@ -257,8 +207,9 @@ export function useComanda(taxaImposto = 0) {
           porUnidade: !product.byWeight
         }));
 
-        const nextCategoryOptions = await loadSharedProductCategories(products);
-        const nextCategorias = buildComandaCategories(nextCategoryOptions);
+        const nextCategorias = buildComandaCategories(
+          mergeCategoryOptions(readStoredProductCategories(), products)
+        );
 
         setCatalogoProdutos(mappedProducts);
         setCategorias(nextCategorias);
@@ -269,17 +220,17 @@ export function useComanda(taxaImposto = 0) {
 
           return nextCategorias[0]?.id ?? '';
         });
-        setPrecoAtual(null);
+        setPrecoAtual((current) => current || mappedProducts[0]?.precoUnitario || 0);
       } catch {
         setCatalogoProdutos([]);
         setCategorias([]);
         setCategoriaSelecionada('');
-        setPrecoAtual(null);
+        setPrecoAtual(0);
       }
     };
 
     void loadCatalogo();
-  }, [categoryRefreshVersion]);
+  }, []);
 
   const subtotal = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens]);
   const impostos = useMemo(() => Number((subtotal * taxaImposto).toFixed(2)), [subtotal, taxaImposto]);
@@ -289,16 +240,6 @@ export function useComanda(taxaImposto = 0) {
     [categorias]
   );
   const isComandaAberta = Boolean(comandaAtivaId);
-  const canDeleteItems = user?.role === 'ADMIN' || user?.role === 'GERENTE' || user?.role === 'CAIXA';
-
-  useEffect(() => {
-    if (!feedback) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setFeedback(null), 2400);
-    return () => window.clearTimeout(timeoutId);
-  }, [feedback]);
 
   useEffect(() => {
     activeComandaRef.current = comandaAtivaId;
@@ -328,7 +269,7 @@ export function useComanda(taxaImposto = 0) {
     }));
   }, [comandaAtivaId, dataAberturaAtual, itens]);
 
-  const requestOpenComanda = async (numero: string): Promise<OpenComandaResponse> => {
+  const requestOpenComanda = async (numero: string) => {
     const response = await fetch(`${API_BASE}/api/v1/comandas`, {
       method: 'POST',
       headers: {
@@ -340,65 +281,16 @@ export function useComanda(taxaImposto = 0) {
     if (!response.ok) {
       throw await parseError(response);
     }
-
-    return await response.json().catch(() => ({ ok: true, reused: false })) as OpenComandaResponse;
-  };
-
-  const markComandaReadyForCashier = async (numero: string) => {
-    const statusResponse = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}`);
-    if (!statusResponse.ok) {
-      throw await parseError(statusResponse);
-    }
-
-    const payload = (await statusResponse.json().catch(() => null)) as BackendComandaResponse | null;
-    const currentStatus = payload?.comanda?.status;
-    if (currentStatus === 'PRONTA_PARA_CAIXA') {
-      return;
-    }
-
-    if (currentStatus === 'EM_FECHAMENTO'
-      || currentStatus === 'FECHADA_ORCAMENTO'
-      || currentStatus === 'FECHADA_VENDA'
-      || currentStatus === 'CANCELADA'
-      || currentStatus === 'ARQUIVADA') {
-      throw {
-        status: 409,
-        message: `Comanda em status ${currentStatus} não pode ser liberada para o caixa.`
-      } satisfies BackendError;
-    }
-
-    const response = await fetch(`${API_BASE}/api/v1/comandas/${encodeURIComponent(numero)}/status`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        status: 'PRONTA_PARA_CAIXA',
-        reason: 'liberada_na_balanca'
-      })
-    });
-
-    if (!response.ok) {
-      throw await parseError(response);
-    }
   };
 
   const persistItensNoBackend = (numero: string, nextItems: ItemComanda[], reason: string) => {
-    unmarkComandaLocallyCancelled(numero);
-    lastSyncNumeroRef.current = numero;
-    setIsSyncing(true);
     void saveComandaItemsToBackend(numero, nextItems, reason)
       .then(() => {
-        const pendingPesagens = pendingPesagensRef.current.length;
-        setIsOfflineMode(pendingPesagens > 0);
-        setPendingSyncCount(pendingPesagens);
+        setIsOfflineMode(false);
       })
       .catch(() => {
         setIsOfflineMode(true);
-        setPendingSyncCount((current) => Math.max(1, current + 1));
-      })
-      .finally(() => {
-        setIsSyncing(false);
+        setErro('Itens salvos localmente. Backend indisponivel para sincronizar a comanda.');
       });
   };
 
@@ -411,7 +303,6 @@ export function useComanda(taxaImposto = 0) {
       return;
     }
 
-    lastSyncNumeroRef.current = numero;
     void registerComandaPesagemInBackend(numero, {
       peso: item.peso,
       origem,
@@ -421,52 +312,9 @@ export function useComanda(taxaImposto = 0) {
       productName: item.nome,
       reason: 'item_lancado'
     }).catch(() => {
-      pendingPesagensRef.current.push({ numero, item, origem });
       setIsOfflineMode(true);
-      setPendingSyncCount((current) => Math.max(1, current + 1));
+      setErro('Pesagem mantida localmente. Backend indisponivel para registrar a pesagem.');
     });
-  };
-
-  const retrySync = async () => {
-    const numero = comandaAtivaId ?? lastSyncNumeroRef.current;
-    if (!numero) {
-      return;
-    }
-
-    const cachedItems = readComandaCache()[numero]?.itens ?? itens;
-    setIsSyncing(true);
-
-    try {
-      await saveComandaItemsToBackend(numero, cachedItems, 'manual_retry');
-
-      const pendingPesagens = [...pendingPesagensRef.current];
-      for (const pending of pendingPesagens) {
-        if (!pending.item.peso || pending.item.peso <= 0) {
-          continue;
-        }
-
-        await registerComandaPesagemInBackend(pending.numero, {
-          peso: pending.item.peso,
-          origem: pending.origem,
-          owner: lockContext?.owner,
-          stationId: lockContext?.stationId,
-          itemId: pending.item.id,
-          productName: pending.item.nome,
-          reason: 'manual_retry'
-        });
-      }
-
-      pendingPesagensRef.current = [];
-      setPendingSyncCount(0);
-      setIsOfflineMode(false);
-      setErro(null);
-      setFeedback('Sincronização concluída.');
-    } catch {
-      setIsOfflineMode(true);
-      setPendingSyncCount((current) => Math.max(1, current));
-    } finally {
-      setIsSyncing(false);
-    }
   };
 
   const acquireLock = async (numero: string) => {
@@ -603,46 +451,8 @@ export function useComanda(taxaImposto = 0) {
         isBuscaGlobalPorNome || !categoriaSelecionada || produto.categoriaId === categoriaSelecionada;
       const matchPesquisa = termo.length === 0 || produto.nome.toLowerCase().includes(termo);
       return matchCategoria && matchPesquisa;
-    }).sort((left, right) => {
-      if (isBuscaGlobalPorNome || categoriaSelecionada !== porQuiloCategoryId) {
-        return 0;
-      }
-
-      const leftIsSelfService = isSelfServiceProductName(left.nome);
-      const rightIsSelfService = isSelfServiceProductName(right.nome);
-
-      if (leftIsSelfService === rightIsSelfService) {
-        return 0;
-      }
-
-      return leftIsSelfService ? -1 : 1;
     });
-  }, [catalogoProdutos, categoriaSelecionada, pesquisa, porQuiloCategoryId]);
-
-  const getDefaultScaleProduct = (categoryId = porQuiloCategoryId) => {
-    if (!categoryId) {
-      return catalogoProdutos.find((produto) => isSelfServiceProductName(produto.nome)) ?? null;
-    }
-
-    const categoryProducts = catalogoProdutos.filter((produto) => produto.categoriaId === categoryId);
-    return categoryProducts.find((produto) => isSelfServiceProductName(produto.nome))
-      ?? catalogoProdutos.find((produto) => isSelfServiceProductName(produto.nome))
-      ?? categoryProducts[0]
-      ?? null;
-  };
-
-  const prepareScaleDefaultSelection = () => {
-    if (!porQuiloCategoryId) {
-      const defaultProduct = getDefaultScaleProduct(null);
-      setPrecoAtual(defaultProduct?.precoUnitario ?? null);
-      return;
-    }
-
-    const defaultProduct = getDefaultScaleProduct(porQuiloCategoryId);
-    setCategoriaSelecionada(porQuiloCategoryId);
-    setPesquisa('');
-    setPrecoAtual(defaultProduct?.precoUnitario ?? null);
-  };
+  }, [catalogoProdutos, categoriaSelecionada, pesquisa]);
 
   const salvarSnapshotComandaAtual = () => {
     if (!comandaAtivaId) {
@@ -659,26 +469,23 @@ export function useComanda(taxaImposto = 0) {
   };
 
   const abrirComanda = async () => {
-    const nextId = normalizeComandaNumber(comandaNumber);
+    const nextId = comandaNumber.trim();
     if (!nextId) {
-      setErro('Informe o número da comanda e pressione Enter para abrir.');
+      setErro('Informe o numero da comanda e pressione Enter para abrir.');
       return false;
     }
 
     if (comandaAtivaId === nextId) {
-      setComandaNumber(nextId);
       setErro(null);
       return true;
     }
 
     const comandaAnterior = comandaAtivaId && comandaAtivaId !== nextId ? comandaAtivaId : null;
     let openedOffline = false;
-    let openedReusedBackend = false;
     let backendItems: ItemComanda[] | null = null;
 
     try {
-      const openResult = await requestOpenComanda(nextId);
-      openedReusedBackend = Boolean(openResult.reused);
+      await requestOpenComanda(nextId);
       setIsOfflineMode(false);
       if (lockContext) {
         await acquireLock(nextId);
@@ -690,7 +497,6 @@ export function useComanda(taxaImposto = 0) {
 
       try {
         backendItems = await fetchComandaItemsFromBackend(nextId);
-        setPendingSyncCount(0);
       } catch {
         backendItems = null;
       }
@@ -719,13 +525,13 @@ export function useComanda(taxaImposto = 0) {
         }
       : null;
 
-    const snapshotDestino = openedReusedBackend ? undefined : comandasAbertas[nextId];
+    const snapshotDestino = comandasAbertas[nextId];
     const shouldHydrateBackendFromLocal =
       backendItems !== null && backendItems.length === 0 && Boolean(snapshotDestino?.itens.length);
     const nextItems = backendItems !== null
       ? (backendItems.length > 0 || !snapshotDestino ? backendItems : snapshotDestino.itens)
       : snapshotDestino?.itens ?? [];
-    const nextDataAbertura = openedReusedBackend ? new Date() : snapshotDestino?.dataAbertura ?? new Date();
+    const nextDataAbertura = snapshotDestino?.dataAbertura ?? new Date();
 
     setComandasAbertas((prev) => {
       const next = comandaAtivaId
@@ -746,34 +552,31 @@ export function useComanda(taxaImposto = 0) {
 
     setItens(nextItems);
     setDataAberturaAtual(nextDataAbertura);
-    prepareScaleDefaultSelection();
 
     if (shouldHydrateBackendFromLocal) {
       persistItensNoBackend(nextId, nextItems, 'hydrate_backend_from_local_cache');
     }
 
-    setComandaAtivaId(nextId);
-    setComandaNumber(nextId);
-    lastSyncNumeroRef.current = nextId;
-    if (!openedOffline) {
-      unmarkComandaLocallyCancelled(nextId);
+    if (!snapshotDestino && porQuiloCategoryId) {
+      setCategoriaSelecionada(porQuiloCategoryId);
     }
-    setErro(null);
-    setFeedback(openedOffline ? `Comanda #${nextId} aberta em modo local.` : `Comanda #${nextId} aberta.`);
+
+    setComandaAtivaId(nextId);
+    setErro(openedOffline ? 'Backend indisponivel. Comanda aberta em modo local.' : null);
 
     return true;
   };
 
-  const adicionarProduto = (produto: ProdutoCatalogo, pesoManualInformado?: number) => {
+  const adicionarProduto = (produto: ProdutoCatalogo) => {
     if (!isComandaAberta) {
-      setErro('Abra a comanda (Enter no número) antes de adicionar itens.');
+      setErro('Abra a comanda (Enter no numero) antes de adicionar itens.');
       return;
     }
 
-    const possuiPesoManualInformado = typeof pesoManualInformado === 'number'
-      && Number.isFinite(pesoManualInformado)
-      && pesoManualInformado > 0;
-    const pesoLido = Number((possuiPesoManualInformado ? pesoManualInformado : pesoAtual).toFixed(3));
+    let pesoLido = Number(pesoAtual.toFixed(3));
+    if (!produto.porUnidade && isSelServiceProduct(produto.nome) && pesoSensor > 0) {
+      pesoLido = Number(pesoSensor.toFixed(3));
+    }
 
     const quantidade = produto.porUnidade ? 1 : pesoLido;
     if (!produto.porUnidade && quantidade <= 0) {
@@ -781,60 +584,31 @@ export function useComanda(taxaImposto = 0) {
       return;
     }
 
-    const itemExistente = itens.find((item) =>
-      normalizeSearchText(item.nome) === normalizeSearchText(produto.nome)
-      && item.categoriaId === produto.categoriaId
-      && item.porUnidade === produto.porUnidade
-      && item.precoUnitario === produto.precoUnitario
-    );
-
     const subtotalItem = Number((produto.precoUnitario * quantidade).toFixed(2));
-    const itemParaPesagem: ItemComanda = {
-      id: itemExistente?.id ?? crypto.randomUUID(),
+    const novoItem: ItemComanda = {
+      id: crypto.randomUUID(),
       nome: produto.nome,
       precoUnitario: produto.precoUnitario,
       quantidade,
       peso: produto.porUnidade ? undefined : quantidade,
       categoriaId: produto.categoriaId,
       subtotal: subtotalItem,
-      porUnidade: produto.porUnidade,
-      origemLancamento: 'BALANCA'
+      porUnidade: produto.porUnidade
     };
 
-    const nextItems = itemExistente
-      ? itens.map((item) => {
-          if (item.id !== itemExistente.id) {
-            return item;
-          }
-
-          const proximaQuantidade = Number((item.quantidade + quantidade).toFixed(3));
-          return {
-            ...item,
-            quantidade: proximaQuantidade,
-            peso: item.porUnidade ? undefined : proximaQuantidade,
-            subtotal: Number((item.precoUnitario * proximaQuantidade).toFixed(2)),
-            origemLancamento: item.origemLancamento ?? 'BALANCA'
-          };
-        })
-      : [itemParaPesagem, ...itens];
-
+    const nextItems = [novoItem, ...itens];
     setItens(nextItems);
     if (comandaAtivaId) {
       persistItensNoBackend(comandaAtivaId, nextItems, 'item_added');
       if (!produto.porUnidade) {
-        registrarPesagemNoBackend(
-          comandaAtivaId,
-          itemParaPesagem,
-          possuiPesoManualInformado || pesoManual !== null ? 'manual' : 'sensor'
-        );
+        registrarPesagemNoBackend(comandaAtivaId, novoItem, pesoManual !== null ? 'manual' : 'sensor');
       }
     }
     setPesquisa('');
     setErro(null);
-    setFeedback(itemExistente ? `${produto.nome} somado ao item lançado.` : `${produto.nome} adicionado.`);
     setPrecoAtual(produto.precoUnitario);
 
-    if (!produto.porUnidade && (possuiPesoManualInformado || pesoManual !== null)) {
+    if (!produto.porUnidade && pesoManual !== null) {
       setPesoManual(null);
     }
   };
@@ -898,36 +672,15 @@ export function useComanda(taxaImposto = 0) {
     setItens([]);
     setPesquisa('');
     setErro(null);
-    setFeedback(activeNumero ? `Comanda #${activeNumero} liberada para novos consumos e caixa.` : null);
-    setPrecoAtual(null);
     setPesoManual(null);
     setIsOfflineMode(false);
     setCampoAtivo('COMANDA');
     toggleToNumerico();
 
     if (activeNumero) {
-      unmarkComandaLocallyCancelled(activeNumero);
-      lastSyncNumeroRef.current = activeNumero;
-
-      void (async () => {
-        try {
-          await markComandaReadyForCashier(activeNumero);
-          setIsOfflineMode(false);
-          setPendingSyncCount(0);
-        } catch (backendError) {
-          const typedError = backendError as BackendError;
-          setIsOfflineMode(true);
-          setPendingSyncCount((current) => Math.max(1, current + 1));
-          setErro(typedError.message || 'Comanda liberada localmente, mas ainda não foi preparada no backend para o caixa.');
-        }
-
-        try {
-          await releaseLock(activeNumero);
-        } catch (backendError) {
-          const typedError = backendError as BackendError;
-          setErro(typedError.message || 'Falha ao liberar lock da comanda encerrada.');
-        }
-      })();
+      void releaseLock(activeNumero).catch((backendError: BackendError) => {
+        setErro(backendError.message || 'Falha ao liberar lock da comanda encerrada.');
+      });
     }
   };
 
@@ -938,7 +691,7 @@ export function useComanda(taxaImposto = 0) {
 
   const focarPesquisa = () => {
     void (async () => {
-      if (isComandaAberta && comandaAtivaId === normalizeComandaNumber(comandaNumber)) {
+      if (isComandaAberta && comandaAtivaId === comandaNumber.trim()) {
         setCampoAtivo('PESQUISA');
         toggleToVirtual();
         return;
@@ -1041,12 +794,7 @@ export function useComanda(taxaImposto = 0) {
     pesquisa,
     tecladoAtivo,
     isComandaConectada,
-    isSyncing,
-    pendingSyncCount,
-    feedback,
     erro,
-    canOpen: Boolean(normalizeComandaNumber(comandaNumber)),
-    canDeleteItems,
     canFinalize: isComandaAberta
   };
 
@@ -1058,11 +806,9 @@ export function useComanda(taxaImposto = 0) {
     focarPesquisa,
     selecionarCategoria,
     selecionarProduto: adicionarProduto,
-    selecionarProdutoComPesoManual: (produto: ProdutoCatalogo, peso: number) => adicionarProduto(produto, peso),
     removerItem,
     ajustarQuantidade,
     finalizeComanda,
-    retrySync,
     handleKeyPress,
     toggleToNumerico,
     toggleToVirtual

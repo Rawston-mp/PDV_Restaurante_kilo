@@ -2,7 +2,7 @@ generator client {
   provider = "prisma-client-js"
 }
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 
@@ -95,4 +95,71 @@ model pdv_comanda_audit {
   numero    String
   event     Json
   created_at DateTime @default(now())
+}
+
+// ============================================
+// TABELAS FISCAIS - NFC-e (API Própria PDVTouch)
+// ============================================
+
+model FiscalDocument {
+  id               String    @id @default(uuid())
+  saleId           String    @unique @map("sale_id")
+  documentType     String    @default("NFCE") @map("document_type")
+  model            String    @default("65")
+  series           String
+  number           String
+  environment      String    // HOMOLOGACAO | PRODUCAO
+  status           String    // PENDING | OFFLINE | AUTHORIZED | REJECTED | CANCELLED | MANUAL_REVIEW
+  accessKey        String    @unique @map("access_key")
+  protocol         String?
+  qrCodeUrl        String?   @map("qr_code_url")
+  signedXml        String?   @db.Text @map("signed_xml")
+  authorizedXml    String?   @db.Text @map("authorized_xml")
+  payload          Json
+  attempts         Int       @default(0)
+  nextRetryAt      DateTime? @map("next_retry_at")
+  cstat            String?
+  xmotivo          String?
+  lastError        String?   @map("last_error")
+  issuedAt         DateTime  @default(now()) @map("issued_at")
+  authorizedAt     DateTime? @map("authorized_at")
+  cancelledAt      DateTime? @map("cancelled_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([accessKey])
+  @@index([saleId])
+  @@map("fiscal_documents")
+}
+
+model NfceNumberControl {
+  id            String   @id @default(uuid())
+  cnpj          String
+  ambiente      String   // HOMOLOGACAO | PRODUCAO
+  serie         String
+  ultimoNumero  String   @default("0") @map("ultimo_numero")
+  proximoNumero String   @default("1") @map("proximo_numero")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([cnpj, ambiente, serie])
+  @@map("nfce_number_control")
+}
+
+model FiscalQueueItem {
+  id           String   @id @default(uuid())
+  documentId   String   @unique @map("document_id")
+  saleId       String   @map("sale_id")
+  status       String   // PENDING | PROCESSING | AUTHORIZED | REJECTED | CANCELLED | MANUAL_REVIEW | FAILED
+  attempts     Int      @default(0)
+  maxAttempts  Int      @default(5) @map("max_attempts")
+  nextRetryAt  DateTime? @map("next_retry_at")
+  lastError    String?  @map("last_error")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([documentId])
+  @@map("fiscal_queue")
 }

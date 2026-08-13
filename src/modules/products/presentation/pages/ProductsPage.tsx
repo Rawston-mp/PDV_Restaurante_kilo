@@ -2,35 +2,17 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import {
+  buildComandaCategories,
   defaultProductCategories,
   getCategoryVisual,
   isSameCategoryName,
+  mergeCategoryOptions,
   normalizeCategoryName,
   persistProductCategories,
   readStoredProductCategories,
   sanitizeCategoryOptions
 } from '@/modules/products/domain/services/productCategories';
-import {
-  cacheSharedProductCategories,
-  loadSharedProductCategories,
-  saveProductCategoriesCatalog
-} from '@/modules/products/infrastructure/api/productCategoryCatalog';
-import {
-  calculateSaleUnitCost,
-  inferUnitsPerPurchase,
-  isPackageUnit,
-  normalizeProductUnit,
-  productUnitOptions,
-  type ProductUnit
-} from '@/modules/products/domain/services/productUnits';
-import { formatNcmCode, searchNcmCatalog } from '@/modules/products/domain/services/ncmLookup';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
-import {
-  clearNfeProductDraft,
-  readNfeProductDraft,
-  writeNfeProductDraftResult,
-  type NfeProductDraftResult
-} from '@/modules/products/infrastructure/local/nfeProductDraft';
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 
@@ -41,12 +23,6 @@ const fiscalTypeOptions = [
   'Produzida internamente',
   'Com substituicao tributaria'
 ];
-
-const fiscalTypeLabels: Record<string, string> = {
-  'Sem substituicao tributaria': 'Sem substituição tributária',
-  'Produzida internamente': 'Produzida internamente',
-  'Com substituicao tributaria': 'Com substituição tributária'
-};
 
 const cstIcmsOptions = [
   '0 - Nacional (exceto as indicadas nos codigos 3, 4, 5 e 8)',
@@ -59,18 +35,6 @@ const cstIcmsOptions = [
   '7 - Estrangeira - mercado interno, sem similar, lista CAMEX',
   '8 - Nacional, Conteudo de importacao superior a 70%'
 ];
-
-const cstIcmsLabels: Record<string, string> = {
-  [cstIcmsOptions[0]]: '0 - Nacional (exceto as indicadas nos códigos 3, 4, 5 e 8)',
-  [cstIcmsOptions[1]]: '1 - Estrangeira - Importação direta',
-  [cstIcmsOptions[2]]: '2 - Estrangeira - Adquirida no mercado interno',
-  [cstIcmsOptions[3]]: '3 - Nacional, conteúdo superior a 40% e inferior ou igual a 70%',
-  [cstIcmsOptions[4]]: '4 - Nacional, processos produtivos básicos',
-  [cstIcmsOptions[5]]: '5 - Nacional, conteúdo inferior a 40%',
-  [cstIcmsOptions[6]]: '6 - Estrangeira - Importação direta, com similar nacional, lista CAMEX',
-  [cstIcmsOptions[7]]: '7 - Estrangeira - Mercado interno, sem similar, lista CAMEX',
-  [cstIcmsOptions[8]]: '8 - Nacional, conteúdo de importação superior a 70%'
-};
 
 const cstPisCofinsOptions = [
   '01',
@@ -91,6 +55,44 @@ const cstPisCofinsOptions = [
 
 const taxSituationCodeOptions = ['61', '102', '300', '400', '500', '900'];
 
+const ncmLookupCatalog = [
+  { code: '02013000', description: 'Carne bovina desossada, fresca ou refrigerada' },
+  { code: '02071400', description: 'Cortes e miudezas de frango congelados' },
+  { code: '03038990', description: 'Peixes congelados (outros)' },
+  { code: '04012010', description: 'Leite UHT integral' },
+  { code: '07031019', description: 'Cebola fresca ou refrigerada (outras)' },
+  { code: '07133329', description: 'Feijao comum, seco, debulhado (outros)' },
+  { code: '09012100', description: 'Cafe torrado, nao descafeinado' },
+  { code: '10063021', description: 'Arroz semibranqueado ou branqueado, polido' },
+  { code: '11010010', description: 'Farinha de trigo' },
+  { code: '16025000', description: 'Preparacoes alimenticias de carne bovina' },
+  { code: '17019900', description: 'Acucares de cana ou de beterraba (outros)' },
+  { code: '19021900', description: 'Massas alimenticias nao cozidas (outras)' },
+  { code: '19059090', description: 'Produtos de padaria e pastelaria (outros)' },
+  { code: '20057000', description: 'Azeitonas preparadas ou conservadas' },
+  { code: '21039021', description: 'Molhos preparados (maionese)' },
+  { code: '22011000', description: 'Agua mineral e agua gaseificada' },
+  { code: '22021000', description: 'Refrigerantes e bebidas nao alcoolicas' },
+  { code: '22030000', description: 'Cervejas de malte' },
+  { code: '22042100', description: 'Vinhos em recipientes ate 2 litros' },
+  { code: '25010020', description: 'Sal refinado' }
+];
+
+const normalizeNcmDigits = (value: string) => value.replace(/\D/g, '').slice(0, 8);
+
+const formatNcmCode = (value: string) => {
+  const digits = normalizeNcmDigits(value);
+  if (digits.length <= 4) {
+    return digits;
+  }
+
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 4)}.${digits.slice(4)}`;
+  }
+
+  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`;
+};
+
 const parseLegacyProductCode = (productName: string) => {
   const [firstChunk] = productName.split(' - ');
   return /^\d{2,4}$/.test(firstChunk) ? firstChunk : null;
@@ -107,6 +109,10 @@ const getUsedProductCodes = (products: Array<{ productCode?: string; name: strin
   }
 
   return usedCodes;
+};
+
+type ProductsPageProps = {
+  onNfeProductSaved?: (result: any) => void;
 };
 
 const getProductDisplayName = (product: { productCode?: string; name: string }) => {
@@ -126,7 +132,7 @@ const generateRandomProductCode = (usedCodes: Set<string>) => {
     }
   }
 
-  // Fallback para manter a unicidade mesmo com alta ocupação de códigos curtos.
+  // Fallback para manter unicidade mesmo com alta ocupacao de codigos curtos.
   for (let fallback = 100; fallback <= 9999; fallback += 1) {
     const candidate = String(fallback);
     if (!usedCodes.has(candidate)) {
@@ -175,7 +181,7 @@ const imageFileToDataUrl = (file: File): Promise<string> =>
         return;
       }
 
-      reject(new Error('Arquivo de imagem inválido.'));
+      reject(new Error('Arquivo de imagem invalido.'));
     };
 
     reader.onerror = () => {
@@ -228,21 +234,15 @@ const compressImageToDataUrl = async (file: File): Promise<string> => {
 
 const isFilled = (value: string) => value.trim().length > 0;
 
-type ProductsPageProps = {
-  onNfeProductSaved?: (result: NfeProductDraftResult) => void;
-};
-
-export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
+export function ProductsPage(_props: ProductsPageProps = {}) {
   const { products, setProducts, reload } = useProductsQuery();
   const { createProduct, saving } = useCreateProduct();
-  const { can } = useAuth();
+  const { user } = useAuth();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const nfeDraftAppliedRef = useRef(false);
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState('ALL');
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -268,10 +268,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
   const [salePrice, setSalePrice] = useState(0);
   const [stock, setStock] = useState(0);
   const [byWeight, setByWeight] = useState(false);
-  const [purchaseUnit, setPurchaseUnit] = useState<ProductUnit>('UN');
-  const [saleUnit, setSaleUnit] = useState<ProductUnit>('UN');
-  const [unitsPerPurchase, setUnitsPerPurchase] = useState(1);
-  const [purchaseCostValue, setPurchaseCostValue] = useState(0);
 
   const [cfop, setCfop] = useState(cfopOptions[0]);
   const [cstIcms, setCstIcms] = useState(cstIcmsOptions[0]);
@@ -282,69 +278,12 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
   const [cstCofins, setCstCofins] = useState(cstPisCofinsOptions[0]);
   const [aliqCofins, setAliqCofins] = useState('');
   const [fiscalType, setFiscalType] = useState(fiscalTypeOptions[0]);
-  const [nfeDraftSourceItemId, setNfeDraftSourceItemId] = useState<string | null>(null);
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const canEditOrDelete = can('products:manage');
+  const canEditOrDelete =
+    user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B' && user?.role !== 'CAIXA';
   const isNewCadastro = editingProductId === null;
-
-  useEffect(() => {
-    if (!canEditOrDelete || nfeDraftAppliedRef.current) {
-      return;
-    }
-
-    const draft = readNfeProductDraft();
-    if (!draft) {
-      return;
-    }
-
-    const importedPurchaseCost = parseDecimalInput(draft.unitCost);
-    const importedPurchaseUnit = normalizeProductUnit(draft.unit);
-    const importedUnitsPerPurchase = inferUnitsPerPurchase(draft.name, importedPurchaseUnit);
-    const importedSaleUnit = isPackageUnit(importedPurchaseUnit) ? 'UN' : importedPurchaseUnit;
-    const importedSaleUnitCost = calculateSaleUnitCost(importedPurchaseCost, importedUnitsPerPurchase);
-    const importedOrigin = cstIcmsOptions.find((option) => option.startsWith(`${draft.origin} -`)) ?? cstIcmsOptions[0];
-    const importedFiscalType = ['10', '30', '60', '70', '201', '202', '203', '500'].includes(draft.cstOrCsosn)
-      ? 'Com substituicao tributaria'
-      : fiscalTypeOptions[0];
-
-    nfeDraftAppliedRef.current = true;
-    setNfeDraftSourceItemId(draft.sourceItemId);
-    setEditingProductId(null);
-    setShowCadastroSpan(true);
-    setActiveTab('PRODUTO');
-    setFormError(null);
-    setProductCode(generateRandomProductCode(getUsedProductCodes(products)));
-    setName(draft.name);
-    setDescription([
-      draft.xmlProductCode ? `Código do fornecedor: ${draft.xmlProductCode}` : '',
-      draft.unit ? `Unidade: ${draft.unit}` : ''
-    ].filter(Boolean).join(' | '));
-    setBarcode(draft.barcode);
-    setCategory(categoryOptions[0] ?? defaultProductCategories[0]);
-    setNcm(formatNcmCode(draft.ncm));
-    setNcmSearchQuery(draft.ncm);
-    setPurchaseUnit(importedPurchaseUnit);
-    setSaleUnit(importedSaleUnit);
-    setUnitsPerPurchase(importedUnitsPerPurchase);
-    setPurchaseCostValue(importedPurchaseCost);
-    setCostValue(importedSaleUnitCost);
-    setMarginProfit(0);
-    setSalePrice(importedSaleUnitCost);
-    setStock(0);
-    setByWeight(importedSaleUnit === 'KG');
-    setCfop(draft.cfop || cfopOptions[0]);
-    setCstIcms(importedOrigin);
-    setTaxSituationCode(draft.cstOrCsosn || taxSituationCodeOptions[0]);
-    setAliqIcms(draft.aliqIcms || '0');
-    setCstPis(draft.cstPis || cstPisCofinsOptions[0]);
-    setAliqPis(draft.aliqPis || '0');
-    setCstCofins(draft.cstCofins || cstPisCofinsOptions[0]);
-    setAliqCofins(draft.aliqCofins || '0');
-    setFiscalType(importedFiscalType);
-    setSyncMessage('Produto preenchido automaticamente com os dados da NF-e. Confira Produto e Fiscal antes de salvar.');
-  }, [canEditOrDelete, categoryOptions, products]);
 
   const getNumericInputValue = (value: number) => {
     if (isNewCadastro && value === 0) {
@@ -355,35 +294,18 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
   };
 
   useEffect(() => {
-    let cancelled = false;
+    const mergedCategories = mergeCategoryOptions(readStoredProductCategories(), products);
+    setCategoryOptions((current) => {
+      const currentNormalized = sanitizeCategoryOptions(current);
+      const nextNormalized = sanitizeCategoryOptions(mergedCategories);
 
-    const refreshCategories = async () => {
-      const sharedCategories = await loadSharedProductCategories(products);
-      const nextNormalized = sanitizeCategoryOptions(sharedCategories);
-
-      if (cancelled) {
-        return;
+      if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
+        return current;
       }
 
-      setCategoryOptions((current) => {
-        const currentNormalized = sanitizeCategoryOptions(current);
-
-        if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
-          return current;
-        }
-
-        cacheSharedProductCategories(nextNormalized);
-        return nextNormalized;
-      });
-
-      void saveProductCategoriesCatalog(nextNormalized).catch(() => undefined);
-    };
-
-    void refreshCategories();
-
-    return () => {
-      cancelled = true;
-    };
+      persistProductCategories(nextNormalized);
+      return nextNormalized;
+    });
   }, [products]);
 
   useEffect(() => {
@@ -427,10 +349,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     setSalePrice(0);
     setStock(0);
     setByWeight(false);
-    setPurchaseUnit('UN');
-    setSaleUnit('UN');
-    setUnitsPerPurchase(1);
-    setPurchaseCostValue(0);
     setCfop(cfopOptions[0]);
     setCstIcms(cstIcmsOptions[0]);
     setTaxSituationCode(taxSituationCodeOptions[0]);
@@ -447,7 +365,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     const sanitized = sanitizeCategoryOptions(nextCategories);
     setCategoryOptions(sanitized);
     persistProductCategories(sanitized);
-    void saveProductCategoriesCatalog(sanitized).catch(() => undefined);
     return sanitized;
   };
 
@@ -508,7 +425,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       }
 
       if (categoryOptions.some((option) => isSameCategoryName(option, nextCategoryName))) {
-        setCategoryActionError('Já existe uma categoria com esse nome.');
+        setCategoryActionError('Ja existe uma categoria com esse nome.');
         return;
       }
 
@@ -537,7 +454,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
           (option) => !isSameCategoryName(option, targetCategory) && isSameCategoryName(option, nextCategoryName)
         )
       ) {
-        setCategoryActionError('Já existe outra categoria com esse nome.');
+        setCategoryActionError('Ja existe outra categoria com esse nome.');
         return;
       }
 
@@ -553,13 +470,13 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     }
 
     if (categoryOptions.length === 1) {
-      setCategoryActionError('Não é possível excluir a única categoria cadastrada.');
+      setCategoryActionError('Nao e possivel excluir a unica categoria cadastrada.');
       return;
     }
 
     const fallbackCategory = categoryOptions.find((option) => !isSameCategoryName(option, targetCategory));
     if (!fallbackCategory) {
-      setCategoryActionError('Não foi possível definir a categoria de destino.');
+      setCategoryActionError('Nao foi possivel definir a categoria de destino.');
       return;
     }
 
@@ -579,16 +496,23 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       : null;
 
   const ncmLookupResults = useMemo(() => {
-    return searchNcmCatalog(ncmSearchQuery);
-  }, [ncmSearchQuery]);
-
-  const filteredProducts = useMemo(() => {
-    if (activeCategoryFilter === 'ALL') {
-      return products;
+    const query = ncmSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return ncmLookupCatalog.slice(0, 8);
     }
 
-    return products.filter((product) => isSameCategoryName(product.category, activeCategoryFilter));
-  }, [activeCategoryFilter, products]);
+    const normalizedQueryDigits = normalizeNcmDigits(query);
+
+    return ncmLookupCatalog
+      .filter((item) => {
+        if (normalizedQueryDigits && item.code.includes(normalizedQueryDigits)) {
+          return true;
+        }
+
+        return item.description.toLowerCase().includes(query);
+      })
+      .slice(0, 12);
+  }, [ncmSearchQuery]);
 
   const generateCodeForCurrentCatalog = () => {
     const usedCodes = getUsedProductCodes(products);
@@ -600,12 +524,12 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       const result = await productsContainer.syncProducts.execute();
       await reload();
       setSyncMessage(
-        `Sincronização de produtos: ${result.mergedCount} itens, ${result.resolvedConflicts} conflitos.`
+        `Sincronizacao de produtos: ${result.mergedCount} itens, ${result.resolvedConflicts} conflitos.`
       );
     } catch (error) {
       await productsContainer.syncTaskQueue.enqueue('SYNC_PRODUCTS');
       setSyncMessage(
-        `Falha na sincronização. Tarefa enviada para a fila: ${
+        `Falha na sincronizacao. Tarefa enviada para fila: ${
           error instanceof Error ? error.message : 'erro desconhecido'
         }`
       );
@@ -626,7 +550,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     event.preventDefault();
 
     if (!canEditOrDelete) {
-      setFormError('O perfil de comanda não pode cadastrar nem editar produtos.');
+      setFormError('Perfil de comanda nao pode cadastrar ou editar produtos.');
       return;
     }
 
@@ -637,7 +561,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     }
 
     if (!isFilled(aliqIcms) || !isFilled(aliqPis) || !isFilled(aliqCofins)) {
-      setFormError('Preencha as alíquotas fiscais (ICMS, PIS e COFINS) antes de salvar.');
+      setFormError('Preencha as aliquotas fiscais (ICMS, PIS e COFINS) antes de salvar.');
       setActiveTab('FISCAL');
       return;
     }
@@ -646,13 +570,12 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     const generatedCode = productCode && !usedCodes.has(productCode)
       ? productCode
       : generateRandomProductCode(usedCodes);
-    let savedProductId = editingProductId;
 
     if (editingProductId) {
       const existingProduct = products.find((product) => product.id === editingProductId);
 
       if (!existingProduct) {
-        setFormError('O produto selecionado para edição não foi encontrado.');
+        setFormError('Produto selecionado para edicao nao foi encontrado.');
         return;
       }
 
@@ -676,10 +599,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
         cstCofins,
         aliqCofins,
         fiscalType,
-        purchaseUnit,
-        saleUnit,
-        unitsPerPurchase,
-        purchaseCostValue,
         costValue,
         marginProfit,
         price: salePrice,
@@ -711,10 +630,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
         cstCofins,
         aliqCofins,
         fiscalType,
-        purchaseUnit,
-        saleUnit,
-        unitsPerPurchase,
-        purchaseCostValue,
         costValue,
         marginProfit,
         price: salePrice,
@@ -723,20 +638,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       });
 
       setProducts((prev) => [...prev, product]);
-      savedProductId = product.id;
-    }
-
-    if (nfeDraftSourceItemId && savedProductId) {
-      const result = {
-        sourceItemId: nfeDraftSourceItemId,
-        productId: savedProductId,
-        productName: name
-      };
-      writeNfeProductDraftResult(result);
-      clearNfeProductDraft();
-      setNfeDraftSourceItemId(null);
-      setSyncMessage('Produto cadastrado e vinculado à entrada de estoque.');
-      onNfeProductSaved?.(result);
     }
 
     resetCadastroForm();
@@ -746,7 +647,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
   const onEditProduct = (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('O perfil de comanda não pode editar produtos.');
+      setFormError('Perfil de comanda nao pode editar produtos.');
       return;
     }
 
@@ -774,10 +675,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     setShowNcmLookup(false);
     setStock(product.stock);
     setByWeight(product.byWeight);
-    setPurchaseUnit(normalizeProductUnit(product.purchaseUnit));
-    setSaleUnit(normalizeProductUnit(product.saleUnit));
-    setUnitsPerPurchase(product.unitsPerPurchase && product.unitsPerPurchase > 0 ? product.unitsPerPurchase : 1);
-    setPurchaseCostValue(product.purchaseCostValue ?? product.costValue ?? 0);
     setCostValue(product.costValue ?? 0);
     setMarginProfit(product.marginProfit ?? 0);
     setSalePrice(product.price);
@@ -795,7 +692,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
   const onDeleteProduct = async (productId: string) => {
     if (!canEditOrDelete) {
-      setFormError('O perfil de comanda não pode excluir produtos.');
+      setFormError('Perfil de comanda nao pode deletar produtos.');
       return;
     }
 
@@ -804,7 +701,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       return;
     }
 
-    const confirmed = window.confirm(`Deseja excluir o produto "${getProductDisplayName(target)}"?`);
+    const confirmed = window.confirm(`Deseja deletar o produto "${getProductDisplayName(target)}"?`);
     if (!confirmed) {
       return;
     }
@@ -826,7 +723,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
     }
 
     if (!PRODUCT_IMAGE_MIME_TYPES.has(file.type)) {
-      setImageUploadError('Formato inválido. Use JPG, PNG ou WEBP.');
+      setImageUploadError('Formato invalido. Use JPG, PNG ou WEBP.');
       event.target.value = '';
       return;
     }
@@ -843,21 +740,24 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       setImageUploadError(null);
       setFormError(null);
     } catch {
-      setImageUploadError('Não foi possível carregar ou comprimir a imagem selecionada.');
+      setImageUploadError('Nao foi possivel carregar ou comprimir a imagem selecionada.');
     } finally {
       event.target.value = '';
     }
   };
 
-  const openCadastro = () => {
-    resetCadastroForm();
-
-    if (activeCategoryFilter !== 'ALL') {
-      setCategory(activeCategoryFilter);
+  const openCadastroForCategory = (nextCategory: string) => {
+    if (!canEditOrDelete) {
+      return;
     }
 
-    setShowCadastroSpan(true);
+    if (!showCadastroSpan) {
+      resetCadastroForm();
+      setShowCadastroSpan(true);
+    }
+
     setActiveTab('PRODUTO');
+    setCategory(nextCategory);
   };
 
   return (
@@ -866,7 +766,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
         <div>
           <p className="products-eyebrow">Catalogo e precificacao</p>
           <h2>Produtos</h2>
-          <p className="products-subtitle">Cadastre e sincronize itens com foco em operação rápida de caixa.</p>
+          <p className="products-subtitle">Cadastre e sincronize itens com foco em operacao rapida de caixa.</p>
         </div>
         <div className="products-kpi">
           <strong>{products.length}</strong>
@@ -880,7 +780,13 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
             <button
               type="button"
               className="products-new-button"
-              onClick={openCadastro}
+              onClick={() => {
+                if (!showCadastroSpan) {
+                  resetCadastroForm();
+                }
+
+                setShowCadastroSpan((prev) => !prev);
+              }}
             >
               + Novo cadastro
             </button>
@@ -889,7 +795,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
             Sincronizar produtos
           </button>
           <button type="button" className="button-muted" onClick={onProcessSyncQueue}>
-            Processar fila de sincronização
+            Processar fila de sincronizacao
           </button>
         </div>
         {syncMessage && <p className="sync-banner">{syncMessage}</p>}
@@ -897,19 +803,10 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
       {canEditOrDelete && (
         <article className="card products-cadastro-quickbar">
-          <p className="products-help-note">Categorias rápidas: clique para filtrar o catálogo ativo.</p>
-          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rápidas do catálogo">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeCategoryFilter === 'ALL'}
-              className={`products-category-chip ${activeCategoryFilter === 'ALL' ? 'is-active' : ''}`}
-              onClick={() => setActiveCategoryFilter('ALL')}
-            >
-              Todos
-            </button>
+          <p className="products-help-note">Categorias rapidas: clique para abrir o cadastro ja na categoria.</p>
+          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rapidas de cadastro">
             {categoryOptions.map((option) => {
-              const isActiveCategory = activeCategoryFilter !== 'ALL' && isSameCategoryName(option, activeCategoryFilter);
+              const isActiveCategory = isSameCategoryName(option, category);
               return (
                 <button
                   key={option}
@@ -917,7 +814,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   role="tab"
                   aria-selected={isActiveCategory}
                   className={`products-category-chip ${isActiveCategory ? 'is-active' : ''}`}
-                  onClick={() => setActiveCategoryFilter(option)}
+                  onClick={() => openCadastroForCategory(option)}
                 >
                   {option}
                 </button>
@@ -928,10 +825,9 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       )}
 
       {canEditOrDelete && showCadastroSpan && (
-        <div className="products-cadastro-overlay" role="dialog" aria-modal="true" aria-labelledby="products-cadastro-title">
-        <article className="card products-cadastro-span products-cadastro-modal">
+        <article className="card products-cadastro-span">
           <header className="products-cadastro-header">
-            <h3 id="products-cadastro-title">Produtos &gt; Cadastro</h3>
+            <h3>Produtos &gt; Cadastro</h3>
             <div className="products-cadastro-tabs">
               <button
                 type="button"
@@ -947,18 +843,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
               >
                 Fiscal
               </button>
-              <button
-                type="button"
-                className="products-cadastro-close"
-                aria-label="Fechar cadastro de produto"
-                onClick={() => {
-                  setShowCadastroSpan(false);
-                  setEditingProductId(null);
-                  setFormError(null);
-                }}
-              >
-                +
-              </button>
             </div>
           </header>
 
@@ -967,7 +851,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
               <>
                 <div className="products-row-4">
                   <div className="products-field-compact">
-                    <label htmlFor="product-code">ID do produto (automático)</label>
+                    <label htmlFor="product-code">ID do produto (automatico)</label>
                     <input
                       id="product-code"
                       placeholder="Gerado automaticamente"
@@ -990,18 +874,18 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                     />
                   </div>
                   <div className="products-field-main">
-                    <label htmlFor="description">Descrição</label>
+                    <label htmlFor="description">Descricao</label>
                     <input
                       id="description"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="Descrição exibida no caixa"
+                      placeholder="Descricao exibida no caixa"
                     />
                   </div>
                   <div>
-                    <label htmlFor="barcode">Código de barras</label>
+                    <label htmlFor="barcode">Codigo de barra</label>
                     <input id="barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} autoComplete="off" />
                   </div>
                   <div className="products-photo-field">
@@ -1015,7 +899,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                         void onUploadProductImage(event);
                       }}
                     />
-                    <small className="products-help-note">PNG, JPG ou WEBP de até 2 MB.</small>
+                    <small className="products-help-note">PNG, JPG ou WEBP ate 2MB.</small>
 
                     {imageUploadError && <small className="products-form-warning">{imageUploadError}</small>}
 
@@ -1138,8 +1022,8 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                         <input
                           value={ncmSearchQuery}
                           onChange={(e) => setNcmSearchQuery(e.target.value)}
-                          placeholder="Buscar por código ou descrição"
-                          aria-label="Buscar por código ou descrição de NCM"
+                          placeholder="Buscar por codigo ou descricao"
+                          aria-label="Buscar por codigo ou descricao de NCM"
                           autoComplete="off"
                         />
                         <ul>
@@ -1181,92 +1065,28 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                 </div>
 
                 <div className="products-cost-block">
-                  <h4>Unidades e conversão</h4>
-                  <div className="products-row-4">
+                  <h4>Custo inicial</h4>
+                  <div className="products-row-3">
                     <div className="products-field-compact">
-                      <label htmlFor="purchase-unit">Unidade de compra</label>
-                      <select
-                        id="purchase-unit"
-                        value={purchaseUnit}
-                        onChange={(event) => {
-                          const nextUnit = event.target.value as ProductUnit;
-                          const nextConversion = isPackageUnit(nextUnit) ? unitsPerPurchase : 1;
-                          const nextSaleUnit = isPackageUnit(nextUnit) ? saleUnit : nextUnit;
-                          const nextUnitCost = calculateSaleUnitCost(purchaseCostValue, nextConversion);
-                          setPurchaseUnit(nextUnit);
-                          setSaleUnit(nextSaleUnit);
-                          setUnitsPerPurchase(nextConversion);
-                          setCostValue(nextUnitCost);
-                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
-                          setByWeight(nextSaleUnit === 'KG');
-                        }}
-                      >
-                        {productUnitOptions.map((unitOption) => <option key={unitOption} value={unitOption}>{unitOption}</option>)}
-                      </select>
-                      <small className="products-help-note">Lida automaticamente da NF-e.</small>
-                    </div>
-                    <div className="products-field-compact">
-                      <label htmlFor="units-per-purchase">Conteúdo da embalagem</label>
+                      <label htmlFor="cost-value">Valor R$</label>
                       <input
-                        id="units-per-purchase"
-                        type="number"
-                        min="0.001"
-                        step="0.001"
-                        value={unitsPerPurchase}
-                        onChange={(event) => {
-                          const nextConversion = Math.max(0.001, parseDecimalInput(event.target.value) || 1);
-                          const nextUnitCost = calculateSaleUnitCost(purchaseCostValue, nextConversion);
-                          setUnitsPerPurchase(nextConversion);
-                          setCostValue(nextUnitCost);
-                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
-                        }}
-                      />
-                      <small className="products-help-note">Quantas unidades de venda existem na compra.</small>
-                    </div>
-                    <div className="products-field-compact">
-                      <label htmlFor="sale-unit">Unidade de venda</label>
-                      <select
-                        id="sale-unit"
-                        value={saleUnit}
-                        onChange={(event) => {
-                          const nextUnit = event.target.value as ProductUnit;
-                          setSaleUnit(nextUnit);
-                          setByWeight(nextUnit === 'KG');
-                        }}
-                      >
-                        {productUnitOptions.map((unitOption) => <option key={unitOption} value={unitOption}>{unitOption}</option>)}
-                      </select>
-                    </div>
-                    <div className="products-conversion-summary">
-                      <span>Conversão aplicada</span>
-                      <strong>1 {purchaseUnit} = {unitsPerPurchase} {saleUnit}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="products-cost-block">
-                  <h4>Custo e margem por unidade de venda</h4>
-                  <div className="products-row-4">
-                    <div className="products-field-compact">
-                      <label htmlFor="purchase-cost-value">Custo por {purchaseUnit}</label>
-                      <input
-                        id="purchase-cost-value"
+                        id="cost-value"
                         type="number"
                         min={0}
-                        step="0.000001"
-                        value={getNumericInputValue(purchaseCostValue)}
+                        step="0.01"
+                        value={getNumericInputValue(costValue)}
                         onChange={(e) => {
-                          const nextPurchaseCost = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
-                          const nextUnitCost = calculateSaleUnitCost(nextPurchaseCost, unitsPerPurchase);
-                          setPurchaseCostValue(nextPurchaseCost);
-                          setCostValue(nextUnitCost);
-                          setSalePrice(calculateSalePrice(nextUnitCost, marginProfit));
+                          const nextCost = e.target.value === '' ? 0 : parseDecimalInput(e.target.value);
+                          setCostValue(nextCost);
+
+                          if (salePrice > 0) {
+                            setMarginProfit(calculateMarginProfit(nextCost, salePrice));
+                            return;
+                          }
+
+                          setSalePrice(calculateSalePrice(nextCost, marginProfit));
                         }}
                       />
-                    </div>
-                    <div className="products-field-compact">
-                      <label htmlFor="cost-value">Custo por {saleUnit}</label>
-                      <input id="cost-value" type="number" value={costValue} readOnly />
                     </div>
                     <div className="products-field-compact">
                       <label htmlFor="margin-profit">Margem lucro %</label>
@@ -1284,7 +1104,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                       />
                     </div>
                     <div className="products-field-compact">
-                      <label htmlFor="sale-price">Preço de venda</label>
+                      <label htmlFor="sale-price">Preco venda</label>
                       <input
                         id="sale-price"
                         type="number"
@@ -1305,39 +1125,37 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                 <div className="products-row-2">
                   <div>
                     <small className="products-help-note">
-                      O custo de venda é calculado dividindo o custo da compra pelo conteúdo da embalagem. A margem e o preço usam esse custo convertido.
+                      O sistema calcula automaticamente preco de venda por custo + margem, e tambem recalcula a margem quando voce informa custo + preco de venda.
                     </small>
                   </div>
                 </div>
 
-                <div className="products-options-row">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={byWeight}
-                      onChange={(e) => setByWeight(e.target.checked)}
-                    />
-                    Produto por peso
-                  </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={byWeight}
+                    onChange={(e) => setByWeight(e.target.checked)}
+                  />
+                  Produto por peso
+                </label>
 
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={isUnavailable}
-                      onChange={(e) => setIsUnavailable(e.target.checked)}
-                    />
-                    Tornar indisponível no caixa
-                  </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={isUnavailable}
+                    onChange={(e) => setIsUnavailable(e.target.checked)}
+                  />
+                  Tornar indisponivel no caixa
+                </label>
 
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={isHidden}
-                      onChange={(e) => setIsHidden(e.target.checked)}
-                    />
-                    Ocultar do caixa e dos terminais de balança
-                  </label>
-                </div>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={isHidden}
+                    onChange={(e) => setIsHidden(e.target.checked)}
+                  />
+                  Ocultar do caixa e dos terminais de balanca
+                </label>
               </>
             ) : (
               <>
@@ -1345,10 +1163,9 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   <div>
                     <label htmlFor="cfop">CFOP</label>
                     <select id="cfop" value={cfop} onChange={(e) => setCfop(e.target.value)}>
-                      {cfop && !cfopOptions.includes(cfop) && <option value={cfop}>{cfop} - Importado da NF-e</option>}
                       {cfopOptions.map((option) => (
                         <option key={option} value={option}>
-                          {cstIcmsLabels[option] ?? option}
+                          {option}
                         </option>
                       ))}
                     </select>
@@ -1362,18 +1179,15 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                         </option>
                       ))}
                     </select>
-                    <small className="products-help-note">Dica: use o código CST/CSOSN conforme seu regime.</small>
+                    <small className="products-help-note">Dica: use o codigo CST/CSOSN conforme seu regime.</small>
                   </div>
                   <div>
-                    <label htmlFor="tax-situation-code">Código 61 a 900</label>
+                    <label htmlFor="tax-situation-code">Codigo 61 a 900</label>
                     <select
                       id="tax-situation-code"
                       value={taxSituationCode}
                       onChange={(e) => setTaxSituationCode(e.target.value)}
                     >
-                      {taxSituationCode && !taxSituationCodeOptions.includes(taxSituationCode) && (
-                        <option value={taxSituationCode}>{taxSituationCode} - Importado da NF-e</option>
-                      )}
                       {taxSituationCodeOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1382,7 +1196,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="aliq-icms">Alíq. ICMS</label>
+                    <label htmlFor="aliq-icms">Aliq. ICMS</label>
                     <input
                       id="aliq-icms"
                       placeholder="Ex.: 18,00"
@@ -1396,7 +1210,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   <div>
                     <label htmlFor="cst-pis">CST PIS</label>
                     <select id="cst-pis" value={cstPis} onChange={(e) => setCstPis(e.target.value)}>
-                      {cstPis && !cstPisCofinsOptions.includes(cstPis) && <option value={cstPis}>{cstPis} - Importado da NF-e</option>}
                       {cstPisCofinsOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1405,7 +1218,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="aliq-pis">Alíq. PIS</label>
+                    <label htmlFor="aliq-pis">Aliq. PIS</label>
                     <input
                       id="aliq-pis"
                       placeholder="Ex.: 1,65"
@@ -1416,7 +1229,6 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   <div>
                     <label htmlFor="cst-cofins">CST COFINS</label>
                     <select id="cst-cofins" value={cstCofins} onChange={(e) => setCstCofins(e.target.value)}>
-                      {cstCofins && !cstPisCofinsOptions.includes(cstCofins) && <option value={cstCofins}>{cstCofins} - Importado da NF-e</option>}
                       {cstPisCofinsOptions.map((option) => (
                         <option key={option} value={option}>
                           {option}
@@ -1428,7 +1240,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
                 <div className="products-row-2 products-fiscal-row-end">
                   <div>
-                    <label htmlFor="aliq-cofins">Alíq. COFINS</label>
+                    <label htmlFor="aliq-cofins">Aliq. COFINS</label>
                     <input
                       id="aliq-cofins"
                       placeholder="Ex.: 7,60"
@@ -1441,7 +1253,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                     <select id="fiscal-type" value={fiscalType} onChange={(e) => setFiscalType(e.target.value)}>
                       {fiscalTypeOptions.map((option) => (
                         <option key={option} value={option}>
-                          {fiscalTypeLabels[option] ?? option}
+                          {option}
                         </option>
                       ))}
                     </select>
@@ -1452,7 +1264,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
 
             <div className="products-cadastro-footer">
               <button type="submit" disabled={saving}>
-                {saving ? 'Salvando...' : editingProductId ? 'Salvar edição' : 'Salvar dados'}
+                {saving ? 'Salvando...' : editingProductId ? 'Salvar edicao' : 'Salvar dados'}
               </button>
               <button
                 type="button"
@@ -1470,39 +1282,44 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
             {formError && <p className="products-form-warning">{formError}</p>}
           </form>
         </article>
-        </div>
       )}
 
       <div className="products-grid products-grid-list-only">
         <article className="card products-list-card">
-          <header className="products-list-header">
-            <div>
-              <h3>Catalogo ativo</h3>
-              <p className="products-help-note">
-                {activeCategoryFilter === 'ALL' ? 'Mostrando todos os produtos.' : `Filtro: ${activeCategoryFilter}.`}
-              </p>
-            </div>
-            <span>{filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'itens'}</span>
-          </header>
+          <h3>Catalogo ativo</h3>
           {products.length === 0 ? (
             <p className="empty-state">Nenhum produto cadastrado ainda.</p>
-          ) : filteredProducts.length === 0 ? (
-            <p className="empty-state">Nenhum produto encontrado nesta categoria.</p>
           ) : (
             <ul className="products-list">
-              {filteredProducts.map((product) => (
+              {products.map((product) => (
                 <li key={product.id}>
                   <div>
                     <strong>
                       <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
                       {getProductDisplayName(product)}
                     </strong>
+                    {product.description ? <span>{product.description}</span> : <span />}
                     <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
                       <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
                     </span>
                   </div>
-                  <div className="products-list-actions-cell">
+                  <div>
                     <strong>{currency.format(product.price)}</strong>
+                    <span>estoque {product.stock}</span>
+                    <span>
+                      {product.isUnavailable ? 'indisponivel' : 'disponivel'} | {product.isHidden ? 'oculto' : 'visivel'}
+                    </span>
+                    {canEditOrDelete && (
+                      <span>
+                        custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
+                        {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
+                      </span>
+                    )}
+                    {canEditOrDelete && (
+                      <span>
+                        cod. barras {product.barcode ?? '-'} | NCM {product.ncm ?? '-'} | CFOP {product.cfop ?? '-'}
+                      </span>
+                    )}
                     {canEditOrDelete && (
                       <div className="products-row-actions">
                         <button
@@ -1517,7 +1334,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                           className="products-delete-button"
                           onClick={() => void onDeleteProduct(product.id)}
                         >
-                          Excluir
+                          Deletar
                         </button>
                       </div>
                     )}
@@ -1530,12 +1347,7 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
       </div>
 
       {categoryManagerMode && (
-        <div
-          className="sensitive-modal-overlay products-category-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="products-group-manager-title"
-        >
+        <div className="sensitive-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="products-group-manager-title">
           <section className="sensitive-modal">
             <h3 id="products-group-manager-title">
               {categoryManagerMode === 'ADD'
@@ -1603,8 +1415,8 @@ export function ProductsPage({ onNfeProductSaved }: ProductsPageProps = {}) {
                   {categoryManagerMode === 'ADD'
                     ? 'Cadastrar'
                     : categoryManagerMode === 'EDIT'
-                      ? 'Salvar alteração'
-                      : 'Confirmar exclusão'}
+                      ? 'Salvar alteracao'
+                      : 'Confirmar exclusao'}
                 </button>
                 <button type="button" className="button-muted" onClick={closeCategoryManager}>
                   Cancelar

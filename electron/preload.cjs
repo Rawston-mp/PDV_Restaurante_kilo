@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testarImpressora: (config) => ipcRenderer.send('print-job:test', config),
   imprimirCupom: (dados) => ipcRenderer.send('print-job:execute', dados),
   listarImpressoras: () => ipcRenderer.invoke('print-job:list-printers'),
-  selecionarCertificadoDigital: (options) => ipcRenderer.invoke('certificate:select-and-store', options)
+  selecionarCertificadoDigital: (options) => ipcRenderer.invoke('certificate:select-and-store', options),
+  validarCertificadoDigital: (input) => ipcRenderer.invoke('certificate:validate', input),
+  prepararNfceHomologacao: (input) => ipcRenderer.invoke('nfce:prepare-homologation', input)
 });
 

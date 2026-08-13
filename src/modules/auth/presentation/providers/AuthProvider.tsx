@@ -166,11 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!user) {
           return {
             success: false,
-            message: 'Usuário não autenticado para ação sensível.'
+            message: 'Usuario nao autenticado para acao sensivel.'
           };
         }
 
-        if (!verifySensitivePin(user.role, password, user.storeId)) {
+        if (!verifySensitivePin(user.role, password)) {
           logWarn({
             event: 'AUTH_SENSITIVE_DENIED',
             module: 'auth',
@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return {
             success: false,
-            message: `Senha de confirmação inválida para ${actionNameMap[action]}.`
+            message: `Senha de confirmacao invalida para ${actionNameMap[action]}.`
           };
         }
 
@@ -191,21 +191,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           success: true,
-          message: `Confirmação de ${actionNameMap[action]} aprovada.`
+          message: `Confirmacao de ${actionNameMap[action]} aprovada.`
         };
       },
       changePin: ({ kind, role, currentPin, nextPin, confirmPin }: ChangePinInput) => {
         if (!user || user.role !== 'ADMIN') {
           return {
             success: false,
-            message: 'Somente ADMIN pode alterar a política de PIN.'
+            message: 'Somente ADMIN pode alterar politica de PIN.'
           };
         }
 
         if (nextPin !== confirmPin) {
           return {
             success: false,
-            message: 'A confirmação do novo PIN não confere.'
+            message: 'Confirmacao do novo PIN nao confere.'
           };
         }
 
@@ -213,8 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           kind,
           role,
           currentPin,
-          nextPin,
-          storeId: user.storeId
+          nextPin
         });
 
         if (result.success) {
@@ -233,7 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return result;
       },
-      getPinHealth: () => getPinPolicySummary(user?.storeId),
+      getPinHealth: () => getPinPolicySummary(),
       signOut: () => {
         setUser(null);
         persistUser(null);
