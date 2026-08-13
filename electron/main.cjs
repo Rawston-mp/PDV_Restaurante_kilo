@@ -17,6 +17,20 @@ let backendProcess = null;
 let mainWindow = null;
 const startupLogPath = path.join(os.tmpdir(), 'pdvtouch-main.log');
 
+// Durante desenvolvimento, redirecionar `userData` para uma pasta local do projeto
+// evita locks/EBUSY no AppData do Windows quando o processo é reiniciado pelo
+// Vite/Electron em paralelo. Isso só é aplicado quando não empacotado.
+try {
+    if (!app.isPackaged) {
+        const projectUserData = path.join(process.cwd(), '.electron-user-data');
+        try { fs.mkdirSync(projectUserData, { recursive: true }); } catch (_) {}
+        app.setPath('userData', projectUserData);
+        writeStartupLog(`Redirected userData to ${projectUserData}`);
+    }
+} catch (err) {
+    // Não falhar a inicialização por problemas no redirecionamento.
+}
+
 const writeStartupLog = (message, error) => {
     const details = error ? ` | ${error.stack || error.message || String(error)}` : '';
     const line = `[${new Date().toISOString()}] ${message}${details}\n`;

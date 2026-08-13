@@ -11,10 +11,17 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  // Configurações do servidor de desenvolvimento
   server: {
     host: '0.0.0.0',
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    // Evitar que o dev server observe arquivos do Electron userData criados localmente
+    // que podem estar travados por outros processos (IndexedDB/LOCK). Ignorar essa
+    // pasta previne erros EBUSY ao rodar `npm run dev` junto com `electron:dev`.
+    watch: {
+      ignored: ['**/.electron-user-data/**']
+    }
   },
   test: {
     environment: 'jsdom',
