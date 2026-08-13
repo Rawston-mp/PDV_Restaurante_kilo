@@ -1,5 +1,7 @@
 import type { SefazClient, SefazClientConfig } from '../../domain/ports/SefazClient';
 import type { FiscalAuthorizationResult } from '../../domain/ports/FiscalGateway';
+import https from 'https';
+import { URL } from 'url';
 
 /**
  * SefazClientReal
@@ -129,29 +131,53 @@ export class SefazClientReal implements SefazClient {
   }
 
   private async postSoap(endpoint: string, soapEnvelope: string, soapAction: string): Promise<string> {
-    const controller = new AbortController();
-    const timeout = globalThis.setTimeout(() => controller.abort(), this.config.timeoutMs || 30000);
+    const url = new URL(endpoint);
+    const timeoutMs = this.config.timeoutMs || 30000;
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8',
-          SOAPAction: soapAction
+    const pfxOption = this.config.certificatePfx
+      ? (typeof this.config.certificatePfx === 'string' ? Buffer.from(this.config.certificatePfx, 'base64') : this.config.certificatePfx)
+      : undefined;
+
+    const agent = new https.Agent({ pfx: pfxOption, passphrase: this.config.certificatePassword });
+
+    return await new Promise<string>((resolve, reject) => {
+      const req = https.request(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
+          path: url.pathname + url.search,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/soap+xml; charset=utf-8',
+            SOAPAction: soapAction,
+            'Content-Length': Buffer.byteLength(soapEnvelope, 'utf8'),
+          },
+          agent,
+          timeout: timeoutMs,
         },
-        body: soapEnvelope,
-        signal: controller.signal
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          res.on('end', () => {
+            const responseText = Buffer.concat(chunks).toString('utf8');
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(responseText);
+            } else {
+              reject(new Error(`SEFAZ retornou HTTP ${res.statusCode}: ${responseText.slice(0, 300)}`));
+            }
+          });
+        }
+      );
+
+      req.on('error', (err) => reject(err));
+      req.on('timeout', () => {
+        req.destroy(new Error('AbortError: request timeout'));
       });
 
-      const responseText = await response.text();
-      if (!response.ok) {
-        throw new Error(`SEFAZ retornou HTTP ${response.status}: ${responseText.slice(0, 300)}`);
-      }
-
-      return responseText;
-    } finally {
-      globalThis.clearTimeout(timeout);
-    }
+      req.write(soapEnvelope, 'utf8');
+      req.end();
+    });
   }
 
   private isNetworkError(error: unknown): boolean {

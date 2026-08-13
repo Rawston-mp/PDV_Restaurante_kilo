@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { Role } from '@/modules/auth/domain/types/Role';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
-import { readStoreSettings } from '@/modules/admin/infrastructure/local/platformSettings';
+import { getStoreSettingsForRole } from '@/modules/admin/infrastructure/local/platformSettings';
 
 const roleLabel: Record<Role, string> = {
   ADMIN: 'Admin',
@@ -17,7 +17,7 @@ export function AuthAccessPanel() {
   const { user, signInWithPassword, signOut, availableRoles } = useAuth();
 
   const [role, setRole] = useState<Role>('CAIXA');
-  const [stores, setStores] = useState(() => readStoreSettings());
+  const [stores, setStores] = useState(() => getStoreSettingsForRole(role));
   const [selectedStoreId, setSelectedStoreId] = useState(stores[0]?.id ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -34,6 +34,12 @@ export function AuthAccessPanel() {
     }
   };
 
+  useEffect(() => {
+    const accessible = getStoreSettingsForRole(role);
+    setStores(accessible);
+    setSelectedStoreId(accessible[0]?.id ?? '');
+  }, [role]);
+
   if (user) {
     return (
       <section className="auth-sidebar-status">
@@ -41,6 +47,7 @@ export function AuthAccessPanel() {
         <strong>{user.name}</strong>
         <span>{roleLabel[user.role]}</span>
         <span>Logado em: {roleLabel[user.role]}</span>
+        <span>Loja: {user.storeName ?? 'Sem loja'}</span>
 
         <button
           type="button"

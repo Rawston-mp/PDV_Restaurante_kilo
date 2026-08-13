@@ -4,6 +4,9 @@ export interface SefazClientConfig {
   uf: string;
   ambiente: 'HOMOLOGACAO' | 'PRODUCAO';
   timeoutMs?: number;
+  // Certificado A1 em formato PFX (buffer base64 ou binário) e senha
+  certificatePfx?: Buffer | string;
+  certificatePassword?: string;
 }
 
 export interface SefazClient {

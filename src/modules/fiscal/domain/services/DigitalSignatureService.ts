@@ -60,27 +60,50 @@ export class DigitalSignatureService implements DigitalSigner {
         throw new Error('Certificado expirado ou ainda não válido');
       }
 
-      // 5. Canonicalizar XML (abordagem simplificada para NFC-e)
-      // Remove quebras de linha e espaços desnecessários entre tags
-      const canonicalXml = this.canonicalizeXml(xml);
+      // 5. Extrair <infNFe> e seu Id (Id="NFe..." contém a chave de acesso)
+      const infNFeMatch = xml.match(/<infNFe\s+([^>]*)>([\s\S]*?)<\/infNFe>/i);
+      if (!infNFeMatch) {
+        throw new Error('Tag <infNFe> não encontrada no XML');
+      }
 
-      // 6. Gerar digest SHA-256 do XML canonicalizado
-      const md = forge.md.sha256.create();
-      md.update(canonicalXml, 'utf8');
-      const digestValue = forge.util.encode64(md.digest().getBytes());
+      const infNFeAttrs = infNFeMatch[1];
+      const infNFeInner = `<infNFe ${infNFeAttrs}>${infNFeMatch[2]}</infNFe>`;
 
-      // 7. Assinar o digest com RSA + SHA-256
-      const signature = privateKey.sign(md, 'RSASSA-PKCS1-V1_5');
-      const signatureValue = forge.util.encode64(signature);
+      // 6. Extrair accessKey (parte do atributo Id="NFeXXXXXXXX...)
+      const accessKey = this.extractAccessKeyFromXml(infNFeInner);
+      if (!accessKey) {
+        throw new Error('Chave de acesso não encontrada no infNFe');
+      }
 
-      // 8. Montar tag <Signature> (XMLDSig)
-      const signatureXml = this.buildSignatureXml(
+      // 7. Canonicalizar apenas o infNFe (C14N simplificado compatível)
+      const canonicalInfNFe = this.canonicalizeXml(infNFeInner);
+
+      // 8. Calcular digest SHA-256 sobre o infNFe canonicalizado
+      const mdInf = forge.md.sha256.create();
+      mdInf.update(canonicalInfNFe, 'utf8');
+      const digestValue = forge.util.encode64(mdInf.digest().getBytes());
+
+      // 9. Montar SignedInfo com Reference para o Id extraído
+      const signedInfo = `<?xml version="1.0"?>\n<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">\n  <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\n  <SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>\n  <Reference URI="#${accessKey}">\n    <Transforms>\n      <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>\n      <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\n    </Transforms>\n    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>\n    <DigestValue>${digestValue}</DigestValue>\n  </Reference>\n</SignedInfo>`;
+
+      const canonicalSignedInfo = this.canonicalizeXml(signedInfo);
+
+      // 10. Assinar o SignedInfo (RSA-SHA256) e gerar SignatureValue
+      const mdSignedInfo = forge.md.sha256.create();
+      mdSignedInfo.update(canonicalSignedInfo, 'utf8');
+      const signatureBytes = privateKey.sign(mdSignedInfo);
+      const signatureValue = forge.util.encode64(signatureBytes);
+
+      // 11. Montar tag <Signature> com certificado e SignatureValue
+      const signatureXml = this.buildSignatureXmlForAccessKey(
+        accessKey,
         digestValue,
         signatureValue,
-        certificate
+        certificate,
+        canonicalSignedInfo
       );
 
-      // 9. Inserir assinatura no XML (antes de </NFe> ou no final do infNFe)
+      // 12. Inserir assinatura no XML (antes de </NFe>)
       const signedXml = this.insertSignature(xml, signatureXml);
 
       return {
@@ -150,19 +173,23 @@ export class DigitalSignatureService implements DigitalSigner {
    * Canonicalização simplificada do XML (remove formatação desnecessária)
    */
   private canonicalizeXml(xml: string): string {
-    return xml
-      .replace(/>\s+</g, '><') // Remove whitespace entre tags
-      .replace(/\s+/g, ' ') // Normaliza espaços
-      .trim();
+    // Remover declaração XML
+    const noDecl = xml.replace(/<\?xml[^>]*\?>/g, '');
+    // Remover espaços entre tags, preservar espaços dentro de texto
+    const collapsed = noDecl.replace(/>\s+</g, '><');
+    // Remover espaços repetidos fora de tags
+    return collapsed.replace(/\s+/g, ' ').trim();
   }
 
   /**
    * Monta a estrutura <Signature> conforme XMLDSig + padrão SEFAZ
    */
-  private buildSignatureXml(
+  private buildSignatureXmlForAccessKey(
+    accessKey: string,
     digestValue: string,
     signatureValue: string,
-    certificate: forge.pki.Certificate
+    certificate: forge.pki.Certificate,
+    signedInfoCanonicalized: string
   ): string {
     // Extrai o certificado em Base64 (sem cabeçalhos PEM)
     const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
@@ -171,29 +198,8 @@ export class DigitalSignatureService implements DigitalSigner {
     // Quebra o certificado em linhas de 76 caracteres (padrão PEM)
     const certLines = certB64.match(/.{1,76}/g)?.join('\n') || certB64;
 
-    return `
-<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-  <SignedInfo>
-    <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-    <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha256"/>
-    <Reference URI="#NFe${this.extractAccessKeyFromXml('')}">
-      <Transforms>
-        <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-        <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-      </Transforms>
-      <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-      <DigestValue>${digestValue}</DigestValue>
-    </Reference>
-  </SignedInfo>
-  <SignatureValue>${signatureValue}</SignatureValue>
-  <KeyInfo>
-    <X509Data>
-      <X509Certificate>
-${certLines}
-      </X509Certificate>
-    </X509Data>
-  </KeyInfo>
-</Signature>`;
+    // Note: SignedInfo element must be canonicalized before signing; caller provided canonicalized SignedInfo
+    return `\n<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">\n  ${signedInfoCanonicalized.replace(/^<\?xml[^>]*\?>/, '')}\n  <SignatureValue>${signatureValue}</SignatureValue>\n  <KeyInfo>\n    <X509Data>\n      <X509Certificate>\n${certLines}\n      </X509Certificate>\n    </X509Data>\n  </KeyInfo>\n</Signature>`;
   }
 
   /**
@@ -212,8 +218,14 @@ ${certLines}
    * Extrai a chave de acesso do XML (helper)
    */
   private extractAccessKeyFromXml(xml: string): string {
-    // Em implementação real, extrairia do atributo Id da tag infNFe
-    // Por enquanto retorna string vazia (será preenchido pelo caller)
+    // Procura atributo Id="NFe{chave}" dentro da tag <infNFe>
+    const idMatch = xml.match(/<infNFe\s+[^>]*Id\s*=\s*"NFe(\d{44})"/i);
+    if (idMatch) return idMatch[1];
+
+    // Alternativa: procurar chNFe em outros locais
+    const chMatch = xml.match(/<chNFe>(\d{44})<\/chNFe>/i);
+    if (chMatch) return chMatch[1];
+
     return '';
   }
 }

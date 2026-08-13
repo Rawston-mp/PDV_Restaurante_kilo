@@ -53,32 +53,9 @@ export class FiscalQueueService {
     try {
       await this.queueRepo.updateStatus(item.id, 'PROCESSING');
 
-      // Tenta autorizar via gateway
-      // NOTA: O receipt completo deveria vir do FiscalDocument ou ser reconstruído
-      // Por enquanto usamos um placeholder
-      const result = await this.gateway.authorizeNfce({
-        tipo: 'NFCE',
-        emitente: { razaoSocial: '', cnpj: '', endereco: { logradouro: '', numero: '', bairro: '', municipio: '', uf: 'SP', cep: '' } },
-        nfce: {
-          modelo: '65',
-          serie: document.series,
-          numero: document.number,
-          chaveAcesso: document.accessKey,
-          protocoloAutorizacao: '',
-          dataEmissao: document.issuedAt.toISOString(),
-          dataAutorizacao: '',
-          ambiente: document.environment,
-          qrCodeUrl: document.qrCodeUrl || '',
-        },
-        operador: 'queue-worker',
-        pdv: 'PDV-01',
-        itens: [],
-        pagamentos: [],
-        totalProdutos: 0,
-        descontoTotal: 0,
-        acrescimoTotal: 0,
-        totalDocumento: 0,
-      } as any);
+      // Usa o payload completo armazenado no documento (FiscalReceipt)
+      const receipt = document.payload;
+      const result = await this.gateway.authorizeNfce(receipt);
 
       if (result.status === 'AUTHORIZED') {
         document.status = 'AUTHORIZED';
@@ -100,7 +77,7 @@ export class FiscalQueueService {
         return { processed: true, item, result: document.status };
       }
 
-      // OFFLINE ou erro temporário → agenda retry
+      // OFFLINE ou erro temporário → agenda retry com backoff
       if (item.attempts + 1 >= item.maxAttempts) {
         await this.queueRepo.updateStatus(item.id, 'FAILED', 'Máximo de tentativas atingido');
         document.status = 'MANUAL_REVIEW';
@@ -109,14 +86,9 @@ export class FiscalQueueService {
         return { processed: true, item, result: 'FAILED - Máximo de tentativas' };
       }
 
-      // Backoff progressivo: 5min, 30min, 1h, 4h, 16h
-      const backoffMinutes = [5, 30, 60, 240, 960][Math.min(item.attempts, 4)];
-      const nextRetry = new Date(Date.now() + backoffMinutes * 60 * 1000);
+      await this.scheduleBackoffRetry(item);
 
-      await this.queueRepo.scheduleRetry(item.id, nextRetry);
-      await this.queueRepo.incrementAttempts(item.id);
-
-      return { processed: true, item, result: `RETRY agendado em ${backoffMinutes}min` };
+      return { processed: true, item, result: `RETRY agendado` };
     } catch (error: any) {
       const errorMsg = error.message || 'Erro desconhecido';
 
@@ -128,13 +100,16 @@ export class FiscalQueueService {
         return { processed: true, item, result: 'FAILED - ' + errorMsg };
       }
 
-      const backoffMinutes = [5, 30, 60, 240, 960][Math.min(item.attempts, 4)];
-      const nextRetry = new Date(Date.now() + backoffMinutes * 60 * 1000);
+      await this.scheduleBackoffRetry(item);
 
-      await this.queueRepo.scheduleRetry(item.id, nextRetry);
-      await this.queueRepo.incrementAttempts(item.id);
-
-      return { processed: true, item, result: `RETRY em ${backoffMinutes}min - ${errorMsg}` };
+      return { processed: true, item, result: `RETRY agendado - ${errorMsg}` };
     }
+  }
+
+  private async scheduleBackoffRetry(item: FiscalQueueItem): Promise<void> {
+    const backoffMinutes = [5, 30, 60, 240, 960][Math.min(item.attempts, 4)];
+    const nextRetry = new Date(Date.now() + backoffMinutes * 60 * 1000);
+    await this.queueRepo.scheduleRetry(item.id, nextRetry);
+    await this.queueRepo.incrementAttempts(item.id);
   }
 }

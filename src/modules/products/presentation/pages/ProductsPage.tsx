@@ -281,7 +281,8 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
 
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-  const canEditOrDelete = user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B';
+  const canEditOrDelete =
+    user?.role !== 'COMANDA_A' && user?.role !== 'COMANDA_B' && user?.role !== 'CAIXA';
   const isNewCadastro = editingProductId === null;
 
   const getNumericInputValue = (value: number) => {
