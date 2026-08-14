@@ -2724,42 +2724,50 @@ body {
 
 .comanda-categories {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
-    gap: 0.55rem;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
 }
 
-.content .comanda-categories button {
-    border-radius: 10px;
-    border: 1px solid rgba(20, 184, 166, 0.72);
-    background: linear-gradient(180deg, #0f9f91 0%, #0f766e 100%);
-    color: #ffffff;
-    min-height: 48px;
-    padding: 0.5rem 0.7rem;
-    font-size: 0.82rem;
-    font-weight: 800;
+.comanda-categories button {
+    border-radius: 12px;
+    border-width: 2px;
+    border-style: solid;
+    /* border-color is set inline */
+    background: #1e293b;
+    color: #f8fafc;
+    min-height: 64px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    font-weight: 600;
     text-align: center;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 5px 12px rgba(15, 23, 42, 0.18);
-    transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    word-break: break-word;
+    cursor: pointer;
 }
 
-.content .comanda-categories button:hover:not(:disabled) {
-    border-color: rgba(45, 212, 191, 0.9);
-    background: linear-gradient(180deg, #14b8a6 0%, #0f8f83 100%);
-    color: #ffffff;
-    transform: translateY(-1px);
+.comanda-categories button:hover:not(:disabled) {
+    background: #334155;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
 }
 
-.content .comanda-categories button.is-active {
-    border-color: #fb923c !important;
-    background: linear-gradient(180deg, #fb923c 0%, #f97316 100%);
+.comanda-categories button.is-active {
+    background: #334155;
     color: #ffffff;
-    box-shadow: 0 8px 18px rgba(249, 115, 22, 0.28);
+    font-weight: 700;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+    transform: translateY(1px);
 }
 
 .comanda-categories button:disabled {
-    opacity: 0.62;
+    opacity: 0.4;
     cursor: not-allowed;
-    filter: grayscale(0.25);
+    filter: grayscale(0.8);
+    transform: none;
 }
 
 .comanda-workspace {
