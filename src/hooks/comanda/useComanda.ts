@@ -173,6 +173,39 @@ const isSelServiceProduct = (value: string) => {
   return normalized.includes('sel-service') || normalized.includes('self-service') || normalized.includes('self service');
 };
 
+const isSameUnitItem = (current: ItemComanda, next: ItemComanda) =>
+  current.porUnidade &&
+  next.porUnidade &&
+  current.categoriaId === next.categoriaId &&
+  Number(current.precoUnitario.toFixed(2)) === Number(next.precoUnitario.toFixed(2)) &&
+  normalizeSearchText(current.nome).trim() === normalizeSearchText(next.nome).trim();
+
+const addOrAccumulateUnitItem = (currentItems: ItemComanda[], nextItem: ItemComanda) => {
+  if (!nextItem.porUnidade) {
+    return [nextItem, ...currentItems];
+  }
+
+  const itemIndex = currentItems.findIndex((item) => isSameUnitItem(item, nextItem));
+
+  if (itemIndex < 0) {
+    return [nextItem, ...currentItems];
+  }
+
+  return currentItems.map((item, index) => {
+    if (index !== itemIndex) {
+      return item;
+    }
+
+    const quantidade = item.quantidade + nextItem.quantidade;
+
+    return {
+      ...item,
+      quantidade,
+      subtotal: Number((item.precoUnitario * quantidade).toFixed(2))
+    };
+  });
+};
+
 export function useComanda(taxaImposto = 0.1) {
   const { user } = useAuth();
   const [comandaNumber, setComandaNumber] = useState('');
@@ -596,7 +629,7 @@ export function useComanda(taxaImposto = 0.1) {
       porUnidade: produto.porUnidade
     };
 
-    const nextItems = [novoItem, ...itens];
+    const nextItems = addOrAccumulateUnitItem(itens, novoItem);
     setItens(nextItems);
     if (comandaAtivaId) {
       persistItensNoBackend(comandaAtivaId, nextItems, 'item_added');

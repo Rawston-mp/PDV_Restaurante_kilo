@@ -126,12 +126,51 @@ const normalizeFiniteNumber = (value: unknown) => {
 
 const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
+const normalizeComparableText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .trim();
+
 const normalizeOptionalIso = (value: unknown) => {
   if (typeof value !== 'string') {
     return undefined;
   }
 
   return Number.isNaN(Date.parse(value)) ? undefined : value;
+};
+
+const isSameUnitItem = (current: ComandaItemRecord, next: ComandaItemRecord) =>
+  current.porUnidade &&
+  next.porUnidade &&
+  current.categoriaId === next.categoriaId &&
+  Number(current.precoUnitario.toFixed(2)) === Number(next.precoUnitario.toFixed(2)) &&
+  normalizeComparableText(current.nome) === normalizeComparableText(next.nome);
+
+const pushOrAccumulateUnitItem = (items: ComandaItemRecord[], nextItem: ComandaItemRecord) => {
+  if (!nextItem.porUnidade) {
+    items.push(nextItem);
+    return;
+  }
+
+  const itemIndex = items.findIndex((item) => isSameUnitItem(item, nextItem));
+
+  if (itemIndex < 0) {
+    items.push(nextItem);
+    return;
+  }
+
+  const current = items[itemIndex];
+  const quantidade = current.quantidade + nextItem.quantidade;
+
+  items[itemIndex] = {
+    ...current,
+    quantidade,
+    subtotal: Number((current.precoUnitario * quantidade).toFixed(2)),
+    updatedAt: nextItem.updatedAt ?? current.updatedAt,
+    createdAt: current.createdAt ?? nextItem.createdAt
+  };
 };
 
 const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
@@ -157,7 +196,7 @@ const normalizeComandaItems = (items: unknown): ComandaItemRecord[] => {
     const peso = normalizeFiniteNumber(item.peso);
     const subtotal = normalizeFiniteNumber(item.subtotal) ?? Number((precoUnitario * quantidade).toFixed(2));
 
-    acc.push({
+    pushOrAccumulateUnitItem(acc, {
       id,
       nome,
       precoUnitario,

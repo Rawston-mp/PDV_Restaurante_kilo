@@ -1130,32 +1130,34 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
                   </div>
                 </div>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={byWeight}
-                    onChange={(e) => setByWeight(e.target.checked)}
-                  />
-                  Produto por peso
-                </label>
+                <div className="products-checkbox-row">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={byWeight}
+                      onChange={(e) => setByWeight(e.target.checked)}
+                    />
+                    Produto por peso
+                  </label>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={isUnavailable}
-                    onChange={(e) => setIsUnavailable(e.target.checked)}
-                  />
-                  Tornar indisponivel no caixa
-                </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isUnavailable}
+                      onChange={(e) => setIsUnavailable(e.target.checked)}
+                    />
+                    Tornar indisponivel no caixa
+                  </label>
 
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={isHidden}
-                    onChange={(e) => setIsHidden(e.target.checked)}
-                  />
-                  Ocultar do caixa e dos terminais de balanca
-                </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={isHidden}
+                      onChange={(e) => setIsHidden(e.target.checked)}
+                    />
+                    Ocultar do caixa e dos terminais de balanca
+                  </label>
+                </div>
               </>
             ) : (
               <>
@@ -1292,34 +1294,25 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
           ) : (
             <ul className="products-list">
               {products.map((product) => (
-                <li key={product.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
-                      {getProductDisplayName(product)}
-                    </strong>
-                    {product.description ? <span>{product.description}</span> : <span />}
-                    <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
-                      <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
-                    </span>
+                <li key={product.id} className="products-list-item">
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>
+                      <strong>{getProductDisplayName(product)}</strong>
+                    </div>
+                    <div className="products-list-meta">
+                      <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
+                        <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
+                      </span>
+                      {(product.isUnavailable || product.isHidden) && (
+                        <span className="products-status-pill">
+                          {product.isUnavailable ? 'Indisponivel' : 'Disponivel'} - {product.isHidden ? 'Oculto' : 'Visivel'}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <strong>{currency.format(product.price)}</strong>
-                    <span>estoque {product.stock}</span>
-                    <span>
-                      {product.isUnavailable ? 'indisponivel' : 'disponivel'} | {product.isHidden ? 'oculto' : 'visivel'}
-                    </span>
-                    {canEditOrDelete && (
-                      <span>
-                        custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
-                        {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
-                      </span>
-                    )}
-                    {canEditOrDelete && (
-                      <span>
-                        cod. barras {product.barcode ?? '-'} | NCM {product.ncm ?? '-'} | CFOP {product.cfop ?? '-'}
-                      </span>
-                    )}
+                  <div className="products-list-side">
+                    <strong className="products-list-price">{currency.format(product.price)}</strong>
                     {canEditOrDelete && (
                       <div className="products-row-actions">
                         <button
@@ -1334,7 +1327,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
                           className="products-delete-button"
                           onClick={() => void onDeleteProduct(product.id)}
                         >
-                          Deletar
+                          Excluir
                         </button>
                       </div>
                     )}

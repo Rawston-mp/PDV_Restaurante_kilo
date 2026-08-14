@@ -28,14 +28,22 @@ const isPorQuiloCategoryName = (value: string) => {
   return normalized === 'por quilo' || normalized === 'por kilo';
 };
 
+const formatCurrency = (value: number) =>
+  value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+
 export function ComandaScreen() {
   const { state, actions, produtosFiltrados } = useComanda();
   const comandaInputRef = useRef<HTMLInputElement | null>(null);
   const pesquisaInputRef = useRef<HTMLInputElement | null>(null);
+  const [isWorkspaceExpanded, setIsWorkspaceExpanded] = useState(false);
   const [isPesoManualEditing, setIsPesoManualEditing] = useState(false);
   const [pesoManualDraft, setPesoManualDraft] = useState('');
   const [pesoManualError, setPesoManualError] = useState<string | null>(null);
   const pesquisaSanitizada = state.pesquisa.trim();
+  const isComandaOpen = Boolean(state.comandaAtual);
   const statusOperacional = state.lockStationId
     ? `${state.isComandaConectada ? 'Conectada' : 'Sem conexao'} | lock ${state.lockStationId}`
     : state.isComandaConectada
@@ -43,7 +51,7 @@ export function ComandaScreen() {
       : 'Sem conexao';
   const deveBloquearResultados = pesquisaSanitizada.length > 0 && pesquisaSanitizada.length < 3;
   const porQuiloCategoryId = state.categorias.find((categoria) => isPorQuiloCategoryName(categoria.nome))?.id;
-  const categoriaDesabilitadaSemComanda = !state.comandaAtual?.id && porQuiloCategoryId ? [porQuiloCategoryId] : [];
+  const categoriaDesabilitadaSemComanda = !isComandaOpen && porQuiloCategoryId ? [porQuiloCategoryId] : [];
 
   useEffect(() => {
     if (state.campoAtivo === 'COMANDA') {
@@ -151,7 +159,7 @@ export function ComandaScreen() {
         <div className="comanda-header-wrap">
           <ComandaHeader
             status={statusOperacional}
-            title="TELA DE COMANDA"
+            title={isComandaOpen ? `Comanda #${state.comandaAtual?.id} aberta` : 'Abra uma comanda'}
             isOfflineMode={state.isOfflineMode}
           />
           <div className="comanda-top-fields">
@@ -183,13 +191,14 @@ export function ComandaScreen() {
                 value={state.pesquisa}
                 onFocus={actions.focarPesquisa}
                 onChange={(event) => actions.setPesquisa(event.target.value)}
+                disabled={!isComandaOpen}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     actions.handleKeyPress('Enter');
                   }
                 }}
-                placeholder="Digite para filtrar produtos"
+                placeholder={isComandaOpen ? 'Digite para filtrar produtos' : 'Abra uma comanda para pesquisar'}
                 className="comanda-search-input"
               />
             </div>
@@ -203,7 +212,7 @@ export function ComandaScreen() {
                 value={state.pesoAtual}
                 manualValue={state.pesoManual}
                 isConnected={state.isComandaConectada}
-                isComandaOpen={Boolean(state.comandaAtual)}
+                isComandaOpen={isComandaOpen}
                 isEditing={isPesoManualEditing}
                 draftValue={pesoManualDraft}
                 error={pesoManualError}
@@ -218,39 +227,78 @@ export function ComandaScreen() {
                 onClearManual={limparPesoManual}
               />
               <PriceDisplay value={state.precoAtual} />
+              <TotalDisplay total={state.total} />
             </div>
 
-            <CategoryGrid
-              categories={state.categorias}
-              activeId={state.categoriaSelecionada}
-              onSelect={actions.selecionarCategoria}
-              disabledIds={categoriaDesabilitadaSemComanda}
-            />
+            <div className={`comanda-workspace${isWorkspaceExpanded ? ' is-expanded' : ''}`}>
+              <CategoryGrid
+                categories={state.categorias}
+                activeId={state.categoriaSelecionada}
+                onSelect={actions.selecionarCategoria}
+                disabledIds={categoriaDesabilitadaSemComanda}
+                expanded={isWorkspaceExpanded}
+                onToggleExpand={() => setIsWorkspaceExpanded((current) => !current)}
+              />
 
-            <section className="comanda-panel comanda-suggestions-panel">
-              <p className="panel-label">Resultados da pesquisa</p>
-              <div className="comanda-suggestions">
-                {deveBloquearResultados && (
-                  <p className="comanda-suggestions-empty">
-                    Digite ao menos 3 letras para listar os produtos.
+              <section className="comanda-panel comanda-suggestions-panel">
+                <div className="comanda-products-heading">
+                  <p className="panel-label">
+                    {!isComandaOpen
+                      ? 'Produtos'
+                      : pesquisaSanitizada.length >= 3
+                        ? 'Resultados da pesquisa'
+                        : 'Produtos da categoria'}
                   </p>
-                )}
-                {!deveBloquearResultados && pesquisaSanitizada.length >= 3 && produtosFiltrados.length === 0 && (
-                  <p className="comanda-suggestions-empty">
-                    Nenhum produto encontrado para "{pesquisaSanitizada}".
-                  </p>
-                )}
-                {produtosFiltrados.map((produto) => (
-                  <button key={produto.id} type="button" onClick={() => actions.selecionarProduto(produto)}>
-                    <strong>{produto.nome}</strong>
-                    <small>R$ {produto.precoUnitario.toFixed(2)} / {produto.porUnidade ? 'un' : 'kg'}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
+                  {isComandaOpen && !deveBloquearResultados && (
+                    <span>{produtosFiltrados.length} {produtosFiltrados.length === 1 ? 'produto' : 'produtos'}</span>
+                  )}
+                </div>
+                <div className="comanda-suggestions">
+                  {!isComandaOpen && (
+                    <p className="comanda-suggestions-empty">
+                      Abra uma comanda para consultar e adicionar produtos.
+                    </p>
+                  )}
+                  {isComandaOpen && deveBloquearResultados && (
+                    <p className="comanda-suggestions-empty">
+                      Digite ao menos 3 letras para listar os produtos.
+                    </p>
+                  )}
+                  {isComandaOpen && !deveBloquearResultados && pesquisaSanitizada.length >= 3 && produtosFiltrados.length === 0 && (
+                    <p className="comanda-suggestions-empty">
+                      Nenhum produto encontrado para "{pesquisaSanitizada}".
+                    </p>
+                  )}
+                  {isComandaOpen && produtosFiltrados.map((produto) => (
+                    <button
+                      key={produto.id}
+                      type="button"
+                      className="comanda-product-row"
+                      onClick={() => actions.selecionarProduto(produto)}
+                      aria-label={`Adicionar ${produto.nome}`}
+                    >
+                      <span className="comanda-product-description">
+                        <strong>{produto.nome}</strong>
+                        <small>
+                          {produto.porUnidade ? '1 un' : 'Venda por peso'}
+                          <span aria-hidden="true"> · </span>
+                          {formatCurrency(produto.precoUnitario)} / {produto.porUnidade ? 'un' : 'kg'}
+                        </small>
+                      </span>
+                      <strong className="comanda-product-price">
+                        {formatCurrency(produto.precoUnitario)}
+                      </strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
-            <ItemsList items={state.itens} onDelete={actions.removerItem} onAdjust={actions.ajustarQuantidade} />
-            <TotalDisplay total={state.total} />
+              <ItemsList
+                items={state.itens}
+                onDelete={actions.removerItem}
+                onAdjust={actions.ajustarQuantidade}
+              />
+            </div>
 
             {state.erro && <p className="comanda-error">{state.erro}</p>}
           </section>
