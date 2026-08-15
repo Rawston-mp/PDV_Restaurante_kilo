@@ -50,6 +50,7 @@ export type ComandaPesagemRecord = {
   stationId?: ComandaLockStationId;
   itemId?: string;
   productName?: string;
+  reason?: string;
   createdAt: string;
 };
 
@@ -125,6 +126,17 @@ const normalizeFiniteNumber = (value: unknown) => {
 };
 
 const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+export const normalizeComandaNumber = (value: unknown) => {
+  const normalized = typeof value === 'number' && Number.isFinite(value)
+    ? String(Math.trunc(value))
+    : normalizeText(value);
+  if (!normalized) {
+    return '';
+  }
+
+  return /^\d+$/.test(normalized) ? String(Number.parseInt(normalized, 10)) : normalized;
+};
 
 const normalizeComparableText = (value: string) =>
   value
@@ -242,6 +254,7 @@ const normalizeComandaPesagens = (pesagens: unknown): ComandaPesagemRecord[] => 
       stationId,
       itemId: normalizeText(pesagem.itemId) || undefined,
       productName: normalizeText(pesagem.productName) || undefined,
+      reason: normalizeText(pesagem.reason) || undefined,
       createdAt
     });
 
@@ -525,6 +538,60 @@ export class ComandaStateMachineService {
     return updated;
   }
 
+  closeMany(
+    numeros: string[],
+    targetStatus: Extract<ComandaStatus, 'FECHADA_ORCAMENTO' | 'FECHADA_VENDA'>,
+    reason?: string
+  ) {
+    const normalizedNumbers = [...new Set(numeros.map(normalizeComandaNumber).filter(Boolean))];
+    if (normalizedNumbers.length === 0) {
+      throw new Error('Informe ao menos uma comanda para fechamento.');
+    }
+
+    const plans = normalizedNumbers.map((numero) => {
+      const record = this.get(numero);
+      if (!record) {
+        throw new Error(`Comanda #${numero} nao encontrada.`);
+      }
+
+      let transitions: ComandaStatus[];
+      switch (record.status) {
+        case 'ABERTA':
+        case 'EM_USO_BALANCA':
+          transitions = ['PRONTA_PARA_CAIXA', 'EM_FECHAMENTO', targetStatus];
+          break;
+        case 'PRONTA_PARA_CAIXA':
+          transitions = ['EM_FECHAMENTO', targetStatus];
+          break;
+        case 'EM_FECHAMENTO':
+          transitions = [targetStatus];
+          break;
+        case targetStatus:
+          transitions = [];
+          break;
+        default:
+          throw new Error(`Comanda #${numero} em status ${record.status} nao pode ser fechada como ${targetStatus}.`);
+      }
+
+      let currentStatus: ComandaStatus = record.status;
+      for (const nextStatus of transitions) {
+        if (!canTransition(currentStatus, nextStatus)) {
+          throw new Error(`Transicao invalida para a comanda #${numero}: ${currentStatus} -> ${nextStatus}.`);
+        }
+        currentStatus = nextStatus;
+      }
+
+      return { numero, transitions };
+    });
+
+    return plans.map((plan) => {
+      for (const status of plan.transitions) {
+        this.transition(plan.numero, status, reason);
+      }
+      return this.get(plan.numero)!;
+    });
+  }
+
   markEmUsoBalanca(numero: string, reason = 'peso_recebido') {
     const existing = this.get(numero);
     if (!existing) {
@@ -604,6 +671,7 @@ export class ComandaStateMachineService {
       stationId: input.stationId,
       itemId: normalizeText(input.itemId) || undefined,
       productName: normalizeText(input.productName) || undefined,
+      reason: normalizeText(input.reason) || undefined,
       createdAt
     };
 

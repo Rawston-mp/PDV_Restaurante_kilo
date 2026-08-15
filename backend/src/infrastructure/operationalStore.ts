@@ -309,7 +309,8 @@ export class OperationalPostgresStore {
               toNumber(item.subtotal),
               !Boolean(item.porUnidade),
               Boolean(item.porUnidade),
-              item.origemLancamento ?? null,
+              // origem_lancamento nao existe mais em ComandaItemRecord; coluna mantida nullable.
+          null,
               JSON.stringify(item),
               item.createdAt ?? null,
               item.updatedAt ?? null
@@ -442,7 +443,8 @@ export class OperationalPostgresStore {
           toNumber(item.subtotal),
           !Boolean(item.porUnidade),
           Boolean(item.porUnidade),
-          item.origemLancamento ?? null,
+          // origem_lancamento nao existe mais em ComandaItemRecord; coluna mantida nullable.
+          null,
           JSON.stringify(item),
           item.createdAt ?? null,
           item.updatedAt ?? null
