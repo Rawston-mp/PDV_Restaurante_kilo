@@ -265,6 +265,10 @@ npm run dev
 - Backend/Windows: `127.0.0.1:55432`.
 - pgAdmin dentro do Docker: host `postgres`, porta `5432`.
 - A senha do banco deve ser consultada no `.env` local; nao registrar senha em documentacao versionavel.
+- `.env` nao e versionado (ignorado no `.gitignore`). O modelo versionado e `.env.example`.
+- `docker-compose.yml` nao contem senha: ele resolve `POSTGRES_PASSWORD` e `PGADMIN_DEFAULT_PASSWORD` do `.env` e falha explicitamente se faltarem.
+- Postgres (`55432`) e pgAdmin (`8080`) sao publicados apenas em `127.0.0.1`, nunca em `0.0.0.0`.
+- Senha com caractere especial vai percent-encoded apenas na `DATABASE_URL` (`@` vira `%40`).
 - Nao usar o servidor antigo `PostgreSQL 18`/porta `5432` do Windows para validar dados do PDV, pois pode apontar para outro banco.
 
 ### Tabelas principais esperadas

@@ -10,6 +10,17 @@ Usuario: postgres
 Senha: consulte o .env local ou a credencial combinada para desenvolvimento
 ```
 
+O `.env` nao e versionado. Na primeira configuracao da maquina, rode
+`cp .env.example .env` e preencha a credencial. O `docker-compose.yml` le
+`POSTGRES_PASSWORD` desse arquivo e falha com mensagem explicita se ela faltar.
+
+Caracteres especiais da senha precisam ser percent-encoded apenas dentro da
+`DATABASE_URL` (por exemplo, `@` vira `%40`). Nas variaveis `PGPASSWORD` e
+`POSTGRES_PASSWORD` a senha vai em texto normal.
+
+Postgres (`55432`) e pgAdmin (`8080`) sao publicados apenas em `127.0.0.1`.
+Nao sao alcancaveis por outros dispositivos da rede local.
+
 ### Conexao pelo backend ou pgAdmin instalado no Windows
 
 ```text

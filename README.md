@@ -52,6 +52,23 @@ Usuario: postgres
 Senha: consulte o .env local
 ```
 
+Antes do primeiro `npm run db:up`, crie o arquivo de credenciais local:
+
+```bash
+cp .env.example .env
+```
+
+O `.env` nao e versionado. O `docker-compose.yml` le a senha dele: sem
+`POSTGRES_PASSWORD` definida, o compose falha com mensagem explicita em vez de
+subir o banco com uma senha padrao conhecida.
+
+Se a senha tiver caracteres especiais, lembre de percent-encode apenas dentro da
+`DATABASE_URL` (por exemplo, `@` vira `%40`).
+
+Postgres e pgAdmin sao publicados somente em `127.0.0.1`, entao nao ficam
+acessiveis a outros dispositivos da rede. Para administrar o banco a partir de
+outra maquina, use um tunel SSH em vez de reabrir a porta.
+
 Comandos principais:
 
 ```bash

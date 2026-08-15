@@ -7,3 +7,15 @@ vite.config.d.ts
 release-electron/
 release-electron-auth/
 .electron-user-data/
+
+# Segredos e credenciais locais. Use .env.example como modelo.
+.env
+.env.*
+!.env.example
+
+# Certificados digitais A1 nunca devem ser versionados.
+*.pfx
+*.p12
+
+# Banco SQLite legado, gerado localmente.
+dev.db

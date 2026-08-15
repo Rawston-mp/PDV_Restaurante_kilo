@@ -34,6 +34,11 @@ loadDotEnv();
 
 const sourceDb = process.env.PDV_SOURCE_DATABASE || 'postgres';
 const targetDb = process.env.PDV_TARGET_DATABASE || 'pdv_touch_dev';
+if (!process.env.PGPASSWORD) {
+  console.error('PGPASSWORD nao definida. Copie .env.example para .env e preencha a credencial local.');
+  process.exit(1);
+}
+
 const baseConfig = {
   host: process.env.PGHOST || '127.0.0.1',
   port: Number(process.env.PGPORT || 5432),

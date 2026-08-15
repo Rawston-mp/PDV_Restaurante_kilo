@@ -1,14 +1,19 @@
+# Credenciais vem do .env local (nao versionado). Veja .env.example.
+# A sintaxe ${VAR:?mensagem} faz o compose falhar com erro claro quando a
+# variavel nao esta definida, em vez de subir o banco com senha padrao.
 services:
   postgres:
     image: postgres:16-alpine
     container_name: pdv_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: pdv_touch_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-pdv_touch_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
     ports:
-      - '55432:5432'
+      # Exposto apenas no loopback: o banco de desenvolvimento nao deve ficar
+      # alcancavel por outros dispositivos da rede.
+      - '127.0.0.1:55432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,11 +27,11 @@ services:
     container_name: pdv_pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@pdv.com
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@pdv.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?defina PGADMIN_DEFAULT_PASSWORD no .env}
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
     ports:
-      - '8080:80'
+      - '127.0.0.1:8080:80'
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
