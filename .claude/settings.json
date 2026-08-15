@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm *)",
+      "Bash(awk '{print $NF, \"\\(ainda em disco\\)\"}')",
+      "Bash(git check-ignore *)",
+      "Bash(docker compose *)",
+      "Bash(env -u POSTGRES_PASSWORD docker compose --env-file /dev/null config)"
+    ]
+  }
+}
