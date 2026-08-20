@@ -155,196 +155,251 @@ export function NewOrderPage() {
   };
 
   return (
-    <section className="card">
-      <h2>Novo Pedido</h2>
-      <form onSubmit={onSubmit} autoComplete="off">
-        <label htmlFor="table">Mesa</label>
-        <input
-          id="table"
-          value={table}
-          onChange={(e) => setTable(e.target.value)}
-          required
-        />
-        <button type="submit" disabled={saving}>
-          {saving ? 'Salvando...' : 'Criar pedido'}
-        </button>
-      </form>
+    <div className="new-order-page">
+      <header className="new-order-header">
+        <div>
+          <h2>Novo Pedido</h2>
+          <p className="products-subtitle">Abertura de mesa, controle de comanda e lançamento de itens.</p>
+        </div>
+      </header>
 
-      <div>
-        <p>Comanda ativa: {comandaAtiva ? 'sim' : 'não'}</p>
-        <button type="button" onClick={() => void abrirComanda()} disabled={loading || comandaAtiva}>
-          Abrir comanda
-        </button>
-        <button type="button" onClick={() => void fecharComanda()} disabled={loading || !comandaAtiva}>
-          Fechar comanda
-        </button>
-        {error && <p>{error}</p>}
-      </div>
+      <section className="new-order-card">
+        <h3>Mesa do Pedido</h3>
+        <form onSubmit={onSubmit} className="new-order-form-inline" autoComplete="off">
+          <div className="new-order-form-group">
+            <label htmlFor="table">Mesa</label>
+            <input
+              id="table"
+              value={table}
+              onChange={(e) => setTable(e.target.value)}
+              placeholder="Ex: 01"
+              required
+            />
+          </div>
+          <button type="submit" className="new-order-btn new-order-btn--success" disabled={saving}>
+            {saving ? 'Salvando...' : 'Criar pedido'}
+          </button>
+        </form>
+      </section>
+
+      <section className="new-order-card">
+        <h3>Status da Comanda</h3>
+        <div className="new-order-comanda-toolbar">
+          <span className={`new-order-status-pill ${comandaAtiva ? 'is-open' : ''}`}>
+            Comanda ativa: {comandaAtiva ? 'sim' : 'não'}
+          </span>
+          <button
+            type="button"
+            className="new-order-btn new-order-btn--success"
+            onClick={() => void abrirComanda()}
+            disabled={loading || comandaAtiva}
+          >
+            Abrir comanda
+          </button>
+          <button
+            type="button"
+            className="new-order-btn new-order-btn--danger"
+            onClick={() => void fecharComanda()}
+            disabled={loading || !comandaAtiva}
+          >
+            Fechar comanda
+          </button>
+        </div>
+        {error && <p className="products-form-warning">{error}</p>}
+      </section>
 
       {currentOrder && (
         <>
-          <p>Pedido criado: {currentOrder.id}</p>
-          <p>Status atual: {currentOrder.status}</p>
-          <p>Total atual: R$ {currentOrder.total.toFixed(2)}</p>
+          <section className="new-order-card">
+            <h3>Detalhes do Pedido</h3>
+            <p>Pedido criado: {currentOrder.id}</p>
+            <p>Status atual: {currentOrder.status}</p>
+            <p>Total atual: R$ {currentOrder.total.toFixed(2)}</p>
 
-          <h3>Fechamento / Caixa</h3>
-          <label htmlFor="payment-type">Forma de pagamento</label>
-          <select
-            id="payment-type"
-            value={paymentType}
-            onChange={(e) => setPaymentType(e.target.value as 'A_VISTA' | 'FIADO' | 'CONVENIO')}
-          >
-            <option value="A_VISTA">A vista</option>
-            <option value="FIADO">Fiado</option>
-            <option value="CONVENIO">Convenio</option>
-          </select>
-
-          {paymentType === 'FIADO' && (
-            <>
-              <label htmlFor="fiado-client">Cliente para lançar fiado</label>
+            <h3 style={{ marginTop: '0.85rem' }}>Fechamento / Caixa</h3>
+            <div className="new-order-form-group">
+              <label htmlFor="payment-type">Forma de pagamento</label>
               <select
-                id="fiado-client"
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                id="payment-type"
+                value={paymentType}
+                onChange={(e) => setPaymentType(e.target.value as 'A_VISTA' | 'FIADO' | 'CONVENIO')}
               >
-                <option value="">Selecione um cliente</option>
-                {clients
-                  .filter((client) => client.active)
-                  .map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.fullName} ({client.clientCode})
-                    </option>
-                  ))}
+                <option value="A_VISTA">A vista</option>
+                <option value="FIADO">Fiado</option>
+                <option value="CONVENIO">Convenio</option>
               </select>
-              {clients.filter((client) => client.active).length === 0 && (
-                <p>Nenhum cliente ativo cadastrado para lançamento de fiado.</p>
-              )}
-            </>
-          )}
+            </div>
 
-          {paymentType === 'CONVENIO' && (
-            <>
-              <label htmlFor="convenio-select">Convênio</label>
-              <select
-                id="convenio-select"
-                value={selectedConvenioId}
-                onChange={(e) => setSelectedConvenioId(e.target.value)}
-              >
-                <option value="">Selecione um convênio</option>
-                {convenios
-                  .filter((convenio) => convenio.active)
-                  .map((convenio) => (
-                    <option key={convenio.id} value={convenio.id}>
-                      {convenio.name} ({convenio.paymentMethod})
-                    </option>
-                  ))}
-              </select>
-              {convenios.filter((convenio) => convenio.active).length === 0 && (
-                <p>Nenhum convênio ativo cadastrado para fechamento do caixa.</p>
-              )}
-            </>
-          )}
+            {paymentType === 'FIADO' && (
+              <div className="new-order-form-group">
+                <label htmlFor="fiado-client">Cliente para lançar fiado</label>
+                <select
+                  id="fiado-client"
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                >
+                  <option value="">Selecione um cliente</option>
+                  {clients
+                    .filter((client) => client.active)
+                    .map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.fullName} ({client.clientCode})
+                      </option>
+                    ))}
+                </select>
+                {clients.filter((client) => client.active).length === 0 && (
+                  <p className="products-form-warning">Nenhum cliente ativo cadastrado para lançamento de fiado.</p>
+                )}
+              </div>
+            )}
 
-          {fiadoFeedback && <p>{fiadoFeedback}</p>}
-          {fiscalBlockReason && <p className="products-form-warning">{fiscalBlockReason}</p>}
+            {paymentType === 'CONVENIO' && (
+              <div className="new-order-form-group">
+                <label htmlFor="convenio-select">Convênio</label>
+                <select
+                  id="convenio-select"
+                  value={selectedConvenioId}
+                  onChange={(e) => setSelectedConvenioId(e.target.value)}
+                >
+                  <option value="">Selecione um convênio</option>
+                  {convenios
+                    .filter((convenio) => convenio.active)
+                    .map((convenio) => (
+                      <option key={convenio.id} value={convenio.id}>
+                        {convenio.name} ({convenio.paymentMethod})
+                      </option>
+                    ))}
+                </select>
+                {convenios.filter((convenio) => convenio.active).length === 0 && (
+                  <p className="products-form-warning">Nenhum convênio ativo cadastrado para fechamento do caixa.</p>
+                )}
+              </div>
+            )}
 
-          <h3>Adicionar item</h3>
-          <p>Sensor de peso: {connected ? 'conectado' : 'desconectado'}</p>
-          <p>Peso recebido: {weight ? `${weight.toFixed(3)} kg` : 'aguardando leitura'}</p>
-          <form onSubmit={onAddItem} autoComplete="off">
-            <label htmlFor="item-name">Nome do item</label>
-            <input
-              id="item-name"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              required
-            />
+            {fiadoFeedback && <p className="products-form-info">{fiadoFeedback}</p>}
+            {fiscalBlockReason && <p className="products-form-warning">{fiscalBlockReason}</p>}
+          </section>
 
-            <label htmlFor="item-price">Preço unitário</label>
-            <input
-              id="item-price"
-              type="number"
-              step="0.01"
-              min={0}
-              value={itemPrice}
-              onChange={(e) => setItemPrice(Number(e.target.value))}
-              required
-            />
+          <section className="new-order-card">
+            <h3>Adicionar item</h3>
+            <p>Sensor de peso: {connected ? 'conectado' : 'desconectado'}</p>
+            <p>Peso recebido: {weight ? `${weight.toFixed(3)} kg` : 'aguardando leitura'}</p>
 
-            <label htmlFor="item-quantity">Quantidade</label>
-            <input
-              id="item-quantity"
-              type="number"
-              step="1"
-              min={1}
-              value={itemQuantity}
-              onChange={(e) => setItemQuantity(Number(e.target.value))}
-              required
-            />
+            <form onSubmit={onAddItem} autoComplete="off" className="products-form">
+              <div className="products-row-3">
+                <div>
+                  <label htmlFor="item-name">Nome do item</label>
+                  <input
+                    id="item-name"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    required
+                  />
+                </div>
 
-            <label>
-              <input
-                type="checkbox"
-                checked={itemByWeight}
-                onChange={(e) => setItemByWeight(e.target.checked)}
-              />
-              Item por peso
-            </label>
+                <div>
+                  <label htmlFor="item-price">Preço unitário</label>
+                  <input
+                    id="item-price"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(Number(e.target.value))}
+                    required
+                  />
+                </div>
 
-            {itemByWeight && (
-              <>
-                <label htmlFor="item-weight">Peso (kg)</label>
+                <div>
+                  <label htmlFor="item-quantity">Quantidade</label>
+                  <input
+                    id="item-quantity"
+                    type="number"
+                    step="1"
+                    min={1}
+                    value={itemQuantity}
+                    onChange={(e) => setItemQuantity(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                 <input
-                  id="item-weight"
-                  type="number"
-                  step="0.001"
-                  min={0.001}
-                  value={itemWeight}
-                  onChange={(e) => setItemWeight(Number(e.target.value))}
-                  required
+                  type="checkbox"
+                  checked={itemByWeight}
+                  onChange={(e) => setItemByWeight(e.target.checked)}
                 />
+                Item por peso
+              </label>
+
+              {itemByWeight && (
+                <div style={{ display: 'grid', gap: '0.65rem' }}>
+                  <div className="new-order-form-group">
+                    <label htmlFor="item-weight">Peso (kg)</label>
+                    <input
+                      id="item-weight"
+                      type="number"
+                      step="0.001"
+                      min={0.001}
+                      value={itemWeight}
+                      onChange={(e) => setItemWeight(Number(e.target.value))}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="new-order-btn new-order-btn--info"
+                      disabled={!comandaAtiva || !weight}
+                      onClick={() => {
+                        if (weight) {
+                          setItemWeight(weight);
+                        }
+                      }}
+                    >
+                      Usar peso do sensor
+                    </button>
+                    <button
+                      type="button"
+                      className="new-order-btn new-order-btn--purple"
+                      onClick={() => {
+                        void loadHistory();
+                      }}
+                    >
+                      Atualizar histórico local
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {recentHistory.length > 0 && (
+                <p className="products-subtitle">
+                  Histórico local: {recentHistory.map((value) => `${value.toFixed(3)} kg`).join(' | ')}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                 <button
-                  type="button"
-                  disabled={!comandaAtiva || !weight}
-                  onClick={() => {
-                    if (weight) {
-                      setItemWeight(weight);
-                    }
-                  }}
+                  type="submit"
+                  className="new-order-btn new-order-btn--primary"
+                  disabled={!can('orders:add-item')}
                 >
-                  Usar peso do sensor
+                  Adicionar item ao pedido
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    void loadHistory();
-                  }}
+                  className="new-order-btn new-order-btn--warning"
+                  onClick={onAdvanceStatus}
+                  disabled={!can('orders:advance-status') || Boolean(fiscalBlockReason)}
                 >
-                  Atualizar histórico local
+                  Avançar status do pedido
                 </button>
-              </>
-            )}
-
-            {recentHistory.length > 0 && (
-              <p>
-                Histórico local: {recentHistory.map((value) => `${value.toFixed(3)} kg`).join(' | ')}
-              </p>
-            )}
-
-            <button type="submit" disabled={!can('orders:add-item')}>
-              Adicionar item ao pedido
-            </button>
-          </form>
-
-          <button
-            type="button"
-            onClick={onAdvanceStatus}
-            disabled={!can('orders:advance-status') || Boolean(fiscalBlockReason)}
-          >
-            Avançar status do pedido
-          </button>
+              </div>
+            </form>
+          </section>
         </>
       )}
-    </section>
+    </div>
   );
 }

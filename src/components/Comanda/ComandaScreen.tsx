@@ -164,7 +164,7 @@ export function ComandaScreen() {
           />
           <div className="comanda-top-fields">
             <div className="comanda-field-group">
-              <label htmlFor="comanda-number-input">Numero da comanda</label>
+              <label htmlFor="comanda-number-input">Número da comanda</label>
               <input
                 id="comanda-number-input"
                 ref={comandaInputRef}

@@ -417,7 +417,7 @@ export function CashRegisterClose({
             <thead>
               <tr>
                 <th style="width: 28%;">Data</th>
-                <th>Descricao</th>
+                <th>Descrição</th>
                 <th style="width: 18%; text-align:right;">Valor</th>
               </tr>
             </thead>
@@ -689,7 +689,7 @@ export function CashRegisterClose({
                       <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
                         <tr>
                           <th className="text-left px-3 py-2">Data</th>
-                          <th className="text-left px-3 py-2">Descricao</th>
+                          <th className="text-left px-3 py-2">Descrição</th>
                           <th className="text-right px-3 py-2">Valor</th>
                         </tr>
                       </thead>

@@ -34,6 +34,13 @@ type PesoSensorPayload = {
   timestamp?: string;
 };
 
+type CloseBatchPayment = {
+  id?: string;
+  method: string;
+  label?: string;
+  amount: number;
+};
+
 type CloseBatchResult = {
   beforeByNumero: Map<string, ComandaRecord | null>;
   comandas: ComandaRecord[];
@@ -1089,18 +1096,21 @@ app.delete('/api/v1/financeiro/:id', async (req, res) => {
 });
 
 app.post('/api/v1/comandas/close-batch', async (req, res) => {
-  const numeros = Array.isArray(req.body?.numeros)
-    ? req.body.numeros.map(parseComandaNumero).filter(Boolean)
+  const numeros: string[] = Array.isArray(req.body?.numeros)
+    ? (req.body.numeros as unknown[]).map(parseComandaNumero).filter(Boolean)
     : [];
   const documentMode = parseNumero(req.body?.documentMode).toUpperCase();
-  const payments = Array.isArray(req.body?.payments)
-    ? req.body.payments
-      .map((payment: Record<string, unknown>, index: number) => ({
-        id: parseOptionalText(payment.id),
-        method: parseOptionalText(payment.method) ?? `PAGAMENTO_${index + 1}`,
-        label: parseOptionalText(payment.label),
-        amount: parseNumber(payment.amount)
-      }))
+  const payments: CloseBatchPayment[] = Array.isArray(req.body?.payments)
+    ? (req.body.payments as unknown[])
+      .map((raw, index): CloseBatchPayment => {
+        const payment = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+        return {
+          id: parseOptionalText(payment.id),
+          method: parseOptionalText(payment.method) ?? `PAGAMENTO_${index + 1}`,
+          label: parseOptionalText(payment.label),
+          amount: parseNumber(payment.amount)
+        };
+      })
       .filter((payment) => payment.amount > 0)
     : [];
   const targetStatus = documentMode === 'ORCAMENTO'

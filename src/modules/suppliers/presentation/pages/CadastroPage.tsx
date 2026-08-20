@@ -3496,6 +3496,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'FORNECEDORES' ? 'is-active' : ''}
+            style={{ borderColor: '#38bdf8' }}
             onClick={() => {
               setActiveTab('FORNECEDORES');
               setShowCadastroSpan(false);
@@ -3506,6 +3507,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'FUNCIONARIOS' ? 'is-active' : ''}
+            style={{ borderColor: '#3b82f6' }}
             onClick={() => {
               setActiveTab('FUNCIONARIOS');
               setShowCadastroSpan(false);
@@ -3516,6 +3518,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'CLIENTES' ? 'is-active' : ''}
+            style={{ borderColor: '#10b981' }}
             onClick={() => {
               setActiveTab('CLIENTES');
               setShowCadastroSpan(false);
@@ -3526,6 +3529,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'CONVENIOS' ? 'is-active' : ''}
+            style={{ borderColor: '#a855f7' }}
             onClick={() => {
               setActiveTab('CONVENIOS');
               setShowCadastroSpan(false);
@@ -3536,6 +3540,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'ADMIN_CARTOES' ? 'is-active' : ''}
+            style={{ borderColor: '#ec4899' }}
             onClick={() => {
               setActiveTab('ADMIN_CARTOES');
               setShowCadastroSpan(false);
@@ -3546,6 +3551,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'FINANCEIRO' ? 'is-active' : ''}
+            style={{ borderColor: '#f59e0b' }}
             onClick={() => {
               setActiveTab('FINANCEIRO');
               setShowCadastroSpan(false);
@@ -3556,6 +3562,7 @@ export function CadastroPage() {
           <button
             type="button"
             className={activeTab === 'ESTOQUE' ? 'is-active' : ''}
+            style={{ borderColor: '#14b8a6' }}
             onClick={() => {
               setActiveTab('ESTOQUE');
               setShowCadastroSpan(false);
@@ -4917,6 +4924,9 @@ export function CadastroPage() {
                   key={tab}
                   type="button"
                   className={activeFinanceTab === tab ? 'is-active' : ''}
+                  style={{
+                    borderColor: tab === 'DESPESAS' ? '#f43f5e' : tab === 'RECEITA' ? '#10b981' : '#0ea5e9'
+                  }}
                   onClick={() => {
                     setActiveFinanceTab(tab);
                     if (!editingFinanceEntryId) {
@@ -6507,6 +6517,9 @@ export function CadastroPage() {
                   key={tab}
                   type="button"
                   className={activeFinanceTab === tab ? 'is-active' : ''}
+                  style={{
+                    borderColor: tab === 'DESPESAS' ? '#f43f5e' : tab === 'RECEITA' ? '#10b981' : '#0ea5e9'
+                  }}
                   onClick={() => {
                     setActiveFinanceTab(tab);
                     onCancelDuplicateFinanceEntry();

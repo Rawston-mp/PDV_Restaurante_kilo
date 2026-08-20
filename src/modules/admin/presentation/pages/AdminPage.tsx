@@ -1081,7 +1081,7 @@ export function AdminPage() {
 
           {isPdvSefazOpen && (
             <div className="fixed inset-0 z-50 bg-slate-950/75 p-2 flex items-center justify-center">
-              <section className="pdv-sefaz-panel w-full max-w-7xl h-[calc(100vh-1rem)] overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
+              <section className="pdv-sefaz-panel w-full max-w-full md:max-w-7xl h-[calc(100vh-1rem)] md:h-[calc(100vh-2rem)] overflow-y-auto overflow-x-hidden bg-white rounded-2xl border border-slate-200 shadow-2xl mx-auto">
                 <div className="pdv-sefaz-header bg-white px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-3">
                   <div>
                     <p className="admin-eyebrow">Fiscal</p>
