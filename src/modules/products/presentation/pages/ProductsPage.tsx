@@ -16,6 +16,8 @@ import { productsContainer } from '@/modules/products/infrastructure/container/p
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 
+import { ResponsiveFormWrapper } from '@/components/ResponsiveFormWrapper';
+
 const cfopOptions = ['5102 - VENDA', '5405 - VENDA COM ST', '5101 - VENDAS - BC REDUZIDA'];
 
 const fiscalTypeOptions = [
@@ -825,7 +827,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
       )}
 
       {canEditOrDelete && showCadastroSpan && (
-        <article className="card products-cadastro-span">
+        <ResponsiveFormWrapper className="card products-cadastro-span">
           <header className="products-cadastro-header">
             <h3>Produtos &gt; Cadastro</h3>
             <div className="products-cadastro-tabs">
@@ -1283,7 +1285,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
 
             {formError && <p className="products-form-warning">{formError}</p>}
           </form>
-        </article>
+        </ResponsiveFormWrapper>
       )}
 
       <div className="products-grid products-grid-list-only">
