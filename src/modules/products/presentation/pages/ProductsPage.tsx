@@ -16,8 +16,6 @@ import { productsContainer } from '@/modules/products/infrastructure/container/p
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 
-import { ResponsiveFormWrapper } from '@/components/ResponsiveFormWrapper';
-
 const cfopOptions = ['5102 - VENDA', '5405 - VENDA COM ST', '5101 - VENDAS - BC REDUZIDA'];
 
 const fiscalTypeOptions = [
@@ -242,6 +240,9 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
   const { user } = useAuth();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const cadastroModalRef = useRef<HTMLElement | null>(null);
+  const cadastroTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const categoryManagerModeRef = useRef<'ADD' | 'EDIT' | 'DELETE' | null>(null);
 
   const [showCadastroSpan, setShowCadastroSpan] = useState(false);
   const [activeTab, setActiveTab] = useState<'PRODUTO' | 'FISCAL'>('PRODUTO');
@@ -256,6 +257,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
   const [isHidden, setIsHidden] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>(readStoredProductCategories);
   const [category, setCategory] = useState(defaultProductCategories[0]);
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string | null>(null);
   const [categoryManagerMode, setCategoryManagerMode] = useState<'ADD' | 'EDIT' | 'DELETE' | null>(null);
   const [categoryTargetName, setCategoryTargetName] = useState(defaultProductCategories[0]);
   const [categoryDraftName, setCategoryDraftName] = useState('');
@@ -321,12 +323,25 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
   }, [category, categoryOptions]);
 
   useEffect(() => {
-    if (!showCadastroSpan || activeTab !== 'PRODUTO' || !isNewCadastro) {
+    if (
+      catalogCategoryFilter
+      && !categoryOptions.some((option) => isSameCategoryName(option, catalogCategoryFilter))
+    ) {
+      setCatalogCategoryFilter(null);
+    }
+  }, [catalogCategoryFilter, categoryOptions]);
+
+  useEffect(() => {
+    if (!showCadastroSpan || activeTab !== 'PRODUTO') {
       return;
     }
 
     nameInputRef.current?.focus();
-  }, [activeTab, isNewCadastro, showCadastroSpan]);
+  }, [activeTab, showCadastroSpan]);
+
+  useEffect(() => {
+    categoryManagerModeRef.current = categoryManagerMode;
+  }, [categoryManagerMode]);
 
   const resetCadastroForm = () => {
     setEditingProductId(null);
@@ -362,6 +377,68 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
     setFiscalType(fiscalTypeOptions[0]);
     setActiveTab('PRODUTO');
   };
+
+  const closeCadastro = () => {
+    setShowCadastroSpan(false);
+    setEditingProductId(null);
+    setFormError(null);
+    setShowNcmLookup(false);
+  };
+
+  useEffect(() => {
+    if (!showCadastroSpan) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (categoryManagerModeRef.current) {
+          setCategoryManagerMode(null);
+          setCategoryActionError(null);
+          return;
+        }
+
+        closeCadastro();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        if (categoryManagerModeRef.current) {
+          return;
+        }
+
+        const focusableElements = cadastroModalRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (!focusableElements?.length) {
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (event.shiftKey && document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (!event.shiftKey && document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      cadastroTriggerRef.current?.focus();
+    };
+  }, [showCadastroSpan]);
 
   const saveCategoryOptions = (nextCategories: string[]) => {
     const sanitized = sanitizeCategoryOptions(nextCategories);
@@ -515,6 +592,13 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
       })
       .slice(0, 12);
   }, [ncmSearchQuery]);
+
+  const visibleProducts = useMemo(
+    () => catalogCategoryFilter
+      ? products.filter((product) => isSameCategoryName(product.category, catalogCategoryFilter))
+      : products,
+    [catalogCategoryFilter, products]
+  );
 
   const generateCodeForCurrentCatalog = () => {
     const usedCodes = getUsedProductCodes(products);
@@ -748,20 +832,6 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
     }
   };
 
-  const openCadastroForCategory = (nextCategory: string) => {
-    if (!canEditOrDelete) {
-      return;
-    }
-
-    if (!showCadastroSpan) {
-      resetCadastroForm();
-      setShowCadastroSpan(true);
-    }
-
-    setActiveTab('PRODUTO');
-    setCategory(nextCategory);
-  };
-
   return (
     <section className="products-page">
       <header className="products-header card">
@@ -780,6 +850,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
         <div className="products-toolbar-actions">
           {canEditOrDelete && (
             <button
+              ref={cadastroTriggerRef}
               type="button"
               className="products-new-button"
               onClick={() => {
@@ -805,10 +876,20 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
 
       {canEditOrDelete && (
         <article className="card products-cadastro-quickbar">
-          <p className="products-help-note">Categorias rapidas: clique para abrir o cadastro ja na categoria.</p>
-          <div className="products-category-quickbar" role="tablist" aria-label="Categorias rapidas de cadastro">
+          <p className="products-help-note">Filtre o catálogo por categoria.</p>
+          <div className="products-category-quickbar" role="tablist" aria-label="Filtro de categorias do catálogo">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={catalogCategoryFilter === null}
+              className={`products-category-chip ${catalogCategoryFilter === null ? 'is-active' : ''}`}
+              onClick={() => setCatalogCategoryFilter(null)}
+            >
+              Todas
+            </button>
             {categoryOptions.map((option) => {
-              const isActiveCategory = isSameCategoryName(option, category);
+              const isActiveCategory = catalogCategoryFilter !== null
+                && isSameCategoryName(option, catalogCategoryFilter);
               return (
                 <button
                   key={option}
@@ -816,7 +897,7 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
                   role="tab"
                   aria-selected={isActiveCategory}
                   className={`products-category-chip ${isActiveCategory ? 'is-active' : ''}`}
-                  onClick={() => openCadastroForCategory(option)}
+                  onClick={() => setCatalogCategoryFilter(option)}
                 >
                   {option}
                 </button>
@@ -827,25 +908,52 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
       )}
 
       {canEditOrDelete && showCadastroSpan && (
-        <ResponsiveFormWrapper className="card products-cadastro-span">
+        <div
+          className="products-cadastro-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="products-cadastro-title"
+          aria-describedby="products-cadastro-description"
+        >
+        <article ref={cadastroModalRef} className="card products-cadastro-span products-cadastro-modal">
           <header className="products-cadastro-header">
-            <h3>Produtos &gt; Cadastro</h3>
-            <div className="products-cadastro-tabs">
+            <div>
+              <p className="products-eyebrow">Catálogo de produtos</p>
+              <h3 id="products-cadastro-title">{editingProductId ? 'Editar produto' : 'Novo cadastro'}</h3>
+              <p id="products-cadastro-description" className="products-cadastro-description">
+                Preencha os dados comerciais e fiscais do produto.
+              </p>
+            </div>
+            <div className="products-cadastro-header-actions">
+              <div className="products-cadastro-tabs" role="tablist" aria-label="Etapas do cadastro de produto">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'PRODUTO'}
+                  className={activeTab === 'PRODUTO' ? 'is-active' : ''}
+                  style={{ borderColor: '#0ea5e9' }}
+                  onClick={() => setActiveTab('PRODUTO')}
+                >
+                  Produto
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'FISCAL'}
+                  className={activeTab === 'FISCAL' ? 'is-active' : ''}
+                  style={{ borderColor: '#a855f7' }}
+                  onClick={() => setActiveTab('FISCAL')}
+                >
+                  Fiscal
+                </button>
+              </div>
               <button
                 type="button"
-                className={activeTab === 'PRODUTO' ? 'is-active' : ''}
-                style={{ borderColor: '#0ea5e9' }}
-                onClick={() => setActiveTab('PRODUTO')}
+                className="products-cadastro-close"
+                aria-label="Fechar cadastro de produto"
+                onClick={closeCadastro}
               >
-                Produto
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'FISCAL' ? 'is-active' : ''}
-                style={{ borderColor: '#a855f7' }}
-                onClick={() => setActiveTab('FISCAL')}
-              >
-                Fiscal
+                ×
               </button>
             </div>
           </header>
@@ -1273,57 +1381,44 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
               <button
                 type="button"
                 className="button-muted"
-                onClick={() => {
-                  setShowCadastroSpan(false);
-                  setEditingProductId(null);
-                  setFormError(null);
-                }}
+                onClick={closeCadastro}
               >
-                Fechar cadastro
+                Cancelar
               </button>
             </div>
 
             {formError && <p className="products-form-warning">{formError}</p>}
           </form>
-        </ResponsiveFormWrapper>
+        </article>
+        </div>
       )}
 
       <div className="products-grid products-grid-list-only">
         <article className="card products-list-card">
           <h3>Catalogo ativo</h3>
-          {products.length === 0 ? (
-            <p className="empty-state">Nenhum produto cadastrado ainda.</p>
+          {visibleProducts.length === 0 ? (
+            <p className="empty-state">
+              {products.length === 0
+                ? 'Nenhum produto cadastrado ainda.'
+                : 'Nenhum produto encontrado nesta categoria.'}
+            </p>
           ) : (
             <ul className="products-list">
-              {products.map((product) => (
+              {visibleProducts.map((product) => (
                 <li key={product.id}>
-                  <div>
-                    <strong>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
                       <span className="products-id-tag">ID {product.productCode ?? parseLegacyProductCode(product.name) ?? '--'}</span>{' '}
                       {getProductDisplayName(product)}
-                    </strong>
-                    {product.description ? <span>{product.description}</span> : <span />}
-                    <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
-                      <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
-                    </span>
+                      </strong>
+                      <span className={['products-group-tag', getCategoryVisual(product.category).className ?? ''].join(' ')}>
+                        <b>{getCategoryVisual(product.category).icon}</b> {getCategoryVisual(product.category).label}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <strong>{currency.format(product.price)}</strong>
-                    <span>estoque {product.stock}</span>
-                    <span>
-                      {product.isUnavailable ? 'indisponivel' : 'disponivel'} | {product.isHidden ? 'oculto' : 'visivel'}
-                    </span>
-                    {canEditOrDelete && (
-                      <span>
-                        custo {product.costValue !== undefined ? currency.format(product.costValue) : '-'} | margem{' '}
-                        {product.marginProfit !== undefined ? `${product.marginProfit.toFixed(2)}%` : '-'}
-                      </span>
-                    )}
-                    {canEditOrDelete && (
-                      <span>
-                        cod. barras {product.barcode ?? '-'} | NCM {product.ncm ?? '-'} | CFOP {product.cfop ?? '-'}
-                      </span>
-                    )}
+                  <div className="products-list-side">
+                    <strong className="products-list-price">{currency.format(product.price)}</strong>
                     {canEditOrDelete && (
                       <div className="products-row-actions">
                         <button

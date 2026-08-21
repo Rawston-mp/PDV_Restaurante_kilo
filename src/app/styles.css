@@ -1348,6 +1348,7 @@ body {
 .cadastro-span-overlay,
 .convenio-cadastro-overlay,
 .finance-cadastro-overlay,
+.products-cadastro-overlay,
 .nfe-product-registration-overlay,
 .finance-document-manager-overlay {
     position: fixed;
@@ -1363,6 +1364,7 @@ body {
 .cadastro-span-panel,
 .convenio-cadastro-span,
 .finance-cadastro-span,
+.products-cadastro-modal,
 .stock-note-view-modal,
 .nfe-product-registration-modal {
     width: min(980px, calc(100vw - 1.5rem));
@@ -1377,6 +1379,14 @@ body {
 
 .convenio-cadastro-span {
     width: min(1060px, calc(100vw - 1.5rem));
+}
+
+.products-cadastro-modal {
+    width: min(1160px, calc(100vw - 2rem));
+    max-height: min(94vh, 880px);
+    overflow: auto;
+    padding: 1rem;
+    overscroll-behavior: contain;
 }
 
 .content .cadastro-span-close,
@@ -1432,6 +1442,48 @@ body {
 .products-cadastro-header>div {
     display: grid;
     gap: 0.15rem;
+}
+
+.products-cadastro-modal .products-cadastro-header {
+    position: sticky;
+    top: -1rem;
+    z-index: 4;
+    margin: -1rem -1rem 0;
+    padding: 1rem 1rem 0.8rem;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 1px 0 rgba(203, 213, 225, 0.85);
+    backdrop-filter: blur(10px);
+}
+
+.products-cadastro-description {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.products-cadastro-header-actions {
+    display: flex !important;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem !important;
+}
+
+.products-cadastro-modal .products-form {
+    width: 100%;
+    max-width: none;
+    padding-top: 0.2rem;
+}
+
+.products-cadastro-modal .products-cadastro-footer {
+    position: sticky;
+    bottom: -1rem;
+    z-index: 3;
+    margin: 0 -1rem -1rem;
+    padding: 0.85rem 1rem 1rem;
+    background: rgba(255, 255, 255, 0.97);
+    border-top: 1px solid rgba(203, 213, 225, 0.85);
+    backdrop-filter: blur(10px);
 }
 
 .products-cadastro-header h3 {
@@ -1952,12 +2004,12 @@ body {
 .products-list li {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.85rem;
+    gap: 0.6rem;
     align-items: center;
     border: 1px solid var(--line);
-    border-radius: 12px;
-    min-height: 64px;
-    padding: 0.62rem 0.72rem;
+    border-radius: 10px;
+    min-height: 46px;
+    padding: 0.35rem 0.55rem;
     background: linear-gradient(120deg, #ffffff 0%, #f8fafc 100%);
 }
 
@@ -1977,7 +2029,7 @@ body {
 
 .products-list-title {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.42rem;
     align-items: center;
     min-width: 0;
@@ -1987,6 +2039,9 @@ body {
     color: #0f172a;
     font-size: 0.88rem;
     line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .products-list-meta {
@@ -2010,7 +2065,7 @@ body {
     align-items: center;
     justify-content: center;
     min-width: 78px;
-    min-height: 30px;
+    min-height: 28px;
     padding: 0.22rem 0.55rem;
     border-radius: 9px;
     border: 1px solid #cbd5e1;
@@ -2025,7 +2080,8 @@ body {
 .products-edit-button {
     width: fit-content;
     margin-top: 0;
-    padding: 0.35rem 0.75rem;
+    min-height: 30px;
+    padding: 0.28rem 0.68rem;
     border-radius: 10px;
     border: 2px solid #38bdf8 !important;
     font-size: 0.82rem;
@@ -2055,7 +2111,8 @@ body {
 .products-delete-button {
     width: fit-content;
     margin-top: 0;
-    padding: 0.35rem 0.75rem;
+    min-height: 30px;
+    padding: 0.28rem 0.68rem;
     border-radius: 10px;
     border: 2px solid #f43f5e !important;
     font-size: 0.82rem;
@@ -3352,14 +3409,29 @@ body {
     color: #fef3c7;
 }
 
+.comanda-primary-action {
+    display: grid;
+    width: 100%;
+    gap: 0.35rem;
+}
+
+.comanda-primary-action>p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
 .next-comanda-button {
-    min-height: 52px;
+    width: 100%;
+    min-height: 64px;
     border-radius: 10px;
     border: 1px solid rgba(16, 185, 129, 0.65);
     background: linear-gradient(120deg, #059669 0%, #10b981 100%);
     color: #f8fafc;
     font-weight: 800;
-    font-size: 0.94rem;
+    font-size: 1rem;
+    box-shadow: 0 10px 22px rgba(5, 150, 105, 0.25);
 }
 
 .next-comanda-button:disabled {
@@ -3720,6 +3792,284 @@ body {
     justify-items: end;
 }
 
+.cadastro-compact-list li {
+    align-items: center;
+    min-height: 46px;
+    padding: 0.35rem 0.55rem;
+}
+
+.cadastro-compact-list li>div:last-child {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+}
+
+.cadastro-compact-list .button-muted {
+    min-height: 30px;
+    padding: 0.28rem 0.68rem;
+    border-radius: 10px;
+    font-size: 0.82rem;
+}
+
+.cadastro-compact-list .stock-note-reversed,
+.cadastro-compact-list .stock-note-processed {
+    white-space: nowrap;
+}
+
+.cadastro-compact-ledger {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.cadastro-compact-ledger .finance-revenue-ledger-head,
+.cadastro-compact-ledger .finance-account-ledger-head,
+.cadastro-compact-ledger .finance-revenue-ledger-row,
+.cadastro-compact-ledger .finance-account-ledger-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.cadastro-compact-ledger .finance-revenue-ledger-head,
+.cadastro-compact-ledger .finance-account-ledger-head {
+    padding: 0 0.55rem;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.cadastro-compact-ledger .finance-revenue-ledger-row,
+.cadastro-compact-ledger .finance-account-ledger-row {
+    min-height: 46px;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: linear-gradient(120deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.cadastro-compact-ledger .finance-revenue-ledger-row>strong,
+.cadastro-compact-ledger .finance-account-ledger-row>strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cadastro-compact-ledger .finance-ledger-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.cadastro-compact-ledger .is-total {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+.finance-account-summary {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.finance-account-summary-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.finance-account-summary-header h4,
+.finance-account-summary-header p {
+    margin: 0;
+}
+
+.finance-account-summary-header p {
+    margin-top: 0.22rem;
+}
+
+.finance-account-summary-header>span {
+    flex: 0 0 auto;
+    padding: 0.22rem 0.5rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.finance-account-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.7rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 9px;
+    background: #f1f5f9;
+}
+
+.finance-account-date-range,
+.finance-account-filter-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.finance-account-toolbar input,
+.finance-account-toolbar select,
+.finance-account-toolbar button {
+    min-height: 34px;
+}
+
+.finance-account-date-range input {
+    width: 145px;
+}
+
+.finance-account-filter-field select {
+    width: clamp(145px, 18vw, 220px);
+}
+
+.finance-account-search-button {
+    padding-inline: 0.85rem;
+}
+
+.finance-current-statement {
+    display: grid;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scrollbar-gutter: stable;
+}
+
+.finance-current-statement-head,
+.finance-current-statement-row {
+    display: grid;
+    grid-template-columns: 105px minmax(130px, 0.8fr) minmax(260px, 2fr) 110px 110px 120px 70px;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 900px;
+}
+
+.finance-current-statement-head {
+    padding: 0.35rem 0.65rem;
+    border-radius: 8px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 0.74rem;
+    font-weight: 800;
+}
+
+.finance-current-statement-head span:nth-child(n + 4) {
+    text-align: right;
+}
+
+.finance-current-statement-head span:last-child {
+    text-align: center;
+}
+
+.finance-current-statement-row {
+    min-height: 42px;
+    padding: 0.32rem 0.65rem;
+    border-bottom: 1px solid #dbe3ee;
+    background: #ffffff;
+    font-size: 0.82rem;
+}
+
+.finance-current-statement-row:nth-child(odd):not(.is-opening-balance):not(.is-statement-total) {
+    background: #f8fafc;
+}
+
+.finance-current-statement-row>span,
+.finance-current-statement-row>strong,
+.finance-current-statement-row>b {
+    min-width: 0;
+}
+
+.finance-current-statement-row>b {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.finance-current-description {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.finance-current-statement .is-debit {
+    color: #dc2626;
+}
+
+.finance-current-statement .is-credit {
+    color: #16a34a;
+}
+
+.finance-current-statement .is-balance {
+    color: #1d4ed8;
+}
+
+.finance-current-statement .is-opening-balance,
+.finance-current-statement .is-statement-total {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.finance-current-statement .is-statement-total {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+}
+
+.finance-statement-actions {
+    display: flex;
+    justify-content: flex-end;
+    width: 70px;
+}
+
+.finance-statement-actions .button-muted,
+.finance-statement-actions .products-edit-button {
+    min-height: 28px;
+    width: 100%;
+    padding: 0.24rem 0.58rem;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 560px) {
+    .finance-account-summary-header {
+        align-items: flex-start;
+    }
+
+    .finance-account-toolbar {
+        align-items: stretch;
+    }
+
+    .finance-account-date-range {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        width: 100%;
+    }
+
+    .finance-account-date-range input,
+    .finance-account-filter-field select {
+        width: 100%;
+    }
+
+    .finance-account-filter-field {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        width: 100%;
+    }
+
+    .finance-account-search-button {
+        width: 100%;
+    }
+}
+
 .whatsapp-badge {
     display: inline-flex;
     align-items: center;
@@ -3774,6 +4124,20 @@ body {
     }
     .comanda-categories {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .products-cadastro-modal .products-row-4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .products-cadastro-modal .products-field-compact,
+    .products-cadastro-modal .products-field-main,
+    .products-cadastro-modal .products-row-4>.products-photo-field,
+    .products-cadastro-modal .products-row-4>.products-group-field {
+        min-width: 0;
+        max-width: none;
+    }
+    .products-cadastro-modal .products-row-4>.products-photo-field,
+    .products-cadastro-modal .products-row-4>.products-group-field {
+        grid-column: auto;
     }
 }
 
@@ -3908,6 +4272,7 @@ body {
     .cadastro-span-overlay,
     .convenio-cadastro-overlay,
     .finance-cadastro-overlay,
+    .products-cadastro-overlay,
     .nfe-product-registration-overlay,
     .finance-document-manager-overlay {
         align-items: start;
@@ -3916,10 +4281,25 @@ body {
     .cadastro-span-panel,
     .convenio-cadastro-span,
     .finance-cadastro-span,
+    .products-cadastro-modal,
     .stock-note-view-modal,
     .nfe-product-registration-modal {
         width: 100%;
         max-height: calc(100vh - 1.4rem);
+        padding: 0.7rem;
+    }
+    .products-cadastro-modal .products-cadastro-header {
+        top: -0.7rem;
+        margin: -0.7rem -0.7rem 0;
+        padding: 0.75rem 0.7rem 0.65rem;
+    }
+    .products-cadastro-header-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .products-cadastro-modal .products-cadastro-footer {
+        bottom: -0.7rem;
+        margin: 0 -0.7rem -0.7rem;
         padding: 0.7rem;
     }
     .products-list li {
@@ -3930,6 +4310,23 @@ body {
         justify-content: space-between;
         min-width: 0;
         flex-wrap: wrap;
+    }
+    .cadastro-compact-list li {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+    }
+    .cadastro-compact-list .products-list-side {
+        min-width: max-content;
+        flex-wrap: nowrap;
+    }
+    .cadastro-compact-list .products-row-actions {
+        flex-wrap: nowrap;
+    }
+    .cadastro-compact-ledger .finance-revenue-ledger-head,
+    .cadastro-compact-ledger .finance-account-ledger-head,
+    .cadastro-compact-ledger .finance-revenue-ledger-row,
+    .cadastro-compact-ledger .finance-account-ledger-row {
+        grid-template-columns: minmax(0, 1fr) auto auto;
     }
     .cadastro-tabs-nav {
         width: 100%;

@@ -76,12 +76,7 @@ export function PaymentPanel({ total, items, onConfirm, onBack, initialDocumentM
     quantity: item.quantity,
     unit: item.unit,
     total: item.quantity * item.unitPrice,
-    productCode: item.productCode,
-    barcode: item.barcode,
-    ncm: item.ncm,
-    cfop: item.cfop,
-    taxSituationCode: item.taxSituationCode,
-    fiscalType: item.fiscalType
+    productCode: item.productCode
   }));
   const totalWeightItems = items.filter((item) => item.unit === 'KG').length;
   const totalUnitQuantity = items.filter((item) => item.unit === 'UN').reduce((acc, item) => acc + item.quantity, 0);
@@ -161,6 +156,20 @@ export function PaymentPanel({ total, items, onConfirm, onBack, initialDocumentM
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F2' || event.code === 'F2') {
+        event.preventDefault();
+        event.stopPropagation();
+        setDocumentMode('ORCAMENTO');
+        return;
+      }
+
+      if (event.key === 'F3' || event.code === 'F3') {
+        event.preventDefault();
+        event.stopPropagation();
+        setDocumentMode('NFCE');
+        return;
+      }
+
       if (event.key !== 'Enter' || selectedMethod === 'FIADO') {
         return;
       }
@@ -402,12 +411,9 @@ export function PaymentPanel({ total, items, onConfirm, onBack, initialDocumentM
                   <li key={item.id} className="px-3 py-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
-                        <p className="text-[11px] text-slate-500">
-                          ID {item.productCode ?? '--'} · NCM {item.ncm ?? '--'} · CFOP {item.cfop ?? '--'}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          {item.fiscalType ?? 'Fiscal nao informado'} · CST {item.taxSituationCode ?? '--'} · EAN {item.barcode ?? '--'}
+                        <p className="flex min-w-0 items-baseline gap-2 text-sm text-slate-800">
+                          <span className="truncate font-semibold">{item.name}</span>
+                          <span className="shrink-0 text-[11px] font-medium text-slate-500">ID {item.productCode ?? '--'}</span>
                         </p>
                       </div>
                       <div className="text-right shrink-0">

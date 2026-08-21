@@ -8,6 +8,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock3, LogOut, UserRound } from 'lucide-react';
 import { useAuth } from '@/modules/auth/presentation/providers/AuthProvider';
 import type { Product } from '@/modules/products/domain/entities/Product';
+import {
+  mergeCategoryOptions,
+  productCategoriesChangedEvent,
+  productCategoriesStorageKey,
+  readStoredProductCategories
+} from '@/modules/products/domain/services/productCategories';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
 import { type CashierCartItem } from '@/modules/cashier/presentation/components/CartItem';
@@ -339,6 +345,7 @@ export function CashierPage() {
   const [cashCloseInitialSection, setCashCloseInitialSection] = useState<CashCloseSection>('INICIO');
   const [query, setQuery]                   = useState('');
   const [activeCategory, setActiveCategory] = useState('Todos');
+  const [catalogCategories, setCatalogCategories] = useState<string[]>(readStoredProductCategories);
   const [comandaNumber, setComandaNumber]   = useState('');
   const [cartItems, setCartItems]           = useState<CashierCartItem[]>([]);
   const [openComandasCount, setOpenComandasCount] = useState(0);
@@ -368,6 +375,23 @@ export function CashierPage() {
     : isKeyboardVisible
       ? 'Digite para buscar produto e pressione Enter para adicionar'
       : 'Digite produto, código ou comanda e pressione Enter';
+
+  useEffect(() => {
+    const refreshCategories = () => setCatalogCategories(readStoredProductCategories());
+    const refreshCategoriesFromStorage = (event: StorageEvent) => {
+      if (event.key === productCategoriesStorageKey) {
+        refreshCategories();
+      }
+    };
+
+    window.addEventListener(productCategoriesChangedEvent, refreshCategories);
+    window.addEventListener('storage', refreshCategoriesFromStorage);
+
+    return () => {
+      window.removeEventListener(productCategoriesChangedEvent, refreshCategories);
+      window.removeEventListener('storage', refreshCategoriesFromStorage);
+    };
+  }, []);
 
   const showNotice = (message: string, tone: CashierNotice['tone'] = 'info') => {
     setNotice({ message, tone });
@@ -790,15 +814,15 @@ export function CashierPage() {
   );
 
   const dynamicCategories = useMemo(() => {
-    const categorySet = new Set<string>();
-    for (const product of catalogProducts) {
-      if (product.category.trim()) {
-        categorySet.add(product.category);
-      }
-    }
+    const categories = mergeCategoryOptions(catalogCategories, products);
+    return ['Todos', ...categories];
+  }, [catalogCategories, products]);
 
-    return ['Todos', ...[...categorySet].sort((a, b) => a.localeCompare(b, 'pt-BR'))];
-  }, [catalogProducts]);
+  useEffect(() => {
+    if (!dynamicCategories.includes(activeCategory)) {
+      setActiveCategory('Todos');
+    }
+  }, [activeCategory, dynamicCategories]);
 
   const refreshComandaIndicators = useCallback(async () => {
     const response = await fetch(`${API_BASE}/api/v1/comandas`);
@@ -960,12 +984,18 @@ export function CashierPage() {
 
       if (event.key === 'F2') {
         event.preventDefault();
+        if (view === 'payment') {
+          return;
+        }
         openPaymentWithMode('ORCAMENTO');
         return;
       }
 
       if (event.key === 'F3') {
         event.preventDefault();
+        if (view === 'payment') {
+          return;
+        }
         openPaymentWithMode('NFCE');
         return;
       }

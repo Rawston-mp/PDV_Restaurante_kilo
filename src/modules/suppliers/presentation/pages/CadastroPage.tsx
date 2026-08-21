@@ -240,20 +240,6 @@ const formatIsoDateInput = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const addDays = (baseDate: Date, days: number) => {
-  const nextDate = new Date(baseDate);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-};
-
-const getDateWithFixedDay = (baseDate: Date, dayOfMonth: number) => {
-  const year = baseDate.getFullYear();
-  const month = baseDate.getMonth();
-  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-  const validDay = Math.min(dayOfMonth, lastDayOfMonth);
-  return new Date(year, month, validDay);
-};
-
 const normalizeSearchText = (value: string) => normalizeXmlValue(value).replace(/[^A-Z0-9 ]/g, ' ');
 
 const normalizeNatureOfOperation = (value: string) => {
@@ -429,11 +415,6 @@ const formatDateInputDisplay = (value: string) => {
   return parsedDate ? parsedDate.toLocaleDateString('pt-BR') : '-';
 };
 
-const formatDateTimeDisplayDate = (value: string) => {
-  const parsedDate = new Date(value);
-  return Number.isNaN(parsedDate.getTime()) ? '-' : parsedDate.toLocaleDateString('pt-BR');
-};
-
 const appendFinanceAuditNote = (notes: string, auditNote: string) => {
   const trimmedNotes = notes.trim();
   return trimmedNotes ? `${auditNote}\n${trimmedNotes}` : auditNote;
@@ -443,39 +424,6 @@ const pickConvenioDetails = (convenio: Partial<ConvenioDetails>): ConvenioDetail
   ...createEmptyConvenioDetails(),
   ...Object.fromEntries(Object.entries(convenio).filter(([, value]) => value !== undefined && value !== null))
 }) as ConvenioDetails;
-
-const findStockEntryForFinanceEntry = (entry: FinanceEntry, stockEntries: StockEntry[]) => {
-  const normalizedDocument = normalizeSearchText(entry.documentRef);
-  const normalizedPerson = normalizeSearchText(entry.supplierName || entry.description);
-  const amount = parseFinanceAmount(entry.amount);
-
-  return stockEntries.find((stockEntry) => {
-    const stockDocuments = [
-      stockEntry.noteCode,
-      stockEntry.invoiceNumber,
-      stockEntry.accessKey,
-      stockEntry.stockEntryCode
-    ].map((value) => normalizeSearchText(value));
-
-    if (
-      normalizedDocument &&
-      stockDocuments.some((document) => document && (document.includes(normalizedDocument) || normalizedDocument.includes(document)))
-    ) {
-      return true;
-    }
-
-    const normalizedSupplier = normalizeSearchText(stockEntry.supplierName);
-    const supplierMatches = Boolean(
-      normalizedPerson &&
-      normalizedSupplier &&
-      (normalizedPerson.includes(normalizedSupplier) || normalizedSupplier.includes(normalizedPerson))
-    );
-    const stockTotal = stockEntry.invoiceTotalValue || stockEntry.totalCost;
-    const amountMatches = amount > 0 && Math.abs(stockTotal - amount) < 0.01;
-
-    return supplierMatches && amountMatches;
-  });
-};
 
 const getUsedSupplierCodes = (suppliers: Array<{ supplierCode?: string; legalName: string }>) => {
   const usedCodes = new Set<string>();
@@ -809,13 +757,6 @@ export function CadastroPage() {
   const [cashMovementCategoryError, setCashMovementCategoryError] = useState<string | null>(null);
   const [financeStatus, setFinanceStatus] = useState<'ABERTO' | 'PAGO' | 'RECEBIDO' | 'ESTORNADO'>('ABERTO');
   const [financeNotes, setFinanceNotes] = useState('');
-  const [duplicateFinanceSourceEntryId, setDuplicateFinanceSourceEntryId] = useState<string | null>(null);
-  const [duplicateFinanceIssueDate, setDuplicateFinanceIssueDate] = useState('');
-  const [duplicateFinanceDueDate, setDuplicateFinanceDueDate] = useState('');
-  const [duplicateFinanceInstallmentCount, setDuplicateFinanceInstallmentCount] = useState('1');
-  const [duplicateFinanceIntervalDays, setDuplicateFinanceIntervalDays] = useState('30');
-  const [duplicateFinanceFixedDayEnabled, setDuplicateFinanceFixedDayEnabled] = useState(false);
-  const [duplicateFinanceError, setDuplicateFinanceError] = useState<string | null>(null);
 
 
   const [stockEntryFormError, setStockEntryFormError] = useState<string | null>(null);
@@ -1608,11 +1549,6 @@ export function CadastroPage() {
     [financeEntries]
   );
 
-  const activeFinanceRows = useMemo(
-    () => financeRows.filter((entry) => entry.tab === activeFinanceTab),
-    [financeRows, activeFinanceTab]
-  );
-
   const financeAccountBalanceRows = useMemo(() => {
     const today = new Date();
     const balances = new Map<string, { income: number; expense: number; todayIncome: number; todayExpense: number }>();
@@ -1658,12 +1594,48 @@ export function CadastroPage() {
       .sort((left, right) => left.accountName.localeCompare(right.accountName, 'pt-BR'));
   }, [financeRows]);
 
+  const financeAccountOpeningBalance = useMemo(() => {
+    if (activeFinanceTab !== 'CONTA_CORRENTE' || !financeAccountFilter) {
+      return 0;
+    }
+
+    const startDate = financeAccountStartDateFilter || financeAccountEndDateFilter;
+    const endDate = financeAccountEndDateFilter || financeAccountStartDateFilter;
+    const rangeStartDate = startDate && endDate && startDate > endDate ? endDate : startDate;
+
+    if (!rangeStartDate) {
+      return 0;
+    }
+
+    return financeRows.reduce((balance, entry) => {
+      if (entry.accountName !== financeAccountFilter || entry.status === 'ESTORNADO') {
+        return balance;
+      }
+
+      const movementDate = getFinanceEntryMovementDateInput(entry);
+      if (!movementDate || movementDate >= rangeStartDate) {
+        return balance;
+      }
+
+      const amount = parseFinanceAmount(entry.amount);
+      if (isFinanceIncomeSettled(entry)) {
+        return balance + amount;
+      }
+
+      if (isFinanceExpenseSettled(entry)) {
+        return balance - amount;
+      }
+
+      return balance;
+    }, 0);
+  }, [activeFinanceTab, financeAccountEndDateFilter, financeAccountFilter, financeAccountStartDateFilter, financeRows]);
+
   const financeAccountMovementRows = useMemo(() => {
     if (!financeAccountFilter && activeFinanceTab === 'CONTA_CORRENTE') {
       return [];
     }
 
-    let runningBalance = 0;
+    let runningBalance = activeFinanceTab === 'CONTA_CORRENTE' ? financeAccountOpeningBalance : 0;
     const startDate = financeAccountStartDateFilter || financeAccountEndDateFilter;
     const endDate = financeAccountEndDateFilter || financeAccountStartDateFilter;
     const rangeStartDate = startDate && endDate && startDate > endDate ? endDate : startDate;
@@ -1681,7 +1653,7 @@ export function CadastroPage() {
           return entry.tab === 'RECEITA';
         }
 
-        return true;
+        return isFinanceIncomeSettled(entry) || isFinanceExpenseSettled(entry);
       })
       .filter((entry) => {
         const movementDate = getFinanceEntryMovementDateInput(entry);
@@ -1708,18 +1680,25 @@ export function CadastroPage() {
         const amount = parseFinanceAmount(entry.amount);
         const debit = isFinanceExpenseSettled(entry) ? amount : 0;
         const credit = isFinanceIncomeSettled(entry) ? amount : 0;
-        const stockEntry = findStockEntryForFinanceEntry(entry, stockEntries);
         runningBalance += credit - debit;
 
         return {
           entry,
-          stockEntry,
           debit,
           credit,
           balance: runningBalance
         };
       });
-  }, [activeFinanceTab, financeAccountEndDateFilter, financeAccountFilter, financeAccountStartDateFilter, financeRows, stockEntries]);
+  }, [activeFinanceTab, financeAccountEndDateFilter, financeAccountFilter, financeAccountOpeningBalance, financeAccountStartDateFilter, financeRows]);
+
+  const financeAccountStatementSummary = useMemo(() => {
+    const totalDebit = financeAccountMovementRows.reduce((sum, row) => sum + row.debit, 0);
+    const totalCredit = financeAccountMovementRows.reduce((sum, row) => sum + row.credit, 0);
+    const endingBalance = financeAccountMovementRows[financeAccountMovementRows.length - 1]?.balance
+      ?? financeAccountOpeningBalance;
+
+    return { totalDebit, totalCredit, endingBalance };
+  }, [financeAccountMovementRows, financeAccountOpeningBalance]);
 
   const searchedFinanceEntries = useMemo(
     () => financeAccountMovementRows.map((row) => row.entry),
@@ -1760,11 +1739,6 @@ export function CadastroPage() {
     };
   }, [searchedFinanceEntries]);
 
-  const duplicateFinanceSourceEntry = useMemo(
-    () => financeEntries.find((entry) => entry.id === duplicateFinanceSourceEntryId) ?? null,
-    [financeEntries, duplicateFinanceSourceEntryId]
-  );
-
   const editingFinanceEntry = useMemo(
     () => financeEntries.find((entry) => entry.id === editingFinanceEntryId) ?? null,
     [editingFinanceEntryId, financeEntries]
@@ -1774,33 +1748,6 @@ export function CadastroPage() {
     !!editingFinanceEntry &&
     editingFinanceEntry.status !== 'ESTORNADO' &&
     (isFinanceIncomeSettled(editingFinanceEntry) || isFinanceExpenseSettled(editingFinanceEntry));
-
-  const duplicateFinancePreview = useMemo(() => {
-    const installmentCount = Number(duplicateFinanceInstallmentCount);
-    const intervalDays = Number(duplicateFinanceIntervalDays);
-    const dueDateBase = parseIsoDateInput(duplicateFinanceDueDate);
-
-    if (!Number.isFinite(installmentCount) || installmentCount < 1 || installmentCount > 120) {
-      return null;
-    }
-
-    if (!Number.isFinite(intervalDays) || intervalDays < 1 || intervalDays > 365) {
-      return null;
-    }
-
-    if (!dueDateBase) {
-      return null;
-    }
-
-    const firstDueDate = dueDateBase;
-    const lastInstallmentIndex = installmentCount - 1;
-    const dueDateFromInterval = addDays(dueDateBase, intervalDays * lastInstallmentIndex);
-    const lastDueDate = duplicateFinanceFixedDayEnabled
-      ? getDateWithFixedDay(dueDateFromInterval, dueDateBase.getDate())
-      : dueDateFromInterval;
-
-    return `Serão geradas ${installmentCount} parcela(s), com intervalo de ${intervalDays} dia(s), de ${firstDueDate.toLocaleDateString('pt-BR')} até ${lastDueDate.toLocaleDateString('pt-BR')}.`;
-  }, [duplicateFinanceInstallmentCount, duplicateFinanceIntervalDays, duplicateFinanceDueDate, duplicateFinanceFixedDayEnabled]);
 
   const financePersonLabel = activeFinanceTab === 'RECEITA'
     ? 'Cliente'
@@ -2746,113 +2693,6 @@ export function CadastroPage() {
       clearFinanceForm();
       setShowCadastroSpan(false);
     }
-  };
-
-  const onDuplicateFinanceEntry = (entryId: string) => {
-    const sourceEntry = financeEntries.find((entry) => entry.id === entryId);
-    if (!sourceEntry) {
-      return;
-    }
-
-    setDuplicateFinanceSourceEntryId(sourceEntry.id);
-    setDuplicateFinanceIssueDate(sourceEntry.competenceDate || sourceEntry.dueDate || '');
-    setDuplicateFinanceDueDate(sourceEntry.dueDate || sourceEntry.competenceDate || '');
-    setDuplicateFinanceInstallmentCount('1');
-    setDuplicateFinanceIntervalDays('30');
-    setDuplicateFinanceFixedDayEnabled(false);
-    setDuplicateFinanceError(null);
-  };
-
-  const onDuplicateFromCurrentFinanceTab = () => {
-    const sourceEntry = activeFinanceRows[activeFinanceRows.length - 1];
-    if (!sourceEntry) {
-      window.alert('Não há lançamentos nesta aba para duplicar. Cadastre ao menos um lançamento primeiro.');
-      return;
-    }
-
-    onDuplicateFinanceEntry(sourceEntry.id);
-  };
-
-  const onCancelDuplicateFinanceEntry = () => {
-    setDuplicateFinanceSourceEntryId(null);
-    setDuplicateFinanceIssueDate('');
-    setDuplicateFinanceDueDate('');
-    setDuplicateFinanceInstallmentCount('1');
-    setDuplicateFinanceIntervalDays('30');
-    setDuplicateFinanceFixedDayEnabled(false);
-    setDuplicateFinanceError(null);
-  };
-
-  const onConfirmDuplicateFinanceEntry = () => {
-    if (!duplicateFinanceSourceEntry) {
-      onCancelDuplicateFinanceEntry();
-      return;
-    }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(duplicateFinanceIssueDate)) {
-      setDuplicateFinanceError('Informe a data de emissão no formato AAAA-MM-DD.');
-      return;
-    }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(duplicateFinanceDueDate)) {
-      setDuplicateFinanceError('Informe a data de vencimento no formato AAAA-MM-DD.');
-      return;
-    }
-
-    const installmentCount = Number(duplicateFinanceInstallmentCount);
-    if (!Number.isFinite(installmentCount) || installmentCount < 1 || installmentCount > 120) {
-      setDuplicateFinanceError('Qtde de parcelas deve ser entre 1 e 120.');
-      return;
-    }
-
-    const intervalDays = Number(duplicateFinanceIntervalDays);
-    if (!Number.isFinite(intervalDays) || intervalDays < 1 || intervalDays > 365) {
-      setDuplicateFinanceError('Dias entre parcelas deve ser entre 1 e 365.');
-      return;
-    }
-
-    const issueDateBase = parseIsoDateInput(duplicateFinanceIssueDate);
-    const dueDateBase = parseIsoDateInput(duplicateFinanceDueDate);
-    if (!issueDateBase || !dueDateBase) {
-      setDuplicateFinanceError('As datas informadas são inválidas.');
-      return;
-    }
-
-    const fixedDayOfMonth = dueDateBase.getDate();
-
-    const usedCodes = getUsedFinanceCodes(financeEntries);
-    const nowIso = new Date().toISOString();
-
-    const duplicatedEntries: FinanceEntry[] = [];
-    for (let installmentIndex = 0; installmentIndex < installmentCount; installmentIndex += 1) {
-      const issueDate = addDays(issueDateBase, intervalDays * installmentIndex);
-      const dueDateFromInterval = addDays(dueDateBase, intervalDays * installmentIndex);
-      const dueDate = duplicateFinanceFixedDayEnabled
-        ? getDateWithFixedDay(dueDateFromInterval, fixedDayOfMonth)
-        : dueDateFromInterval;
-
-      const duplicatedCode = generateRandomCode(usedCodes);
-      usedCodes.add(duplicatedCode);
-
-      duplicatedEntries.push({
-        ...duplicateFinanceSourceEntry,
-        id: `finance-entry-${crypto.randomUUID()}`,
-        financeCode: duplicatedCode,
-        dueDate: formatIsoDateInput(dueDate),
-        competenceDate: formatIsoDateInput(issueDate),
-        status: duplicateFinanceSourceEntry.tab === 'CONTA_CORRENTE' ? 'RECEBIDO' : 'ABERTO',
-        notes: duplicateFinanceSourceEntry.notes
-          ? `${duplicateFinanceSourceEntry.notes}\nDuplicado em parcela ${installmentIndex + 1}/${installmentCount} do lançamento ${duplicateFinanceSourceEntry.financeCode ?? '--'} em ${new Date().toLocaleDateString('pt-BR')}`
-          : `Duplicado em parcela ${installmentIndex + 1}/${installmentCount} do lançamento ${duplicateFinanceSourceEntry.financeCode ?? '--'} em ${new Date().toLocaleDateString('pt-BR')}`,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        version: 1,
-        reversedFromEntryId: undefined
-      });
-    }
-
-    saveFinanceEntriesLocal([...financeEntries, ...duplicatedEntries]);
-    onCancelDuplicateFinanceEntry();
   };
 
   const onReverseFinanceEntry = (entryId: string) => {
@@ -5222,13 +5062,6 @@ export function CadastroPage() {
                   Excluir
                 </button>
               )}
-              <button
-                type="button"
-                className="button-muted"
-                onClick={onDuplicateFromCurrentFinanceTab}
-              >
-                Duplicar conta
-              </button>
               {editingFinanceEntry &&
                 editingFinanceEntry.status !== 'ESTORNADO' &&
                 (editingFinanceEntry.tab === 'RECEITA' || editingFinanceEntry.tab === 'DESPESAS') && (
@@ -6056,25 +5889,18 @@ export function CadastroPage() {
           ) : filteredStockEntryNoteRows.length === 0 ? (
             <p className="empty-state">Nenhuma nota encontrada para os filtros informados.</p>
           ) : (
-            <ul className="products-list suppliers-list stock-notes-list">
+            <ul className="products-list suppliers-list cadastro-compact-list stock-notes-list">
               {filteredStockEntryNoteRows.map((note) => (
                 <li key={note.key}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {note.entryCode}</span>{' '}
-                      Nota fiscal {note.invoiceNumber}{note.series ? ` / Série ${note.series}` : ''}
-                    </strong>
-                    <span>
-                      Fornecedor: {note.supplierName} | Emissão: {Number.isNaN(note.issueDate.getTime()) ? '-' : note.issueDate.toLocaleDateString('pt-BR')}
-                    </span>
-                    <span>
-                      Ordem de compra: {note.purchaseOrder} | Valor da nota: {currencyFormatter.format(note.invoiceValue)}
-                      {' | '}Situação: {note.reversed ? 'Estornado' : 'Processado'} | {note.itemCount} {note.itemCount === 1 ? 'item' : 'itens'}
-                    </span>
-                    <span>Chave NF-e: {note.accessKey || '-'}</span>
-                    <span>Protocolo: {note.authorizationProtocol || '-'}</span>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {note.entryCode}</span>{' '}
+                        Nota fiscal {note.invoiceNumber}
+                      </strong>
+                    </div>
                   </div>
-                  <div>
+                  <div className="products-list-side">
                     <span className={note.reversed ? 'stock-note-reversed' : 'stock-note-processed'}>
                       {note.reversed ? 'Estornado' : 'Processado'}
                     </span>
@@ -6192,39 +6018,18 @@ export function CadastroPage() {
           {supplierRows.length === 0 ? (
             <p className="empty-state">Nenhum fornecedor cadastrado ainda.</p>
           ) : (
-            <ul className="products-list suppliers-list">
+            <ul className="products-list suppliers-list cadastro-compact-list">
               {supplierRows.map((supplier) => (
                 <li key={supplier.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? '--'}</span>{' '}
-                      {supplier.legalName}
-                    </strong>
-                    <span>{supplier.tradeName || 'Sem nome fantasia'}</span>
-                    <span>
-                      {supplier.city} - {supplier.state} | CPF/CNPJ {supplier.cpfCnpj}
-                    </span>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {supplier.supplierCode ?? parseLegacySupplierCode(supplier.legalName) ?? '--'}</span>{' '}
+                        {supplier.legalName}
+                      </strong>
+                    </div>
                   </div>
-                  <div>
-                    <span>
-                      Contato: {supplier.mobile || supplier.phone || '-'}{' '}
-                      {supplier.mobile && (
-                        <span className="whatsapp-badge" title="Número com WhatsApp" aria-label="Número com WhatsApp">
-                          <svg
-                            className="whatsapp-icon"
-                            viewBox="0 0 24 24"
-                            role="img"
-                            aria-label="WhatsApp"
-                          >
-                            <path
-                              d="M12 3.2a8.8 8.8 0 0 0-7.58 13.26L3.2 20.8l4.45-1.17A8.8 8.8 0 1 0 12 3.2Zm0 15.98a7.15 7.15 0 0 1-3.65-1l-.26-.15-2.64.69.7-2.57-.17-.27a7.17 7.17 0 1 1 6.02 3.3Zm3.93-5.34c-.22-.11-1.28-.63-1.48-.7-.2-.07-.34-.11-.49.11-.14.22-.56.7-.69.84-.13.14-.25.16-.47.05a5.87 5.87 0 0 1-2.9-2.54c-.12-.2 0-.31.1-.42.1-.1.22-.25.33-.38.1-.12.14-.22.22-.36.07-.14.04-.27-.02-.38-.06-.11-.5-1.21-.7-1.66-.18-.44-.36-.38-.5-.38h-.43c-.14 0-.37.05-.56.27-.2.22-.75.73-.75 1.79 0 1.06.77 2.08.87 2.22.11.14 1.5 2.29 3.63 3.21.5.22.9.35 1.2.45.5.16.95.13 1.31.08.4-.06 1.28-.52 1.46-1.02.18-.5.18-.94.13-1.03-.05-.09-.2-.14-.41-.25Z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        </span>
-                      )}
-                    </span>
-                    <span>E-mail: {supplier.email || '-'}</span>
+                  <div className="products-list-side">
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditSupplier(supplier.id)}>
                         Editar
@@ -6252,46 +6057,18 @@ export function CadastroPage() {
           {employeeRows.length === 0 ? (
             <p className="empty-state">Nenhum funcionário cadastrado ainda.</p>
           ) : (
-            <ul className="products-list suppliers-list">
+            <ul className="products-list suppliers-list cadastro-compact-list">
               {employeeRows.map((employee) => (
                 <li key={employee.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName) ?? '--'}</span>{' '}
-                      {employee.fullName}
-                    </strong>
-                    <span>{employee.role}</span>
-                    <span>
-                      {employee.city} - {employee.state} | CPF {employee.cpf}
-                    </span>
-                    <span>
-                      Nascimento: {employee.birthDate || '-'} | Genero: {employee.gender || '-'}
-                    </span>
-                    <span>
-                      Admissao: {employee.admissionDate || '-'} | Demissao: {employee.dismissalDate || '-'}
-                    </span>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {employee.employeeCode ?? parseLegacyEmployeeCode(employee.fullName) ?? '--'}</span>{' '}
+                        {employee.fullName}
+                      </strong>
+                    </div>
                   </div>
-                  <div>
-                    <span>
-                      Contato: {employee.mobile || employee.phone || '-'}{' '}
-                      {employee.mobile && (
-                        <span className="whatsapp-badge" title="Número com WhatsApp" aria-label="Número com WhatsApp">
-                          <svg
-                            className="whatsapp-icon"
-                            viewBox="0 0 24 24"
-                            role="img"
-                            aria-label="WhatsApp"
-                          >
-                            <path
-                              d="M12 3.2a8.8 8.8 0 0 0-7.58 13.26L3.2 20.8l4.45-1.17A8.8 8.8 0 1 0 12 3.2Zm0 15.98a7.15 7.15 0 0 1-3.65-1l-.26-.15-2.64.69.7-2.57-.17-.27a7.17 7.17 0 1 1 6.02 3.3Zm3.93-5.34c-.22-.11-1.28-.63-1.48-.7-.2-.07-.34-.11-.49.11-.14.22-.56.7-.69.84-.13.14-.25.16-.47.05a5.87 5.87 0 0 1-2.9-2.54c-.12-.2 0-.31.1-.42.1-.1.22-.25.33-.38.1-.12.14-.22.22-.36.07-.14.04-.27-.02-.38-.06-.11-.5-1.21-.7-1.66-.18-.44-.36-.38-.5-.38h-.43c-.14 0-.37.05-.56.27-.2.22-.75.73-.75 1.79 0 1.06.77 2.08.87 2.22.11.14 1.5 2.29 3.63 3.21.5.22.9.35 1.2.45.5.16.95.13 1.31.08.4-.06 1.28-.52 1.46-1.02.18-.5.18-.94.13-1.03-.05-.09-.2-.14-.41-.25Z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        </span>
-                      )}
-                    </span>
-                    <span>E-mail: {employee.email || '-'}</span>
-                    <span>Status: {employee.active ? 'ATIVO' : 'INATIVO'}</span>
+                  <div className="products-list-side">
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditEmployee(employee.id)}>
                         Editar
@@ -6319,32 +6096,18 @@ export function CadastroPage() {
           {clientRows.length === 0 ? (
             <p className="empty-state">Nenhum cliente cadastrado ainda.</p>
           ) : (
-            <ul className="products-list suppliers-list">
+            <ul className="products-list suppliers-list cadastro-compact-list">
               {clientRows.map((client) => (
                 <li key={client.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {client.clientCode ?? parseLegacyClientCode(client.fullName) ?? '--'}</span>{' '}
-                      {client.fullName}
-                    </strong>
-                    <span>CPF {client.cpf}</span>
-                    <span>
-                      {client.city || '-'} - {client.state || '-'}
-                    </span>
-                    <span>
-                      Contato: {client.mobile || client.phone || '-'} | E-mail: {client.email || '-'}
-                    </span>
-                    <span>Status: {client.active ? 'ATIVO' : 'INATIVO'}</span>
-                    <span>Histórico de fiado: {client.consumptionHistory.length} lançamento(s)</span>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {client.clientCode ?? parseLegacyClientCode(client.fullName) ?? '--'}</span>{' '}
+                        {client.fullName}
+                      </strong>
+                    </div>
                   </div>
-                  <div>
-                    {client.consumptionHistory.length > 0 && (
-                      <div className="client-history-list-preview">
-                        <strong>Último lançamento</strong>
-                        <span>{client.consumptionHistory[0]?.launchedAt}</span>
-                        <span>{client.consumptionHistory[0]?.description}</span>
-                      </div>
-                    )}
+                  <div className="products-list-side">
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditClient(client.id)}>
                         Editar
@@ -6423,38 +6186,34 @@ export function CadastroPage() {
           {convenioRows.length === 0 ? (
             <p className="empty-state">Nenhum convênio cadastrado ainda.</p>
           ) : (
-            <div className="convenio-table">
-              <div className="convenio-table-head">
-                <span>Nome Referência</span>
-                <span>CPF / CNPJ</span>
-                <span>Banco</span>
-                <span>Status</span>
-                <span>Ações</span>
-              </div>
+            <ul className="products-list suppliers-list cadastro-compact-list">
               {convenioRows.map((convenio) => (
-                <div className="convenio-table-row" key={convenio.id}>
-                  <strong>
-                    <span className="products-id-tag">ID {convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '--'}</span>{' '}
-                    {convenio.name}
-                  </strong>
-                  <span>{convenio.cpfCnpj || '-'}</span>
-                  <span>{convenio.bankName || convenio.accountName || '-'}</span>
-                  <span>{convenio.active ? 'Ativo' : 'Inativo'}</span>
-                  <div className="convenio-table-actions">
-                    <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="products-delete-button"
-                      onClick={() => void onDeleteConvenio(convenio.id)}
-                    >
-                      Excluir
-                    </button>
+                <li key={convenio.id}>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {convenio.convenioCode ?? parseLegacyConvenioCode(convenio.name) ?? '--'}</span>{' '}
+                        {convenio.name}
+                      </strong>
+                    </div>
                   </div>
-                </div>
+                  <div className="products-list-side">
+                    <div className="products-row-actions">
+                      <button type="button" className="products-edit-button" onClick={() => onEditConvenio(convenio.id)}>
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="products-delete-button"
+                        onClick={() => void onDeleteConvenio(convenio.id)}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </article>
       )}
@@ -6466,24 +6225,18 @@ export function CadastroPage() {
           {cardManagerRows.length === 0 ? (
             <p className="empty-state">Nenhuma administradora cadastrada ainda.</p>
           ) : (
-            <ul className="products-list suppliers-list">
+            <ul className="products-list suppliers-list cadastro-compact-list">
               {cardManagerRows.map((cardManager) => (
                 <li key={cardManager.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {cardManager.cardManagerCode ?? parseLegacyCardManagerCode(cardManager.name) ?? '--'}</span>{' '}
-                      {cardManager.name}
-                    </strong>
-                    <span>
-                      Bandeira: {cardManager.brandGroup} | Prazo: {cardManager.settlementDays} dia(s)
-                    </span>
-                    <span>
-                      Débito: {cardManager.mdrDebit || '-'}% | Crédito: {cardManager.mdrCredit || '-'}%
-                    </span>
-                    <span>Status: {cardManager.active ? 'ATIVO' : 'INATIVO'}</span>
+                  <div className="products-list-main">
+                    <div className="products-list-title">
+                      <strong>
+                        <span className="products-id-tag">ID {cardManager.cardManagerCode ?? parseLegacyCardManagerCode(cardManager.name) ?? '--'}</span>{' '}
+                        {cardManager.name}
+                      </strong>
+                    </div>
                   </div>
-                  <div>
-                    <span>{cardManager.notes || 'Sem observações'}</span>
+                  <div className="products-list-side">
                     <div className="products-row-actions">
                       <button type="button" className="products-edit-button" onClick={() => onEditCardManager(cardManager.id)}>
                         Editar
@@ -6520,10 +6273,7 @@ export function CadastroPage() {
                   style={{
                     borderColor: tab === 'DESPESAS' ? '#f43f5e' : tab === 'RECEITA' ? '#10b981' : '#0ea5e9'
                   }}
-                  onClick={() => {
-                    setActiveFinanceTab(tab);
-                    onCancelDuplicateFinanceEntry();
-                  }}
+                  onClick={() => setActiveFinanceTab(tab)}
                 >
                   {tab === 'DESPESAS' ? 'Despesas' : tab === 'RECEITA' ? 'Receita' : 'Conta Corrente'}
                 </button>
@@ -6545,100 +6295,6 @@ export function CadastroPage() {
               {showCadastroSpan ? 'Fechar cadastro' : '+ Novo cadastro'}
             </button>
           </header>
-
-          {duplicateFinanceSourceEntry && (
-            <section className="suppliers-section">
-              <h4>Duplicar conta</h4>
-              <div className="suppliers-row-3">
-                <div>
-                  <label>Lançamento base</label>
-                  <input
-                    value={`${duplicateFinanceSourceEntry.financeCode ?? '--'} - ${duplicateFinanceSourceEntry.description}`}
-                    readOnly
-                  />
-                </div>
-                <div>
-                  <label htmlFor="duplicate-finance-issue-date">Emissão</label>
-                  <input
-                    id="duplicate-finance-issue-date"
-                    type="date"
-                    value={duplicateFinanceIssueDate}
-                    onChange={(e) => {
-                      setDuplicateFinanceIssueDate(e.target.value);
-                      setDuplicateFinanceError(null);
-                    }}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="duplicate-finance-due-date">Vencimento</label>
-                  <input
-                    id="duplicate-finance-due-date"
-                    type="date"
-                    value={duplicateFinanceDueDate}
-                    onChange={(e) => {
-                      setDuplicateFinanceDueDate(e.target.value);
-                      setDuplicateFinanceError(null);
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="suppliers-row-3">
-                <div>
-                  <label htmlFor="duplicate-finance-fixed-day" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <input
-                      id="duplicate-finance-fixed-day"
-                      type="checkbox"
-                      checked={duplicateFinanceFixedDayEnabled}
-                      onChange={(e) => setDuplicateFinanceFixedDayEnabled(e.target.checked)}
-                    />
-                    Dia fixo para parcelas
-                  </label>
-                </div>
-                <div>
-                  <label htmlFor="duplicate-finance-installment-count">Qtde de parcelas</label>
-                  <input
-                    id="duplicate-finance-installment-count"
-                    type="number"
-                    min={1}
-                    max={120}
-                    value={duplicateFinanceInstallmentCount}
-                    onChange={(e) => {
-                      setDuplicateFinanceInstallmentCount(e.target.value);
-                      setDuplicateFinanceError(null);
-                    }}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="duplicate-finance-interval-days">Dias entre parcelas</label>
-                  <input
-                    id="duplicate-finance-interval-days"
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={duplicateFinanceIntervalDays}
-                    onChange={(e) => {
-                      setDuplicateFinanceIntervalDays(e.target.value);
-                      setDuplicateFinanceError(null);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {duplicateFinancePreview && <p className="products-subtitle">{duplicateFinancePreview}</p>}
-
-              <div className="products-cadastro-footer">
-                <button type="button" onClick={onConfirmDuplicateFinanceEntry}>
-                  Salvar dados
-                </button>
-                <button type="button" className="button-muted" onClick={onCancelDuplicateFinanceEntry}>
-                  Cancelar
-                </button>
-              </div>
-
-              {duplicateFinanceError && <p className="products-form-warning">{duplicateFinanceError}</p>}
-            </section>
-          )}
 
           <section className="finance-account-summary">
             <div className="finance-account-summary-header">
@@ -6662,33 +6318,38 @@ export function CadastroPage() {
             </div>
 
             <div className="finance-account-toolbar">
-              <label htmlFor="finance-account-filter">Conta corrente:</label>
-              <select
-                id="finance-account-filter"
-                value={financeAccountFilter}
-                onChange={(event) => setFinanceAccountFilter(event.target.value)}
-              >
-                {(activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS') && <option value="">Todas as contas</option>}
-                {financeAccountOptions.map((account) => (
-                  <option key={account} value={account}>
-                    {account}
-                  </option>
-                ))}
-              </select>
-              <label htmlFor="finance-account-start-date">Data:</label>
-              <input
-                id="finance-account-start-date"
-                type="date"
-                value={financeAccountStartDateInput}
-                onChange={(event) => setFinanceAccountStartDateInput(event.target.value)}
-              />
-              <span className="finance-account-date-separator">à</span>
-              <input
-                id="finance-account-end-date"
-                type="date"
-                value={financeAccountEndDateInput}
-                onChange={(event) => setFinanceAccountEndDateInput(event.target.value)}
-              />
+              <div className="finance-account-date-range">
+                <label htmlFor="finance-account-start-date">Data</label>
+                <input
+                  id="finance-account-start-date"
+                  type="date"
+                  value={financeAccountStartDateInput}
+                  onChange={(event) => setFinanceAccountStartDateInput(event.target.value)}
+                />
+                <span className="finance-account-date-separator">à</span>
+                <input
+                  id="finance-account-end-date"
+                  type="date"
+                  aria-label="Data final"
+                  value={financeAccountEndDateInput}
+                  onChange={(event) => setFinanceAccountEndDateInput(event.target.value)}
+                />
+              </div>
+              <label className="finance-account-filter-field" htmlFor="finance-account-filter">
+                <span>Conta corrente</span>
+                <select
+                  id="finance-account-filter"
+                  value={financeAccountFilter}
+                  onChange={(event) => setFinanceAccountFilter(event.target.value)}
+                >
+                  {(activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS') && <option value="">Todas as contas</option>}
+                  {financeAccountOptions.map((account) => (
+                    <option key={account} value={account}>
+                      {account}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
                 className="finance-account-search-button"
@@ -6716,36 +6377,26 @@ export function CadastroPage() {
             ) : !financeAccountOptions.length ? (
               <p className="empty-state">Cadastre bancos/contas em Convênios para consultar saldo por conta corrente.</p>
             ) : activeFinanceTab === 'RECEITA' ? (
-              <div className="finance-revenue-ledger">
+              <div className="finance-revenue-ledger cadastro-compact-ledger">
                 <div className="finance-revenue-ledger-head">
-                  <span>Tipo documento</span>
-                  <span>Cliente</span>
-                  <span>Banco</span>
-                  <span>Vencimento</span>
-                  <span>Valor emissão</span>
-                  <span>Valor recebido</span>
-                  <span>Recebimento</span>
-                  <span>Comp.</span>
+                  <span>Lançamento</span>
+                  <span>Valor</span>
                   <span>Ações</span>
                 </div>
 
                 {financeAccountMovementRows.length ? (
                   financeAccountMovementRows.map(({ entry, credit }) => {
                     const isReceived = isFinanceIncomeSettled(entry);
-                    const receivedDate = isReceived ? formatDateTimeDisplayDate(entry.updatedAt || entry.createdAt) : '-';
 
                     return (
                       <div className={`finance-revenue-ledger-row ${isReceived ? 'is-received' : 'is-open'}`} key={entry.id}>
-                        <strong data-label="Tipo documento">{entry.documentRef || '-'}</strong>
-                        <strong data-label="Cliente">{entry.supplierName || entry.description || '-'}</strong>
-                        <span data-label="Banco">{entry.accountName || '-'}</span>
-                        <span data-label="Vencimento">{formatDateInputDisplay(entry.dueDate)}</span>
-                        <b data-label="Valor emissão">{currencyFormatter.format(parseFinanceAmount(entry.amount))}</b>
-                        <b data-label="Valor recebido" className={isReceived ? 'is-credit' : 'is-pending'}>
-                          {isReceived ? currencyFormatter.format(credit || parseFinanceAmount(entry.amount)) : currencyFormatter.format(0)}
+                        <strong data-label="Lançamento">
+                          <span className="products-id-tag">ID {entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</span>{' '}
+                          {entry.supplierName || entry.description || '-'}
+                        </strong>
+                        <b data-label="Valor" className={isReceived ? 'is-credit' : 'is-pending'}>
+                          {currencyFormatter.format(isReceived ? credit || parseFinanceAmount(entry.amount) : parseFinanceAmount(entry.amount))}
                         </b>
-                        <span data-label="Recebimento">{receivedDate}</span>
-                        <span data-label="Comp.">{isReceived ? 'Sim' : 'Não'}</span>
                         <div className="finance-ledger-actions" data-label="Ações">
                           <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
                             Editar
@@ -6768,36 +6419,26 @@ export function CadastroPage() {
                 </div>
               </div>
             ) : activeFinanceTab === 'DESPESAS' ? (
-              <div className="finance-revenue-ledger">
+              <div className="finance-revenue-ledger cadastro-compact-ledger">
                 <div className="finance-revenue-ledger-head">
-                  <span>Tipo documento</span>
-                  <span>Fornecedor</span>
-                  <span>Banco</span>
-                  <span>Vencimento</span>
-                  <span>Valor emissão</span>
-                  <span>Valor pago</span>
-                  <span>Pagamento</span>
-                  <span>Comp.</span>
+                  <span>Lançamento</span>
+                  <span>Valor</span>
                   <span>Ações</span>
                 </div>
 
                 {financeAccountMovementRows.length ? (
                   financeAccountMovementRows.map(({ entry, debit }) => {
                     const isPaid = isFinanceExpenseSettled(entry);
-                    const paidDate = isPaid ? formatDateTimeDisplayDate(entry.updatedAt || entry.createdAt) : '-';
 
                     return (
                       <div className={`finance-revenue-ledger-row ${isPaid ? 'is-received' : 'is-open'}`} key={entry.id}>
-                        <strong data-label="Tipo documento">{entry.documentRef || '-'}</strong>
-                        <strong data-label="Fornecedor">{entry.supplierName || entry.description || '-'}</strong>
-                        <span data-label="Banco">{entry.accountName || '-'}</span>
-                        <span data-label="Vencimento">{formatDateInputDisplay(entry.dueDate)}</span>
-                        <b data-label="Valor emissão">{currencyFormatter.format(parseFinanceAmount(entry.amount))}</b>
-                        <b data-label="Valor pago" className={isPaid ? 'is-credit' : 'is-pending'}>
-                          {isPaid ? currencyFormatter.format(debit || parseFinanceAmount(entry.amount)) : currencyFormatter.format(0)}
+                        <strong data-label="Lançamento">
+                          <span className="products-id-tag">ID {entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</span>{' '}
+                          {entry.supplierName || entry.description || '-'}
+                        </strong>
+                        <b data-label="Valor" className={isPaid ? 'is-credit' : 'is-pending'}>
+                          {currencyFormatter.format(isPaid ? debit || parseFinanceAmount(entry.amount) : parseFinanceAmount(entry.amount))}
                         </b>
-                        <span data-label="Pagamento">{paidDate}</span>
-                        <span data-label="Comp.">{isPaid ? 'Sim' : 'Não'}</span>
                         <div className="finance-ledger-actions" data-label="Ações">
                           <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
                             Editar
@@ -6820,128 +6461,72 @@ export function CadastroPage() {
                 </div>
               </div>
             ) : (
-              <div className="finance-account-ledger">
-                <div className="finance-account-ledger-head">
-                  <span>#ID</span>
-                  <span>Documento</span>
-                  <span>Histórico financeiro</span>
-                  <span>Tipo documento</span>
-                  <span>Nº Nota</span>
-                  <span>Fornecedor</span>
-                  <span>Banco</span>
-                  <span>Vencimento</span>
-                  <span>Valor emissão</span>
-                  <span>Valor pago</span>
-                  <span>Pago</span>
-                  <span>Status</span>
-                  <span>Comp.</span>
+              <div className="finance-current-statement">
+                <div className="finance-current-statement-head">
+                  <span>Data</span>
+                  <span>Conta corrente</span>
+                  <span>Descrição</span>
+                  <span>Saída</span>
+                  <span>Entrada</span>
+                  <span>Saldo</span>
                   <span>Ações</span>
                 </div>
 
-                {financeAccountMovementRows.length ? (
-                  financeAccountMovementRows.map(({ entry, stockEntry, debit, credit }) => {
-                    const isCompensated = debit > 0 || credit > 0;
-                    const paidValue = debit || credit;
-                    const paidDate = isCompensated ? formatDateTimeDisplayDate(entry.updatedAt || entry.createdAt) : '-';
+                <div className="finance-current-statement-row is-opening-balance">
+                  <span>—</span>
+                  <strong>{financeAccountFilter}</strong>
+                  <strong>Saldo anterior</strong>
+                  <span>—</span>
+                  <span>—</span>
+                  <b className={financeAccountOpeningBalance < 0 ? 'is-debit' : 'is-balance'}>
+                    {currencyFormatter.format(financeAccountOpeningBalance)}
+                  </b>
+                  <span>—</span>
+                </div>
 
-                    return (
-                      <div className="finance-account-ledger-row" key={entry.id}>
-                        <strong data-label="#ID">{entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</strong>
-                        <span data-label="Documento">{stockEntry?.noteCode || stockEntry?.accessKey || '-'}</span>
-                        <span data-label="Histórico financeiro">{entry.supplierName || entry.description || '-'}</span>
-                        <span data-label="Tipo documento">{entry.documentRef || '-'}</span>
-                        <span data-label="Nº Nota">{stockEntry?.invoiceNumber || '-'}</span>
-                        <span data-label="Fornecedor">{entry.supplierName || '-'}</span>
-                        <span data-label="Banco">{entry.accountName || '-'}</span>
-                        <span data-label="Vencimento">{formatDateInputDisplay(entry.dueDate)}</span>
-                        <b data-label="Valor emissão">{currencyFormatter.format(parseFinanceAmount(entry.amount))}</b>
-                        <b data-label="Valor pago" className={debit ? 'is-debit' : credit ? 'is-credit' : ''}>
-                          {paidValue ? currencyFormatter.format(paidValue) : '-'}
-                        </b>
-                        <span data-label="Pago">{paidDate}</span>
-                        <span data-label="Status">{entry.status}</span>
-                        <span data-label="Comp.">{isCompensated ? 'Sim' : 'Não'}</span>
-                        <div className="finance-ledger-actions" data-label="Ações">
-                          <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
-                            Editar
-                          </button>
-                        </div>
+                {financeAccountMovementRows.length ? (
+                  financeAccountMovementRows.map(({ entry, debit, credit, balance }) => (
+                    <div className="finance-current-statement-row" key={entry.id}>
+                      <span data-label="Data">{formatDateInputDisplay(getFinanceEntryMovementDateInput(entry))}</span>
+                      <strong data-label="Conta corrente">{entry.accountName || financeAccountFilter}</strong>
+                      <span className="finance-current-description" data-label="Descrição">
+                        <span className="products-id-tag">ID {entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</span>{' '}
+                        {entry.supplierName || entry.description || '-'}
+                      </span>
+                      <b className="is-debit" data-label="Saída">
+                        {debit ? currencyFormatter.format(debit) : '—'}
+                      </b>
+                      <b className="is-credit" data-label="Entrada">
+                        {credit ? currencyFormatter.format(credit) : '—'}
+                      </b>
+                      <b className={balance < 0 ? 'is-debit' : 'is-balance'} data-label="Saldo">
+                        {currencyFormatter.format(balance)}
+                      </b>
+                      <div className="finance-statement-actions" data-label="Ações">
+                        <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
+                          Editar
+                        </button>
                       </div>
-                    );
-                  })
+                    </div>
+                  ))
                 ) : (
-                  <p className="empty-state">Nenhum lançamento encontrado para esta conta.</p>
+                  <p className="empty-state">Nenhuma movimentação compensada encontrada para esta conta e período.</p>
                 )}
 
-                <div className="finance-account-ledger-row is-total">
-                  <strong data-label="#ID">Saldo</strong>
-                  <span data-label="Documento">-</span>
-                  <span data-label="Histórico financeiro">{financeAccountFilter || 'Todas as contas'}</span>
-                  <span data-label="Tipo documento">-</span>
-                  <span data-label="Nº Nota">-</span>
-                  <span data-label="Fornecedor">-</span>
-                  <span data-label="Banco">{financeAccountFilter || 'Todas'}</span>
-                  <span data-label="Vencimento">-</span>
-                  <b data-label="Valor emissão">
-                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + parseFinanceAmount(row.entry.amount), 0))}
+                <div className="finance-current-statement-row is-statement-total">
+                  <span>—</span>
+                  <strong>{financeAccountFilter}</strong>
+                  <strong>Subtotal do período</strong>
+                  <b className="is-debit">{currencyFormatter.format(financeAccountStatementSummary.totalDebit)}</b>
+                  <b className="is-credit">{currencyFormatter.format(financeAccountStatementSummary.totalCredit)}</b>
+                  <b className={financeAccountStatementSummary.endingBalance < 0 ? 'is-debit' : 'is-balance'}>
+                    {currencyFormatter.format(financeAccountStatementSummary.endingBalance)}
                   </b>
-                  <b data-label="Valor pago">
-                    {currencyFormatter.format(financeAccountMovementRows.reduce((sum, row) => sum + row.credit - row.debit, 0))}
-                  </b>
-                  <span data-label="Pago">-</span>
-                  <span data-label="Status">-</span>
-                  <span data-label="Comp.">-</span>
-                  <span data-label="Ações">-</span>
+                  <span>—</span>
                 </div>
               </div>
             )}
           </section>
-
-          {activeFinanceTab === 'RECEITA' || activeFinanceTab === 'DESPESAS' ? null : !financeSearchExecutedByTab[activeFinanceTab] ? (
-            <p className="empty-state">Nenhum lançamento será exibido antes da pesquisa.</p>
-          ) : searchedFinanceEntries.length === 0 ? (
-            <p className="empty-state">Nenhum lançamento em Conta Corrente.</p>
-          ) : (
-            <ul className="products-list suppliers-list">
-              {searchedFinanceEntries.map((entry) => (
-                <li key={entry.id}>
-                  <div>
-                    <strong>
-                      <span className="products-id-tag">ID {entry.financeCode ?? parseLegacyFinanceCode(entry.description) ?? '--'}</span>{' '}
-                      {entry.description}
-                    </strong>
-                    <span>
-                      Tipo: {entry.categoryType} | Status: {entry.status}
-                    </span>
-                    <span>
-                      {entry.tab === 'RECEITA' ? 'Cliente' : entry.tab === 'DESPESAS' ? 'Fornecedor' : 'Origem/Destino'}: {entry.supplierName || '-'}
-                    </span>
-                    <span>
-                      Valor: {entry.amount || '-'} | Vencimento: {entry.dueDate || '-'} | Competência: {entry.competenceDate || '-'}
-                    </span>
-                    <span>
-                      Conta: {entry.accountName || '-'} | Documento: {entry.documentRef || '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <span>{entry.notes || 'Sem observações'}</span>
-                    <div className="products-row-actions">
-                      <button
-                        type="button"
-                        className="button-muted"
-                        onClick={() => onDuplicateFinanceEntry(entry.id)}
-                      >
-                        Duplicar conta
-                      </button>
-                      <button type="button" className="products-edit-button" onClick={() => onEditFinanceEntry(entry.id)}>
-                        Editar
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
         </article>
       )}
     </section>

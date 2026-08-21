@@ -31,8 +31,8 @@ export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemP
   const isKg = item.unit === 'KG';
 
   return (
-    <li className="flex items-center gap-3 py-3 px-4 border-b border-slate-100">
-      <div className="h-14 w-14 shrink-0 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
+    <li className="flex min-w-0 items-center gap-2 border-b border-slate-100 px-3 py-2">
+      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
         {item.imageUrl ? (
           <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
         ) : (
@@ -40,69 +40,64 @@ export function CartItem({ item, onIncrement, onDecrement, onRemove }: CartItemP
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-base font-semibold text-slate-800 truncate">{item.name}</p>
-        {item.description ? <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{item.description}</p> : null}
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
+        <p className="min-w-[72px] flex-1 truncate text-sm font-semibold text-slate-800" title={item.name}>
+          {item.name}
+        </p>
         {item.sourceComanda ? (
-          <p className="text-[11px] font-semibold text-sky-600 mt-0.5">
+          <span className="shrink-0 text-[10px] font-semibold text-sky-600">
             Comanda #{item.sourceComanda} · {item.source === 'BALANCA' ? 'Balança' : 'Caixa'}
-          </p>
+          </span>
         ) : null}
-        <p className="text-sm text-slate-500 mt-0.5">
+        <span className="shrink-0 text-xs text-slate-500">
           {isKg
-            ? formatBRL(item.unitPrice)
+            ? `${item.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg · ${formatBRL(item.unitPrice)} / kg`
             : `${item.quantity.toLocaleString('pt-BR', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
               })} un · ${formatBRL(item.unitPrice)} / un`}
-        </p>
-        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+        </span>
+        <span className="shrink-0 text-[10px] text-slate-500">
           ID {item.productCode ?? '--'}
-        </p>
+        </span>
+      </div>
 
-        {!isKg ? (
-        <div className="mt-1.5 inline-flex items-center rounded-lg border border-slate-200 overflow-hidden">
+      {!isKg ? (
+        <div className="inline-flex shrink-0 items-center overflow-hidden rounded-lg border border-slate-200">
           <button
             type="button"
             onClick={() => onDecrement(item.id)}
             aria-label={`Diminuir ${item.name}`}
-            className="h-12 w-12 text-slate-500 hover:bg-slate-100 transition-colors"
+            className="h-10 w-10 text-slate-500 transition-colors hover:bg-slate-100"
           >
             <Minus size={14} className="mx-auto" />
           </button>
-          <span className="h-12 min-w-[48px] px-2 flex items-center justify-center text-sm font-semibold text-slate-700 border-x border-slate-200">
+          <span className="flex h-10 min-w-10 items-center justify-center border-x border-slate-200 px-2 text-sm font-semibold text-slate-700">
             {item.quantity.toLocaleString('pt-BR', {
-              minimumFractionDigits: isKg ? 3 : 0,
-              maximumFractionDigits: isKg ? 3 : 0,
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
             })}
           </span>
           <button
             type="button"
             onClick={() => onIncrement(item.id)}
             aria-label={`Aumentar ${item.name}`}
-            className="h-12 w-12 text-sky-600 hover:bg-sky-50 transition-colors"
+            className="h-10 w-10 text-sky-600 transition-colors hover:bg-sky-50"
           >
             <Plus size={14} className="mx-auto" />
           </button>
         </div>
-        ) : (
-          <p className="mt-1.5 text-sm font-semibold text-slate-600">
-            {item.quantity.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg
-          </p>
-        )}
-      </div>
+      ) : null}
 
-      <div className="min-w-[100px] text-right">
-        <p className="text-xl font-bold text-slate-800">{formatBRL(total)}</p>
-        <button
-          type="button"
-          onClick={() => onRemove(item.id)}
-          aria-label={`Remover ${item.name}`}
-          className="mt-1 inline-flex h-12 w-12 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
+      <p className="min-w-[78px] shrink-0 text-right text-base font-bold text-slate-800">{formatBRL(total)}</p>
+      <button
+        type="button"
+        onClick={() => onRemove(item.id)}
+        aria-label={`Remover ${item.name}`}
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+      >
+        <Trash2 size={16} />
+      </button>
     </li>
   );
 }
