@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agente PDV Cloud"
+  short_description: "Planeja e evolui o PDV híbrido local e cloud"
+  default_prompt: "Use $agente-pdv-cloud para planejar a próxima fase da arquitetura híbrida do PDV Touch."
