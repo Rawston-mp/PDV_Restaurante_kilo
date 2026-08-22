@@ -17,20 +17,6 @@ let backendProcess = null;
 let mainWindow = null;
 const startupLogPath = path.join(os.tmpdir(), 'pdvtouch-main.log');
 
-// Durante desenvolvimento, redirecionar `userData` para uma pasta local do projeto
-// evita locks/EBUSY no AppData do Windows quando o processo é reiniciado pelo
-// Vite/Electron em paralelo. Isso só é aplicado quando não empacotado.
-try {
-    if (!app.isPackaged) {
-        const projectUserData = path.join(process.cwd(), '.electron-user-data');
-        try { fs.mkdirSync(projectUserData, { recursive: true }); } catch (_) {}
-        app.setPath('userData', projectUserData);
-        writeStartupLog(`Redirected userData to ${projectUserData}`);
-    }
-} catch (err) {
-    // Não falhar a inicialização por problemas no redirecionamento.
-}
-
 const writeStartupLog = (message, error) => {
     const details = error ? ` | ${error.stack || error.message || String(error)}` : '';
     const line = `[${new Date().toISOString()}] ${message}${details}\n`;
@@ -42,14 +28,47 @@ const writeStartupLog = (message, error) => {
     }
 };
 
+// O desenvolvimento usa um perfil isolado. O aplicativo empacotado mantém o
+// perfil padrão do Windows para preservar dados entre atualizações.
+try {
+    if (!app.isPackaged) {
+        const projectUserData = path.join(process.cwd(), '.electron-user-data');
+        try { fs.mkdirSync(projectUserData, { recursive: true }); } catch (_) {}
+        app.setPath('userData', projectUserData);
+        writeStartupLog(`Redirected userData to ${projectUserData}`);
+    }
+} catch (error) {
+    writeStartupLog('Could not configure Electron userData path.', error);
+}
+
+const BACKEND_RUNTIME_PATH = '/api/v1/runtime';
+const BACKEND_SERVICE_ID = 'pdv-touch-backend';
+
 const waitForServer = (url, timeoutMs = 30000) =>
     new Promise((resolve, reject) => {
         const startedAt = Date.now();
 
         const attempt = () => {
-            const req = http.get(url, (res) => {
-                res.resume();
-                resolve();
+            const req = http.get(`${url}${BACKEND_RUNTIME_PATH}`, (res) => {
+                const chunks = [];
+                res.on('data', (chunk) => chunks.push(chunk));
+                res.on('end', () => {
+                    try {
+                        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                        if (res.statusCode === 200 && payload.service === BACKEND_SERVICE_ID) {
+                            resolve(payload);
+                            return;
+                        }
+                    } catch {
+                        // Uma resposta de outro serviço na porta não é aceita.
+                    }
+
+                    if (Date.now() - startedAt > timeoutMs) {
+                        reject(new Error(`A porta ${PORT} respondeu, mas nao pertence ao backend PDV Touch.`));
+                        return;
+                    }
+                    setTimeout(attempt, 500);
+                });
             });
 
             req.on('error', () => {
@@ -91,8 +110,55 @@ const getAppRoot = () => {
     return path.resolve(__dirname, '..');
 };
 
+const findRuntimeEnvironmentFile = (root) => {
+    const executableDir = path.dirname(process.execPath);
+    const portableDir = String(process.env.PORTABLE_EXECUTABLE_DIR || '').trim();
+    const candidates = [
+        process.env.PDV_ENV_FILE,
+        path.join(app.getPath('userData'), 'pdv.env'),
+        portableDir ? path.join(portableDir, 'pdv.env') : null,
+        portableDir ? path.join(portableDir, '.env') : null,
+        portableDir ? path.resolve(portableDir, '..', '.env') : null,
+        path.join(executableDir, 'pdv.env'),
+        path.join(executableDir, '.env'),
+        path.resolve(executableDir, '..', 'pdv.env'),
+        path.resolve(executableDir, '..', '..', '.env'),
+        path.join(root, 'pdv.env'),
+        path.join(root, '.env'),
+        path.resolve(process.cwd(), 'pdv.env'),
+        path.resolve(process.cwd(), '.env')
+    ].filter(Boolean);
+
+    return [...new Set(candidates.map((candidate) => path.resolve(candidate)))]
+        .find((candidate) => {
+            try {
+                return fs.statSync(candidate).isFile();
+            } catch {
+                return false;
+            }
+        }) || null;
+};
+
+const configureRuntimeEnvironment = (root) => {
+    if (!process.env.PDV_DATA_DIR) {
+        const appDataRoot = String(process.env.APPDATA || app.getPath('appData')).trim();
+        process.env.PDV_DATA_DIR = path.join(appDataRoot, 'pdv-touch-restaurante', 'data');
+    }
+
+    const envFile = findRuntimeEnvironmentFile(root);
+    if (envFile) {
+        process.env.PDV_ENV_FILE = envFile;
+        writeStartupLog(`Runtime environment selected: ${envFile}`);
+        return;
+    }
+
+    delete process.env.PDV_ENV_FILE;
+    writeStartupLog('Runtime environment file not found; using explicit process variables only.');
+};
+
 const startBackend = async() => {
     const root = getAppRoot();
+    configureRuntimeEnvironment(root);
     const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
     const serverEntry = path.join(root, 'backend', 'src', 'server.ts');
 

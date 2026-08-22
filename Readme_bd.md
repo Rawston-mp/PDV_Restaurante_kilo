@@ -239,3 +239,5 @@ Teste especifico financeiro, quando aplicavel:
 ```bash
 npm run test -- tests/integration/cashMovementsUseCases.test.ts
 ```
+npm run db:up
+npm run db:setup

@@ -1,4 +1,7 @@
 import { Pool } from 'pg';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { createPostgresPool, parseBoolean } from './postgresConfig';
 
 export type ProductRecord = {
@@ -37,6 +40,7 @@ export type ProductRecord = {
 };
 
 export type ProductStore = {
+  storageKind: 'POSTGRES' | 'FILE';
   initialize: () => Promise<void>;
   list: () => Promise<ProductRecord[]>;
   findById: (id: string) => Promise<ProductRecord | null>;
@@ -173,6 +177,8 @@ const mapRow = (row: Record<string, unknown>): ProductRecord => ({
 });
 
 class PostgresProductStore implements ProductStore {
+  readonly storageKind = 'POSTGRES' as const;
+
   constructor(private readonly pool: Pool) {}
 
   async initialize() {
@@ -244,6 +250,7 @@ class PostgresProductStore implements ProductStore {
       throw new Error('Produto inválido.');
     }
 
+    const syncedAt = new Date().toISOString();
     const result = await this.pool.query(
       `
         INSERT INTO pdv_products (
@@ -328,7 +335,7 @@ class PostgresProductStore implements ProductStore {
         product.version,
         product.createdAt,
         product.updatedAt,
-        product.lastSyncedAt ?? null
+        product.lastSyncedAt ?? syncedAt
       ]
     );
 
@@ -341,8 +348,199 @@ class PostgresProductStore implements ProductStore {
   }
 }
 
+const resolveLocalProductDataFile = () => {
+  const configuredDataDir = process.env.PDV_DATA_DIR?.trim();
+  const platformDataDir = process.env.APPDATA?.trim()
+    ? path.join(process.env.APPDATA, 'pdv-touch-restaurante', 'data')
+    : path.join(os.homedir(), '.pdv-touch-restaurante', 'data');
+  return path.join(configuredDataDir || platformDataDir, 'products-state.json');
+};
+
+class FileProductStore implements ProductStore {
+  readonly storageKind = 'FILE' as const;
+  private readonly products = new Map<string, ProductRecord>();
+
+  constructor(private readonly filePath = resolveLocalProductDataFile()) {}
+
+  async initialize() {
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+
+    try {
+      const raw = JSON.parse(await fs.readFile(this.filePath, 'utf8')) as { products?: unknown[] } | unknown[];
+      const records = Array.isArray(raw) ? raw : raw.products;
+      for (const entry of records ?? []) {
+        const product = normalizeProduct(entry);
+        if (product) {
+          this.products.set(product.id, product);
+        }
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      await this.persist();
+    }
+  }
+
+  async list() {
+    return [...this.products.values()]
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+  }
+
+  async findById(id: string) {
+    return this.products.get(id) ?? null;
+  }
+
+  async save(input: ProductRecord) {
+    const product = normalizeProduct(input);
+    if (!product) {
+      throw new Error('Produto inválido.');
+    }
+
+    const existing = this.products.get(product.id);
+    const now = new Date().toISOString();
+    const savedProduct: ProductRecord = {
+      ...product,
+      version: existing ? Math.max(existing.version + 1, product.version) : product.version,
+      createdAt: existing?.createdAt ?? product.createdAt,
+      updatedAt: product.updatedAt || now,
+      lastSyncedAt: now
+    };
+    this.products.set(savedProduct.id, savedProduct);
+    await this.persist();
+    return savedProduct;
+  }
+
+  async delete(id: string) {
+    const deleted = this.products.delete(id);
+    if (deleted) {
+      await this.persist();
+    }
+    return deleted;
+  }
+
+  async replaceAll(records: ProductRecord[]) {
+    this.products.clear();
+    for (const record of records) {
+      const product = normalizeProduct(record);
+      if (product) {
+        this.products.set(product.id, product);
+      }
+    }
+    await this.persist();
+  }
+
+  async mirror(record: ProductRecord) {
+    const product = normalizeProduct(record);
+    if (!product) {
+      return;
+    }
+    this.products.set(product.id, product);
+    await this.persist();
+  }
+
+  private async persist() {
+    await fs.writeFile(this.filePath, JSON.stringify({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      products: [...this.products.values()]
+    }, null, 2), 'utf8');
+  }
+}
+
+class ResilientProductStore implements ProductStore {
+  readonly storageKind = 'POSTGRES' as const;
+
+  constructor(
+    private readonly primary: PostgresProductStore,
+    private readonly fallback: FileProductStore
+  ) {}
+
+  async initialize() {
+    const [remoteProducts, cachedProducts] = await Promise.all([
+      this.primary.list(),
+      this.fallback.list()
+    ]);
+    const remoteById = new Map(remoteProducts.map((product) => [product.id, product]));
+
+    // Alteracoes feitas enquanto o PostgreSQL estava indisponivel ficam no
+    // arquivo de contingencia. Na primeira reconexao, envie apenas registros
+    // ausentes ou mais recentes antes de atualizar o espelho local.
+    for (const cachedProduct of cachedProducts) {
+      const remoteProduct = remoteById.get(cachedProduct.id);
+      const cachedUpdatedAt = new Date(cachedProduct.updatedAt).getTime();
+      const remoteUpdatedAt = remoteProduct ? new Date(remoteProduct.updatedAt).getTime() : 0;
+
+      if (!remoteProduct || cachedUpdatedAt > remoteUpdatedAt) {
+        await this.primary.save(cachedProduct);
+      }
+    }
+
+    await this.fallback.replaceAll(await this.primary.list());
+  }
+
+  async list() {
+    try {
+      const products = await this.primary.list();
+      await this.fallback.replaceAll(products);
+      return products;
+    } catch {
+      return this.fallback.list();
+    }
+  }
+
+  async findById(id: string) {
+    try {
+      const product = await this.primary.findById(id);
+      if (product) {
+        await this.fallback.mirror(product);
+      }
+      return product;
+    } catch {
+      return this.fallback.findById(id);
+    }
+  }
+
+  async save(product: ProductRecord) {
+    try {
+      const savedProduct = await this.primary.save(product);
+      await this.fallback.mirror(savedProduct);
+      return savedProduct;
+    } catch {
+      return this.fallback.save(product);
+    }
+  }
+
+  async delete(id: string) {
+    try {
+      const deleted = await this.primary.delete(id);
+      await this.fallback.delete(id);
+      return deleted;
+    } catch {
+      return this.fallback.delete(id);
+    }
+  }
+}
+
 export const createProductStore = async (): Promise<ProductStore> => {
-  const store = new PostgresProductStore(createPostgresPool());
-  await store.initialize();
-  return store;
+  const fileStore = new FileProductStore();
+  await fileStore.initialize();
+
+  try {
+    const postgresStore = new PostgresProductStore(createPostgresPool());
+    await postgresStore.initialize();
+    const resilientStore = new ResilientProductStore(postgresStore, fileStore);
+    await resilientStore.initialize();
+    return resilientStore;
+  } catch (error) {
+    if (parseBoolean(process.env.PDV_REQUIRE_POSTGRES, false)) {
+      throw error;
+    }
+
+    // eslint-disable-next-line no-console
+    console.error(
+      `PostgreSQL de produtos indisponivel; usando arquivo local: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return fileStore;
+  }
 };

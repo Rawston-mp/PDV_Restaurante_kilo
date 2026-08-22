@@ -1,8 +1,8 @@
 import type { Product } from '@/modules/products/domain/entities/Product';
 import {
+  defaultProductCategories,
   mergeCategoryOptions,
   productCategoriesStorageKey,
-  readStoredProductCategories,
   sanitizeCategoryOptions
 } from '@/modules/products/domain/services/productCategories';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
@@ -98,14 +98,16 @@ export const saveProductCategoriesCatalog = async (categories: string[]) => {
 export const loadSharedProductCategories = async (products: Product[] = []) => {
   try {
     const remoteCategories = await fetchProductCategoriesCatalog();
-    if (remoteCategories.length > 0) {
-      return mergeCategoryOptions(remoteCategories, products);
-    }
+    return mergeCategoryOptions(
+      remoteCategories.length > 0 ? remoteCategories : defaultProductCategories,
+      products
+    );
   } catch {
-    // O cache local mantém o PDV operacional quando o backend está indisponível.
+    // Sem backend, categorias canônicas + categorias dos produtos evitam que
+    // perfis antigos do navegador/Electron produzam catálogos divergentes.
   }
 
-  return mergeCategoryOptions(readStoredProductCategories(), products);
+  return mergeCategoryOptions(defaultProductCategories, products);
 };
 
 export const cacheSharedProductCategories = (categories: string[]) => {

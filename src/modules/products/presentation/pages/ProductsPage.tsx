@@ -6,13 +6,13 @@ import {
   defaultProductCategories,
   getCategoryVisual,
   isSameCategoryName,
-  mergeCategoryOptions,
   normalizeCategoryName,
   persistProductCategories,
   readStoredProductCategories,
   sanitizeCategoryOptions
 } from '@/modules/products/domain/services/productCategories';
 import { productsContainer } from '@/modules/products/infrastructure/container/productsContainer';
+import { loadSharedProductCategories } from '@/modules/products/infrastructure/api/productCategoryCatalog';
 import { useCreateProduct } from '@/modules/products/presentation/hooks/useCreateProduct';
 import { useProductsQuery } from '@/modules/products/presentation/hooks/useProductsQuery';
 
@@ -298,18 +298,29 @@ export function ProductsPage(_props: ProductsPageProps = {}) {
   };
 
   useEffect(() => {
-    const mergedCategories = mergeCategoryOptions(readStoredProductCategories(), products);
-    setCategoryOptions((current) => {
-      const currentNormalized = sanitizeCategoryOptions(current);
-      const nextNormalized = sanitizeCategoryOptions(mergedCategories);
+    let active = true;
 
-      if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
-        return current;
+    void loadSharedProductCategories(products).then((sharedCategories) => {
+      if (!active) {
+        return;
       }
 
-      persistProductCategories(nextNormalized);
-      return nextNormalized;
+      setCategoryOptions((current) => {
+        const currentNormalized = sanitizeCategoryOptions(current);
+        const nextNormalized = sanitizeCategoryOptions(sharedCategories);
+
+        if (JSON.stringify(currentNormalized) === JSON.stringify(nextNormalized)) {
+          return current;
+        }
+
+        persistProductCategories(nextNormalized);
+        return nextNormalized;
+      });
     });
+
+    return () => {
+      active = false;
+    };
   }, [products]);
 
   useEffect(() => {

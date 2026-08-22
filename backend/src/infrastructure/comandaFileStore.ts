@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
+import os from 'node:os';
 import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 
 import type {
   ComandaLockOwner,
@@ -25,8 +25,10 @@ export type ComandaAuditEvent = {
   origem?: string;
 };
 
-const currentDir = dirname(fileURLToPath(import.meta.url));
-const defaultDataDir = join(currentDir, '..', '..', 'data');
+const platformDataDir = process.env.APPDATA?.trim()
+  ? join(process.env.APPDATA, 'pdv-touch-restaurante', 'data')
+  : join(os.homedir(), '.pdv-touch-restaurante', 'data');
+const defaultDataDir = process.env.PDV_DATA_DIR?.trim() || platformDataDir;
 
 export class ComandaFileStore {
   private readonly stateFilePath: string;

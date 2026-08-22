@@ -12,7 +12,7 @@
         "start:prod": "tsx backend/src/server.ts",
         "build": "tsc -b && vite build",
         "electron:dev": "npm run build && electron electron/main.cjs",
-        "electron:pack": "npm run build && electron-builder --win --x64",
+        "electron:pack": "npm run build && node scripts/package-electron.mjs",
         "preview": "vite preview",
         "verify": "node scripts/verify.mjs",
         "test": "vitest run",
@@ -68,6 +68,12 @@
             "electron/**/*",
             "node_modules/**/*",
             "package.json"
+        ],
+        "extraFiles": [
+            {
+                "from": ".electron-runtime/pdv.env",
+                "to": "pdv.env"
+            }
         ],
         "win": {
             "target": [

@@ -2,28 +2,50 @@ import { Pool } from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Carrega .env manualmente se existir, sem depender do pacote `dotenv` em produção
-try {
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    for (const line of envContent.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
+const loadRuntimeEnvironment = () => {
+  const candidates = [
+    process.env.PDV_ENV_FILE?.trim(),
+    path.resolve(process.cwd(), 'pdv.env'),
+    path.resolve(process.cwd(), '.env')
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const envPath of [...new Set(candidates)]) {
+    try {
+      if (!fs.existsSync(envPath) || !fs.statSync(envPath).isFile()) {
+        continue;
+      }
+
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      for (const line of envContent.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+          continue;
+        }
+
         const eqIdx = trimmed.indexOf('=');
-        if (eqIdx > 0) {
-          const key = trimmed.slice(0, eqIdx).trim();
-          const val = trimmed.slice(eqIdx + 1).trim().replace(/^"|"$/g, '');
-          if (!process.env[key]) {
-            process.env[key] = val;
-          }
+        if (eqIdx <= 0) {
+          continue;
+        }
+
+        const key = trimmed.slice(0, eqIdx).trim();
+        const value = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+        if (!process.env[key]) {
+          process.env[key] = value;
         }
       }
+
+      process.env.PDV_ENV_FILE = envPath;
+      return envPath;
+    } catch {
+      // Tenta o próximo local permitido. O backend informará indisponibilidade
+      // caso nenhuma configuração válida consiga conectar ao banco.
     }
   }
-} catch {
-  // Ignora se não for possível ler o .env no ambiente empacotado
-}
+
+  return null;
+};
+
+export const loadedRuntimeEnvironmentFile = loadRuntimeEnvironment();
 
 export type PostgresConfig = {
   connectionString?: string;
@@ -59,10 +81,10 @@ const resolveConnectionString = () => {
 export const buildPostgresConfig = (): PostgresConfig => ({
   connectionString: resolveConnectionString(),
   host: process.env.PGHOST?.trim() || '127.0.0.1',
-  port: Number(process.env.PGPORT ?? 5432),
-  database: process.env.PGDATABASE?.trim() || 'postgres',
+  port: Number(process.env.PGPORT ?? 55432),
+  database: process.env.PGDATABASE?.trim() || 'pdv_touch_dev',
   user: process.env.PGUSER?.trim() || 'postgres',
-  password: process.env.PGPASSWORD?.trim() || 'postgres',
+  password: process.env.PGPASSWORD?.trim() || '',
   ssl: parseBoolean(process.env.PGSSL, false),
   connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS ?? 3000)
 });

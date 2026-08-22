@@ -1,5 +1,6 @@
 import type { ProductSyncGateway } from '@/modules/products/application/ports/ProductSyncGateway';
 import type { Product } from '@/modules/products/domain/entities/Product';
+import { normalizeCategoryName } from '@/modules/products/domain/services/productCategories';
 import { readPendingProductDeletionIds } from '@/modules/products/infrastructure/local/productDeletionTombstones';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
@@ -18,6 +19,24 @@ type ProductsResponse = {
 
 const endpoint = (path: string) => `${API_BASE_URL}${path}`;
 
+type RuntimeResponse = {
+  ok?: boolean;
+  stores?: {
+    products?: string;
+  };
+};
+
+const assertPostgresProductStore = async () => {
+  const response = await fetch(endpoint('/api/v1/runtime'));
+  const payload = await response.json() as RuntimeResponse;
+
+  if (!response.ok || payload.stores?.products !== 'postgres') {
+    throw new Error(
+      'PostgreSQL indisponível. Os produtos continuam salvos localmente e serão enviados após a reconexão.'
+    );
+  }
+};
+
 const readProductsResponse = async (response: Response): Promise<ProductsResponse> => {
   const contentType = response.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
@@ -32,6 +51,7 @@ const readProductsResponse = async (response: Response): Promise<ProductsRespons
 
 const toProduct = (product: ApiProduct): Product => ({
   ...product,
+  category: normalizeCategoryName(product.category),
   createdAt: new Date(product.createdAt),
   updatedAt: new Date(product.updatedAt),
   lastSyncedAt: product.lastSyncedAt ? new Date(product.lastSyncedAt) : undefined
@@ -39,6 +59,7 @@ const toProduct = (product: ApiProduct): Product => ({
 
 export class ApiProductSyncGateway implements ProductSyncGateway {
   async pullProducts(): Promise<Product[]> {
+    await assertPostgresProductStore();
     const response = await fetch(endpoint('/api/v1/products'));
     const payload = await readProductsResponse(response);
 
@@ -54,6 +75,7 @@ export class ApiProductSyncGateway implements ProductSyncGateway {
   }
 
   async pushProducts(products: Product[]): Promise<void> {
+    await assertPostgresProductStore();
     const pendingDeletedIds = new Set(readPendingProductDeletionIds());
 
     for (const product of products) {

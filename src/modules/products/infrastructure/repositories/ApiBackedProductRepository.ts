@@ -1,11 +1,18 @@
 import type { Product } from '@/modules/products/domain/entities/Product';
 import type { ProductRepository } from '@/modules/products/domain/ports/ProductRepository';
+import { normalizeCategoryName } from '@/modules/products/domain/services/productCategories';
 import {
   clearPendingProductDeletion,
   isProductDeletionPending,
   markProductDeletionPending,
   readPendingProductDeletionIds
 } from '@/modules/products/infrastructure/local/productDeletionTombstones';
+import {
+  backupReconciledProducts,
+  clearPendingProductUpsert,
+  markProductUpsertPending,
+  readPendingProductUpsertIds
+} from '@/modules/products/infrastructure/local/productPendingUpserts';
 import { API_BASE_URL } from '@/shared/infrastructure/api/runtimeEndpoint';
 
 type ApiProduct = Omit<Product, 'createdAt' | 'updatedAt' | 'lastSyncedAt'> & {
@@ -37,15 +44,11 @@ const readProductsResponse = async (response: Response): Promise<ProductsRespons
 
 const toProduct = (product: ApiProduct): Product => ({
   ...product,
+  category: normalizeCategoryName(product.category),
   createdAt: new Date(product.createdAt),
   updatedAt: new Date(product.updatedAt),
   lastSyncedAt: product.lastSyncedAt ? new Date(product.lastSyncedAt) : undefined
 });
-
-const isNewer = (left: Product, right: Product) =>
-  new Date(left.updatedAt).getTime() > new Date(right.updatedAt).getTime();
-
-const wasSyncedBefore = (product: Product) => Boolean(product.lastSyncedAt);
 
 export class ApiBackedProductRepository implements ProductRepository {
   constructor(private readonly localRepository: ProductRepository) {}
@@ -76,6 +79,7 @@ export class ApiBackedProductRepository implements ProductRepository {
     try {
       await this.flushPendingDeletions();
       const pendingDeletedIds = new Set(readPendingProductDeletionIds());
+      const pendingUpsertIds = new Set(readPendingProductUpsertIds());
       const response = await fetch(endpoint('/api/v1/products'));
       if (!response.ok) {
         throw new Error('Backend de produtos indisponível.');
@@ -86,24 +90,40 @@ export class ApiBackedProductRepository implements ProductRepository {
         .map(toProduct)
         .filter((product) => !pendingDeletedIds.has(product.id));
       const activeLocalProducts = localProducts.filter((product) => !pendingDeletedIds.has(product.id));
-      const remoteIds = new Set(remoteProducts.map((product) => product.id));
-      const productsRemovedFromRemote = activeLocalProducts.filter(
-        (product) => wasSyncedBefore(product) && !remoteIds.has(product.id)
-      );
-      await Promise.all(productsRemovedFromRemote.map((product) => this.localRepository.delete(product.id)));
-      const merged = this.mergeByFreshness(activeLocalProducts, remoteProducts);
+      const reconciledById = new Map(remoteProducts.map((product) => [product.id, product]));
 
-      await Promise.all(merged.map((product) => this.localRepository.save(product)));
-      await Promise.all(
-        merged
-          .filter((product) => {
-            const remote = remoteProducts.find((candidate) => candidate.id === product.id);
-            return !remote || isNewer(product, remote);
-          })
-          .map((product) => this.pushProduct(product))
+      for (const localProduct of activeLocalProducts) {
+        if (!pendingUpsertIds.has(localProduct.id)) {
+          continue;
+        }
+
+        try {
+          const savedProduct = await this.pushProduct(localProduct);
+          reconciledById.set(savedProduct.id, savedProduct);
+          clearPendingProductUpsert(localProduct.id);
+        } catch {
+          // Uma alteração explicitamente marcada como offline permanece visível.
+          reconciledById.set(localProduct.id, localProduct);
+        }
+      }
+
+      for (const pendingId of pendingUpsertIds) {
+        if (!activeLocalProducts.some((product) => product.id === pendingId)) {
+          clearPendingProductUpsert(pendingId);
+        }
+      }
+
+      const reconciledProducts = [...reconciledById.values()];
+      const reconciledIds = new Set(reconciledProducts.map((product) => product.id));
+      const legacyProducts = activeLocalProducts.filter(
+        (product) => !reconciledIds.has(product.id) && !pendingUpsertIds.has(product.id)
       );
 
-      return this.sortProducts(merged);
+      backupReconciledProducts(legacyProducts);
+      await Promise.all(legacyProducts.map((product) => this.localRepository.delete(product.id)));
+      await Promise.all(reconciledProducts.map((product) => this.localRepository.save(product)));
+
+      return this.sortProducts(reconciledProducts);
     } catch {
       const pendingDeletedIds = new Set(readPendingProductDeletionIds());
       return this.sortProducts(localProducts.filter((product) => !pendingDeletedIds.has(product.id)));
@@ -125,13 +145,15 @@ export class ApiBackedProductRepository implements ProductRepository {
     try {
       const savedProduct = await this.pushProduct(nextProduct);
       await this.localRepository.save(savedProduct);
+      clearPendingProductUpsert(product.id);
     } catch {
-      // O cache local preserva o produto para a operação continuar sem backend.
+      markProductUpsertPending(product.id);
     }
   }
 
   async delete(id: string): Promise<void> {
     await this.localRepository.delete(id);
+    clearPendingProductUpsert(id);
 
     try {
       await this.deleteRemoteProduct(id);
@@ -152,27 +174,6 @@ export class ApiBackedProductRepository implements ProductRepository {
         markProductDeletionPending(id);
       }
     }
-  }
-
-  private mergeByFreshness(localProducts: Product[], remoteProducts: Product[]) {
-    const productsById = new Map<string, Product>();
-
-    for (const product of remoteProducts) {
-      productsById.set(product.id, product);
-    }
-
-    for (const product of localProducts) {
-      if (wasSyncedBefore(product) && !remoteProducts.some((remoteProduct) => remoteProduct.id === product.id)) {
-        continue;
-      }
-
-      const current = productsById.get(product.id);
-      if (!current || isNewer(product, current)) {
-        productsById.set(product.id, product);
-      }
-    }
-
-    return [...productsById.values()];
   }
 
   private sortProducts(products: Product[]) {

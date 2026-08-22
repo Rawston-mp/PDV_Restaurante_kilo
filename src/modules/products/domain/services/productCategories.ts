@@ -16,7 +16,27 @@ const knownCategoryVisuals: Record<string, { label: string; icon: string; classN
   Bebidas: { label: 'Bebidas', icon: '🥤', className: 'is-bebidas', color: '#38bdf8' }
 };
 
-export const normalizeCategoryName = (value: string) => value.trim().replace(/\s+/g, ' ');
+const categoryAliases: Record<string, string> = {
+  quilo: 'Por kilo',
+  'por quilo': 'Por kilo',
+  'por kilo': 'Por kilo',
+  sobremesas: 'Sobremesa',
+  sobremesa: 'Sobremesa',
+  rotisseria: 'Rotisserie',
+  rotisserie: 'Rotisserie'
+};
+
+const categoryLookupKey = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('pt-BR');
+
+export const normalizeCategoryName = (value: string) => {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  return categoryAliases[categoryLookupKey(normalized)] ?? normalized;
+};
 
 export const isSameCategoryName = (left: string, right: string) =>
   left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }) === 0;

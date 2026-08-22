@@ -26,6 +26,7 @@ import type {
 import { createOperationalStore } from './infrastructure/operationalStore';
 import type { CatalogAdminPostgresStore } from './infrastructure/catalogAdminStore';
 import { createCatalogAdminStore } from './infrastructure/catalogAdminStore';
+import { buildPostgresConfig, loadedRuntimeEnvironmentFile } from './infrastructure/postgresConfig';
 import { startScaleReader } from './services/scaleReader.service';
 
 type PesoSensorPayload = {
@@ -98,6 +99,19 @@ let operationalStore: OperationalPostgresStore | null = null;
 let operationalStoreError: string | null = null;
 let catalogAdminStore: CatalogAdminPostgresStore | null = null;
 let catalogAdminStoreError: string | null = null;
+
+const runtimeDatabaseTarget = (() => {
+  const config = buildPostgresConfig();
+  if (config.connectionString) {
+    try {
+      const url = new URL(config.connectionString);
+      return `${url.hostname}:${url.port || '5432'}${url.pathname}`;
+    } catch {
+      return 'connection-string-configured';
+    }
+  }
+  return `${config.host}:${config.port}/${config.database}`;
+})();
 
 const LOCK_OWNERS: ComandaLockOwner[] = ['COMANDA_A', 'COMANDA_B'];
 const LOCK_STATIONS: ComandaLockStationId[] = ['BALANCA_A', 'BALANCA_B'];
@@ -335,7 +349,7 @@ const initializeProducts = async () => {
     productStore = await createProductStore();
     productStoreError = null;
     // eslint-disable-next-line no-console
-    console.log('Persistencia de produtos: PostgreSQL');
+    console.log(`Persistencia de produtos: ${productStore.storageKind === 'POSTGRES' ? 'PostgreSQL' : 'arquivo local compartilhado'}`);
   } catch (error) {
     productStore = null;
     productStoreError = error instanceof Error ? error.message : 'erro desconhecido';
@@ -407,6 +421,21 @@ const requireCatalogAdminStore = (res: express.Response): CatalogAdminPostgresSt
   });
   return null;
 };
+
+app.get('/api/v1/runtime', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: 'pdv-touch-backend',
+    apiVersion: 1,
+    databaseTarget: runtimeDatabaseTarget,
+    environmentConfigured: Boolean(loadedRuntimeEnvironmentFile || process.env.DATABASE_URL || process.env.PRODUCT_DATABASE_URL),
+    stores: {
+      products: productStore ? productStore.storageKind.toLowerCase() : 'unavailable',
+      operational: operationalStore ? 'ready' : 'unavailable',
+      catalog: catalogAdminStore ? 'ready' : 'unavailable'
+    }
+  });
+});
 
 app.get('/comandas/status', (_req, res) => {
   const active = comandaService.getActive();

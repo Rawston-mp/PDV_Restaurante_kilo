@@ -7,6 +7,7 @@ vite.config.d.ts
 release-electron/
 release-electron-auth/
 .electron-user-data/
+.electron-runtime/
 
 # Segredos e credenciais locais. Use .env.example como modelo.
 .env
